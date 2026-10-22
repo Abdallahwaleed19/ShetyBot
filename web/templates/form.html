@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>تقرير إجازة مرضية</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg1:#0B2763;--bg2:#0d3a8e;
+      --card:rgba(255,255,255,0.08);
+      --input:rgba(255,255,255,0.11);
+      --input-focus:rgba(255,255,255,0.18);
+      --border:rgba(255,255,255,0.15);
+      --accent:#3b9eff;
+      --green:#4caf50;
+      --red:#f44336;
+    }
+    html,body{min-height:100vh;background:linear-gradient(170deg,var(--bg1) 0%,var(--bg2) 100%);color:#fff;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl}
+
+    /* ── Progress Bar ────────────────────────────────── */
+    .progress-wrap{position:sticky;top:0;z-index:50;background:rgba(11,39,99,0.95);padding:12px 20px;backdrop-filter:blur(8px)}
+    .progress-steps{display:flex;gap:6px;justify-content:center;margin-bottom:6px}
+    .step-dot{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,0.2);transition:all .3s}
+    .step-dot.done{background:#4caf50}
+    .step-dot.active{background:var(--accent)}
+    .progress-label{text-align:center;font-size:12px;opacity:.7}
+
+    /* ── Page ────────────────────────────────────────── */
+    .page{display:none;padding:16px 16px 8px;animation:slidein .3s ease}
+    .page.active{display:block}
+    @keyframes slidein{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+    .page-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:18px;opacity:.9;letter-spacing:.3px}
+
+    /* ── Field ───────────────────────────────────────── */
+    .field{margin-bottom:14px}
+    .field label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;opacity:.85}
+    .field input,.field select{
+      width:100%;padding:13px 14px;
+      background:var(--input);border:1.5px solid var(--border);border-radius:12px;
+      color:#fff;font-size:14.5px;font-family:inherit;direction:rtl;outline:none;
+      transition:border-color .2s,background .2s;
+      -webkit-appearance:none;appearance:none
+    }
+    .field input[dir=ltr],.field select[dir=ltr]{direction:ltr;text-align:left}
+    .field input:focus,.field select:focus{border-color:var(--accent);background:var(--input-focus)}
+    .field input[readonly]{opacity:.55;cursor:default}
+    .field input::placeholder{color:rgba(255,255,255,0.38)}
+    .field select option{background:#0d3a8e;color:#fff}
+    .field input[type=date],.field input[type=time]{color-scheme:dark}
+
+    /* ── Issue datetime display ──────────────────────── */
+    .issue-display{
+      background:rgba(59,158,255,0.12);border:1px solid rgba(59,158,255,0.3);
+      border-radius:10px;padding:10px 14px;font-size:13px;
+      color:rgba(255,255,255,0.75);text-align:center;margin-bottom:14px;
+      letter-spacing:.2px
+    }
+
+    /* ── Row (2 cols) ─────────────────────────────────── */
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+    /* ── Toggle buttons ──────────────────────────────── */
+    .toggle-group{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .tog{
+      padding:12px 8px;border:1.5px solid var(--border);border-radius:12px;
+      background:var(--input);color:#fff;font-size:14px;font-weight:600;
+      cursor:pointer;text-align:center;transition:all .2s;user-select:none
+    }
+    .tog.sel{background:var(--accent);border-color:var(--accent)}
+
+    /* ── Logo Upload ──────────────────────────────────── */
+    .logo-box{
+      border:2px dashed rgba(255,255,255,0.28);border-radius:14px;
+      padding:20px;text-align:center;cursor:pointer;transition:border-color .2s
+    }
+    .logo-box:hover{border-color:rgba(255,255,255,.55)}
+    .logo-box input{display:none}
+    .logo-preview{width:72px;height:72px;border-radius:10px;object-fit:contain;background:#fff;display:none;margin:0 auto 8px}
+    .logo-hint{font-size:12px;opacity:.6}
+
+    /* ── Buttons ─────────────────────────────────────── */
+    .btn-row{display:flex;gap:10px;margin-top:20px;padding-bottom:20px}
+    .btn{
+      flex:1;padding:14px;border:none;border-radius:12px;
+      font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;
+      transition:opacity .15s,transform .1s
+    }
+    .btn:active{transform:scale(.97);opacity:.88}
+    .btn-next{background:var(--accent);color:#fff}
+    .btn-prev{background:var(--input);color:#fff;border:1.5px solid var(--border)}
+    .btn-submit{background:var(--green);color:#fff}
+
+    /* ── Error ───────────────────────────────────────── */
+    .err{
+      background:rgba(244,67,54,.18);border:1px solid rgba(244,67,54,.45);
+      border-radius:9px;padding:10px 13px;font-size:13px;
+      margin-bottom:10px;display:none
+    }
+    .err.show{display:block}
+
+    /* ── Loading ─────────────────────────────────────── */
+    #loading{
+      display:none;position:fixed;inset:0;
+      background:rgba(11,39,99,.92);z-index:200;
+      align-items:center;justify-content:center;flex-direction:column;gap:16px
+    }
+    #loading.show{display:flex}
+    .spin{
+      width:46px;height:46px;border:4px solid rgba(255,255,255,.25);
+      border-top-color:var(--accent);border-radius:50%;
+      animation:spin .75s linear infinite
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+
+<!-- ── Progress ─────────────────────────────────── -->
+<div class="progress-wrap">
+  <div class="progress-steps">
+    <div class="step-dot active" id="d1"></div>
+    <div class="step-dot" id="d2"></div>
+    <div class="step-dot" id="d3"></div>
+  </div>
+  <div class="progress-label" id="progress-lbl">الصفحة 1 من 3 — تفاصيل الإجازة</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE 1 — تفاصيل الإجازة
+═══════════════════════════════════════════════ -->
+<div class="page active" id="p1">
+  <p class="page-title">📋 تفاصيل الإجازة</p>
+
+  <div class="field">
+    <label>نوع التقرير</label>
+    <select id="report_type">
+      <option value="تقرير إجازة مرضية">تقرير إجازة مرضية</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>📅 تاريخ الدخول</label>
+      <input type="date" id="admission_date" required>
+    </div>
+    <div class="field">
+      <label>📅 تاريخ الخروج</label>
+      <input type="date" id="discharge_date" required>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>⏱️ مدة الإجازة بالأيام</label>
+    <input type="number" id="leave_duration" min="1" placeholder="أدخل عدد أيام الإجازة" required inputmode="numeric">
+  </div>
+
+  <!-- Hidden inputs auto-set by JS -->
+  <input type="hidden" id="issue_date">
+  <input type="hidden" id="report_time">
+
+  <!-- Read-only display of issue datetime -->
+  <div class="issue-display" id="issue_display">🕐 تاريخ وقت الإصدار: …</div>
+
+  <div class="err" id="e1"></div>
+  <div class="btn-row">
+    <button class="btn btn-next" onclick="go(1,2)">التالي ←</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE 2 — بيانات المريض
+═══════════════════════════════════════════════ -->
+<div class="page" id="p2">
+  <p class="page-title">👤 بيانات المريض</p>
+
+  <div class="field">
+    <label>🔑 رمز الخدمة</label>
+    <input type="text" id="service_code" readonly>
+  </div>
+
+  <div class="field">
+    <label>🪪 رقم الهوية / الإقامة</label>
+    <input type="text" id="national_id" maxlength="14" inputmode="numeric"
+           placeholder="أدخل رقم الهوية أو الإقامة أو الجواز" required>
+  </div>
+
+  <div class="field">
+    <label>اسم المريض — عربي</label>
+    <input type="text" id="patient_name_ar" placeholder="الاسم الرباعي بالعربية" required>
+  </div>
+
+  <div class="field">
+    <label>Patient Name — English</label>
+    <input type="text" id="patient_name_en" placeholder="Full name in English" dir="ltr">
+  </div>
+
+  <div class="field">
+    <label>🌍 الجنسية</label>
+    <input type="text" id="nationality" placeholder="مثال: سعودي">
+  </div>
+
+  <div class="field">
+    <label>🏢 جهة العمل</label>
+    <input type="text" id="employer" placeholder="اسم الجهة">
+  </div>
+
+  <div class="err" id="e2"></div>
+  <div class="btn-row">
+    <button class="btn btn-next" onclick="go(2,3)">التالي ←</button>
+    <button class="btn btn-prev" onclick="go(2,1)">→ السابق</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE 3 — بيانات الممارس والمستشفى
+═══════════════════════════════════════════════ -->
+<div class="page" id="p3">
+  <p class="page-title">👨‍⚕️ بيانات الممارس والمستشفى</p>
+
+  <div class="field">
+    <label>اسم الممارس — عربي</label>
+    <input type="text" id="practitioner_name_ar" placeholder="د. الاسم الكامل" required>
+  </div>
+
+  <div class="field">
+    <label>Practitioner Name — English</label>
+    <input type="text" id="practitioner_name_en" placeholder="Dr. Full Name" dir="ltr">
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>المسمى الوظيفي — عربي</label>
+      <input type="text" id="job_title_ar" placeholder="طبيب عام">
+    </div>
+    <div class="field">
+      <label>Job Title — English</label>
+      <input type="text" id="job_title_en" placeholder="General Practitioner" dir="ltr">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>اسم المستشفى — عربي</label>
+    <input type="text" id="hospital_name_ar" placeholder="مستشفى..." required>
+  </div>
+
+  <div class="field">
+    <label>Hospital Name — English</label>
+    <input type="text" id="hospital_name_en" placeholder="... Hospital" dir="ltr">
+  </div>
+
+  <div class="field">
+    <label>نوع المستشفى</label>
+    <div class="toggle-group">
+      <div class="tog sel" id="tg" onclick="pickType('government')">🏛️ حكومي</div>
+      <div class="tog"     id="tp" onclick="pickType('private')">🏨 خاص</div>
+    </div>
+    <input type="hidden" id="hospital_type" value="government">
+  </div>
+
+  <div class="field">
+    <label>📎 شعار المستشفى (اختياري)</label>
+    <div class="logo-box" onclick="document.getElementById('logo_file').click()">
+      <img id="logo_img" class="logo-preview" src="" alt="">
+      <input type="file" id="logo_file" accept="image/*" onchange="prevLogo(this)">
+      <p class="logo-hint" id="logo_hint">اضغط لرفع الشعار — PNG / JPG</p>
+    </div>
+  </div>
+
+  <div class="err" id="e3"></div>
+  <div class="btn-row">
+    <button class="btn btn-submit" onclick="submitForm()">✅ إرسال التقرير</button>
+    <button class="btn btn-prev"   onclick="go(3,2)">→ السابق</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spin"></div>
+  <p>جاري إنشاء التقرير…</p>
+</div>
+
+<script>
+// ── Telegram WebApp ─────────────────────────────────────────────────────────
+const tg = window.Telegram?.WebApp;
+if(tg){ tg.ready(); tg.expand(); }
+
+// ── Service Code ────────────────────────────────────────────────────────────
+(function(){
+  const now=new Date();
+  const yy=String(now.getFullYear()).slice(2);
+  const mm=String(now.getMonth()+1).padStart(2,'0');
+  const rand=Math.floor(Math.random()*1e8).toString().padStart(8,'0');
+  document.getElementById('service_code').value=`GSL${yy}${mm}${rand}`;
+})();
+
+// ── Auto-set issue date & time (now) ────────────────────────────────────────
+(function(){
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+
+  // Hidden inputs (machine format)
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  document.getElementById('issue_date').value  = dateStr;
+  document.getElementById('report_time').value = timeStr;
+
+  // Human-readable display (Arabic locale, 12h format)
+  const dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
+                      'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+  const dd   = pad(now.getDate());
+  const mon  = monthNames[now.getMonth()];
+  const yyyy = now.getFullYear();
+
+  let hours = now.getHours();
+  const mins = pad(now.getMinutes());
+  const ampm = hours >= 12 ? 'م' : 'ص';
+  hours = hours % 12 || 12;
+
+  const displayStr = `🕐 تاريخ وقت الإصدار: ${dd}/${pad(now.getMonth()+1)}/${yyyy} | ${pad(hours)}:${mins} ${ampm}`;
+  document.getElementById('issue_display').textContent = displayStr;
+})();
+
+// ── Hospital type toggle ────────────────────────────────────────────────────
+function pickType(t){
+  document.getElementById('hospital_type').value=t;
+  document.getElementById('tg').classList.toggle('sel',t==='government');
+  document.getElementById('tp').classList.toggle('sel',t==='private');
+}
+
+// ── Logo preview ────────────────────────────────────────────────────────────
+function prevLogo(inp){
+  if(!inp.files||!inp.files[0])return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const img=document.getElementById('logo_img');
+    img.src=e.target.result; img.style.display='block';
+    document.getElementById('logo_hint').textContent=inp.files[0].name;
+  };
+  r.readAsDataURL(inp.files[0]);
+}
+
+// ── Page Navigation ─────────────────────────────────────────────────────────
+const LABELS=['','الصفحة 1 من 3 — تفاصيل الإجازة',
+                  'الصفحة 2 من 3 — بيانات المريض',
+                  'الصفحة 3 من 3 — الممارس والمستشفى'];
+
+function showErr(id,msg){
+  const el=document.getElementById(id);
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),5000);
+}
+
+function validate(n){
+  if(n===1){
+    if(!document.getElementById('admission_date').value) return 'أدخل تاريخ الدخول';
+    if(!document.getElementById('discharge_date').value)  return 'أدخل تاريخ الخروج';
+    const a=new Date(document.getElementById('admission_date').value);
+    const d=new Date(document.getElementById('discharge_date').value);
+    if(d<a) return 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول';
+    const dur=document.getElementById('leave_duration').value;
+    if(!dur||parseInt(dur)<1) return 'أدخل عدد أيام الإجازة (1 على الأقل)';
+  }
+  if(n===2){
+    if(!document.getElementById('national_id').value.trim())     return 'أدخل رقم الهوية';
+    if(!document.getElementById('patient_name_ar').value.trim()) return 'أدخل اسم المريض بالعربية';
+  }
+  if(n===3){
+    if(!document.getElementById('practitioner_name_ar').value.trim()) return 'أدخل اسم الممارس';
+    if(!document.getElementById('hospital_name_ar').value.trim())     return 'أدخل اسم المستشفى';
+  }
+  return null;
+}
+
+function go(from,to){
+  if(to>from){ const err=validate(from); if(err){showErr(`e${from}`,'⚠️ '+err);return;} }
+  document.getElementById(`p${from}`).classList.remove('active');
+  document.getElementById(`p${to}`).classList.add('active');
+  // update progress dots
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById(`d${i}`);
+    el.className='step-dot'+(i<to?' done':i===to?' active':'');
+  }
+  document.getElementById('progress-lbl').textContent=LABELS[to];
+  window.scrollTo(0,0);
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────────
+async function submitForm(){
+  const err=validate(3); if(err){showErr('e3','⚠️ '+err);return;}
+
+  document.getElementById('loading').classList.add('show');
+
+  const fd=new FormData();
+  const fields={
+    service_code:'service_code', report_type:'report_type',
+    admission_date:'admission_date', discharge_date:'discharge_date',
+    leave_duration_days:'leave_duration', issue_date:'issue_date',
+    report_time:'report_time', national_id:'national_id',
+    patient_name_ar:'patient_name_ar', patient_name_en:'patient_name_en',
+    nationality:'nationality', employer:'employer',
+    practitioner_name_ar:'practitioner_name_ar', practitioner_name_en:'practitioner_name_en',
+    job_title_ar:'job_title_ar', job_title_en:'job_title_en',
+    hospital_name_ar:'hospital_name_ar', hospital_name_en:'hospital_name_en',
+    hospital_type:'hospital_type'
+  };
+  Object.entries(fields).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    fd.append(k, el?el.value:'');
+  });
+
+  // Telegram user ID
+  const uid=tg?.initDataUnsafe?.user?.id||0;
+  fd.append('telegram_user_id', uid);
+
+  const logo=document.getElementById('logo_file').files[0];
+  if(logo) fd.append('logo',logo);
+
+  try{
+    const res=await fetch('/api/submit-report',{method:'POST',body:fd});
+    const json=await res.json();
+    if(json.success){
+      if(tg) tg.sendData(JSON.stringify({service_code:json.service_code,status:'success'}));
+      else    alert('تم الإرسال! رمز الخدمة: '+json.service_code);
+      if(tg) tg.close();
+    } else {
+      document.getElementById('loading').classList.remove('show');
+      showErr('e3','❌ '+(json.error||'حدث خطأ، حاول مجدداً'));
+    }
+  } catch(ex){
+    document.getElementById('loading').classList.remove('show');
+    showErr('e3','❌ فشل الاتصال بالخادم');
+    console.error(ex);
+  }
+}
+</script>
+</body>
+</html>

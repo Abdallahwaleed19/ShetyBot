@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>التحقق من الإجازة المرضية | Sick Leave Verification</title>
+  <style>
+    :root {
+      --blue: #2C3E77;
+      --light: #f7f7f7;
+      --border: #cccccc;
+      --green: #27ae60;
+      --red: #e74c3c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: #eef0f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    header {
+      background: var(--blue);
+      color: white;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header .brand { font-size: 1.3rem; font-weight: 700; }
+    header .sub   { font-size: 0.85rem; opacity: .75; direction: ltr; }
+
+    /* ── Main card ──────────────────────────────────────────── */
+    main {
+      max-width: 860px;
+      margin: 36px auto;
+      padding: 0 16px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+    .card-header {
+      background: var(--blue);
+      color: white;
+      padding: 20px 28px;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .card-body { padding: 28px; }
+
+    /* ── Search form ────────────────────────────────────────── */
+    .search-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .search-form input {
+      flex: 1;
+      min-width: 240px;
+      padding: 12px 16px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+      direction: ltr;
+      transition: border .2s;
+    }
+    .search-form input:focus { outline: none; border-color: var(--blue); }
+    .search-form button {
+      padding: 12px 28px;
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .search-form button:hover { opacity: .85; }
+
+    /* ── Alerts ─────────────────────────────────────────────── */
+    .alert {
+      margin-top: 18px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: .95rem;
+    }
+    .alert-error { background: #fdecea; color: var(--red); border: 1px solid #f5c6c6; }
+    .alert-success { background: #eafaf1; color: var(--green); border: 1px solid #b2dfcc; }
+
+    /* ── Result table ───────────────────────────────────────── */
+    .result-section { margin-top: 28px; }
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--blue);
+      border-bottom: 2px solid var(--blue);
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+    }
+
+    table.info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+    table.info-table tr:nth-child(even) td { background: var(--light); }
+    table.info-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    table.info-table td.label {
+      font-weight: 600;
+      color: var(--blue);
+      width: 38%;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+    .badge-gov { background: #d4e8ff; color: #1a4f99; }
+    .badge-prv { background: #ffe5cc; color: #a84800; }
+
+    .download-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 11px 24px;
+      background: var(--green);
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: .95rem;
+      transition: opacity .2s;
+    }
+    .download-btn:hover { opacity: .85; }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: .8rem;
+      color: #888;
+      direction: ltr;
+    }
+    footer a { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">🏥 منصة التحقق من الإجازات المرضية</div>
+    <div class="sub">Sick Leave Verification Portal</div>
+  </div>
+  <div style="font-size:.85rem;opacity:.7;direction:ltr">
+    Powered by Seha Platform &nbsp;|&nbsp; www.seha.sa
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-header">
+      🔍 التحقق من تقرير الإجازة المرضية &nbsp;/&nbsp; Verify Sick Leave Report
+    </div>
+    <div class="card-body">
+
+      <!-- Search Form -->
+      <form class="search-form" method="get" action="/verify">
+        <input
+          type="text"
+          name="q"
+          placeholder="أدخل رمز الإجازة أو رقم الهوية  /  Enter Leave ID or National ID"
+          value="{{ query or '' }}"
+          autocomplete="off"
+          required
+        />
+        <button type="submit">بحث / Search</button>
+      </form>
+
+      <!-- Error -->
+      {% if error %}
+      <div class="alert alert-error">⚠️ {{ error }}</div>
+      {% endif %}
+
+      <!-- Result -->
+      {% if record %}
+      <div class="alert alert-success">
+        ✅ تم التحقق بنجاح — السجل موجود في قاعدة البيانات
+      </div>
+
+      <div class="result-section">
+        <div class="section-title">👤 بيانات المريض / Patient Information</div>
+        <table class="info-table">
+          <tr>
+            <td class="label">الاسم عربي / Name (AR)</td>
+            <td>{{ record.patient_name_ar }}</td>
+          </tr>
+          <tr>
+            <td class="label">الاسم إنجليزي / Name (EN)</td>
+            <td>{{ record.patient_name_en }}</td>
+          </tr>
+          <tr>
+            <td class="label">رقم الهوية / National ID</td>
+            <td dir="ltr">{{ record.national_id }}</td>
+          </tr>
+          <tr>
+            <td class="label">الجنسية / Nationality</td>
+            <td>{{ record.nationality }}</td>
+          </tr>
+          <tr>
+            <td class="label">جهة العمل / Employer</td>
+            <td>{{ record.employer }}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="result-section">
+        <div class="section-title">📅 تفاصيل الإجازة / Leave Details</div>
+        <table class="info-table">
+          <tr>
+            <td class="label">رمز الإجازة / Leave ID</td>
+            <td dir="ltr"><strong>{{ record.leave_id }}</strong></td>
+          </tr>
+          <tr>
+            <td class="label">نوع التقرير / Report Type</td>
+            <td>{{ record.report_type }}</td>
+          </tr>
+          <tr>
+            <td class="label">تاريخ الدخول / Admission Date</td>
+            <td dir="ltr">{{ record.admission_date_gregorian }} &nbsp;|&nbsp; {{ record.admission_date_hijri }}</td>
+          </tr>
+          <tr>
+            <td class="label">تاريخ الخروج / Discharge Date</td>
+            <td dir="ltr">{{ record.discharge_date_gregorian }} &nbsp;|&nbsp; {{ record.discharge_date_hijri }}</td>
+          </tr>
+          <tr>
+            <td class="label">مدة الإجازة / Duration</td>
+            <td>{{ record.leave_duration_days }} يوم / day(s)</td>
+          </tr>
+          <tr>
+            <td class="label">تاريخ الإصدار / Issue Date</td>
+            <td dir="ltr">{{ record.issue_date_gregorian }} &nbsp;|&nbsp; {{ record.issue_date_hijri }}</td>
+          </tr>
+          <tr>
+            <td class="label">وقت التقرير / Issue Time</td>
+            <td dir="ltr">{{ record.issue_time }}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="result-section">
+        <div class="section-title">👨‍⚕️ بيانات الممارس والمستشفى / Practitioner & Hospital</div>
+        <table class="info-table">
+          <tr>
+            <td class="label">اسم الممارس / Practitioner</td>
+            <td>{{ record.practitioner_name_ar }} / {{ record.practitioner_name_en }}</td>
+          </tr>
+          <tr>
+            <td class="label">المسمى الوظيفي / Position</td>
+            <td>{{ record.practitioner_position_ar }} / {{ record.practitioner_position_en }}</td>
+          </tr>
+          <tr>
+            <td class="label">اسم المستشفى / Hospital</td>
+            <td>{{ record.hospital_name_ar }} / {{ record.hospital_name_en }}</td>
+          </tr>
+          <tr>
+            <td class="label">نوع المستشفى / Type</td>
+            <td>
+              {% if record.hospital_type.value == 'Government' %}
+                <span class="badge badge-gov">🏛️ حكومي / Government</span>
+              {% else %}
+                <span class="badge badge-prv">🏨 خاص / Private</span>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <a class="download-btn" href="/api/download/{{ record.leave_id }}">
+        ⬇️ تحميل التقرير PDF / Download Report
+      </a>
+
+      {% endif %}
+
+    </div><!-- /card-body -->
+  </div><!-- /card -->
+</main>
+
+<footer>
+  للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي &nbsp;|&nbsp;
+  To check the report please visit Seha's official website
+  <a href="https://www.seha.sa/#/inquiries/slenquiry" target="_blank">
+    www.seha.sa/#/inquiries/slenquiry
+  </a>
+</footer>
+
+</body>
+</html>
