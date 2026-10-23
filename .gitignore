@@ -37,7 +37,19 @@ Thumbs.db
 *.swp
 
 # Test files
-test_*.py
+/test_*.py
+test_*.pdf
+
+# Databases & local caches
+*.db
+*.sqlite
+seha_auth.db
+
+# Temp and reference artifacts
+output/
+tmp/
+reference_images/
+reference_doc.pdf
 
 # Template PPTX files (large, not needed)
 *.pptx

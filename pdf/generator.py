@@ -319,14 +319,14 @@ def generate_pdf(data: dict, output_path) -> Path:
         mesh_w_ref = 806 - 543   # ≈ 263pt
         mesh_h_ref = 143 - 36    # ≈ 107pt
         _draw_img(c, mesh_r,
-                  PAGE_W - MAR_R, H - MAR_T,
+                  PAGE_W - MAR_R - 10, H - MAR_T - 5,
                   mesh_w_ref, mesh_h_ref,
                   anchor="ne")
 
         # ── SEHA LOGO — top-left ───────────────────────────────────────────────
         # Reference: rect(36, 36, 186, 102) → 150×66pt
         _draw_img(c, seha_r,
-                  MAR_L, H - MAR_T,
+                  MAR_L + 10, H - MAR_T - 5,
                   150, 66,
                   anchor="nw")
 
@@ -335,7 +335,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         ksa_w_ref = 551 - 288    # ≈ 263pt
         ksa_h_ref = 160 - 36     # ≈ 124pt
         _draw_img(c, ksa_r,
-                  PAGE_W / 2, H - MAR_T,
+                  PAGE_W / 2, H - MAR_T - 5,
                   ksa_w_ref, ksa_h_ref,
                   anchor="n")
 
@@ -343,31 +343,11 @@ def generate_pdf(data: dict, output_path) -> Path:
         # Reference: y≈104 from top (calligraphy bottom is at 160, text is at ~170)
         ksa_bottom_y = H - 160   # bottom of KSA calligraphy in pdf coords
         c.setFillColor(BLACK)
-        c.setFont(_EN if _EN != "Helvetica" else "Helvetica", 10.5)
-        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 14, "Kingdom of Saudi Arabia")
+        c.setFont(_EN if _EN != "Helvetica" else "Helvetica", 11)
+        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 16, "Kingdom of Saudi Arabia")
 
-        # ── NHIC LOGO — bottom right ───────────────────────────────────────────
-        # Reference: rect(655, 934, 806, 1006) — placed in bottom-right area
-        # We position it relative to page bottom with adjusted values
-        nhic_w_ref = 806 - 655   # ≈ 151pt
-        nhic_h_ref = 1006 - 934  # ≈ 72pt
-        # In our coordinate system: y from BOTTOM
-        nhic_bottom = H - 1006   # bottom edge of NHIC box (from page bottom)
-        nhic_right  = PAGE_W - MAR_R
-        _draw_img(c, nhic_r,
-                  nhic_right, nhic_bottom,
-                  nhic_w_ref * 1.5, nhic_h_ref * 1.5,
-                  anchor="se")
-
-        # ── TIME & DATE — bottom left ──────────────────────────────────────────
-        # Reference: time y=945 from top, date y=982 from top
-        time_y = H - 945    # convert to ReportLab y (from bottom)
-        date_y = H - 982
-        c.setFillColor(BLACK)
-        c.setFont(_ENB if _ENB else "Helvetica-Bold", 12)
-        c.drawString(MAR_L, time_y, str(iss_t or ""))
-        c.setFont(_ENB if _ENB else "Helvetica-Bold", 12)
-        c.drawString(MAR_L, date_y, str(iss_long or ""))
+        # ── TIME & DATE — bottom left (footer in story, not canvas) ─────────────
+        # Moved to story for better positioning control
 
         c.restoreState()
 
@@ -386,20 +366,20 @@ def generate_pdf(data: dict, output_path) -> Path:
     BODY_W = USABLE_W  # 770pt
 
     # ── TITLES ─────────────────────────────────────────────────────────────────
-    story.append(arb("تقرير إجازة مرضية", 22.5, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 6 * pt))
-    story.append(enb("Sick Leave Report", 19.7, C_TITLE_EN, TA_CENTER))
-    story.append(Spacer(1, 18 * pt))
+    story.append(arb("تقرير إجازة مرضية", 24, C_TITLE, TA_CENTER))
+    story.append(Spacer(1, 8 * pt))
+    story.append(enb("Sick Leave Report", 20, C_TITLE_EN, TA_CENTER))
+    story.append(Spacer(1, 20 * pt))
 
     # ── DATA TABLE ──────────────────────────────────────────────────────────────
-    CL_EN = BODY_W * 0.175
-    CV    = BODY_W * 0.300
-    CV2   = BODY_W * 0.300
-    CL_AR = BODY_W * 0.225
+    CL_EN = BODY_W * 0.18
+    CV    = BODY_W * 0.29
+    CV2   = BODY_W * 0.29
+    CL_AR = BODY_W * 0.24
 
-    LSZ = 10.0   # label font size
-    VSZ = 10.0   # value font size
-    NSZ = 9.0    # smaller for long names
+    LSZ = 11.0   # label font size
+    VSZ = 11.0   # value font size
+    NSZ = 10.0   # smaller for long names
 
     def lbl_e(t):
         return enb(t, LSZ, C_LABEL, TA_CENTER)
@@ -413,7 +393,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     def val_a(t, sz=VSZ):
         return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
 
-    ROW_H = 33 * pt
+    ROW_H = 36 * pt
 
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
@@ -456,37 +436,37 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
     tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+        ("TOPPADDING",    (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         # ALL white background — labels same bg as values (only text color differs)
         ("BACKGROUND",    (0, 0), (-1, -1), WHITE),
-        ("GRID",          (0, 0), (-1, -1), 0.5, C_BORDER),
-        ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
+        ("GRID",          (0, 0), (-1, -1), 0.6, C_BORDER),
+        ("BOX",           (0, 0), (-1, -1), 1.2, C_BORDER),
     ] + extras))
 
     story.append(tbl)
-    story.append(Spacer(1, 16 * pt))
+    story.append(Spacer(1, 35 * pt))
 
     # ══════════════════════════════════════════════════════════════════════════
-    # FOOTER — 2-row table:
+    # FOOTER — 2-row table (exact match to original reference):
     #
     #  Row 1:  QR + verify text  (left) | hospital logo + name (right)
-    #  Row 2:  time + date       (left) | NHIC logo             (right)
+    #  Row 2:  time + date       (left) | NHIC logo + text (right)
     # ══════════════════════════════════════════════════════════════════════════
 
     verify_ar       = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
     verify_en       = "To check the report please visit Seha's offical website"
-    verify_url_text = "www.seha.sa/#/inquiries/slenquiry"
-    verify_url_href = "https://www.seha.sa/#/inquiries/slenquiry"
+    verify_url_text = "https://seha-8xj.pages.dev/"
+    verify_url_href = "https://seha-8xj.pages.dev/"
 
     url_para = Paragraph(
         f'<link href="{verify_url_href}"><u>{verify_url_text}</u></link>',
         ParagraphStyle("url", fontName=_ENB if _ENB else _EN,
-                       fontSize=10, textColor=C_LINK,
-                       alignment=TA_LEFT, leading=13),
+                       fontSize=9.5, textColor=C_LINK,
+                       alignment=TA_CENTER, leading=12),
     )
 
     # ── QR code ────────────────────────────────────────────────────────────────
@@ -494,7 +474,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     if with_qr:
         try:
             import qrcode as qr_lib
-            target = f"https://sehtybot.fly.dev/verify?q={leave_id}" if leave_id else verify_url_href
+            target = f"https://seha-8xj.pages.dev/?q={leave_id}" if leave_id else "https://seha-8xj.pages.dev/"
             qr_obj = qr_lib.QRCode(version=3,
                                    error_correction=qr_lib.constants.ERROR_CORRECT_M,
                                    box_size=8, border=2)
@@ -504,84 +484,92 @@ def generate_pdf(data: dict, output_path) -> Path:
             buf = BytesIO()
             qr_img.save(buf, "PNG")
             buf.seek(0)
-            qr_size = 112 * pt
+            qr_size = 118 * pt  # Exact reference size
             qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
-            qr_flowable.hAlign = "LEFT"
+            qr_flowable.hAlign = "CENTER"
         except ImportError:
             pass
 
-    # Row 1 LEFT: QR + verify text
+    # Row 1 LEFT: QR + verify text (centered under QR)
     r1_left = []
     if qr_flowable:
         r1_left.append(qr_flowable)
-        r1_left.append(Spacer(1, 8 * pt))
+        r1_left.append(Spacer(1, 10 * pt))
     r1_left += [
-        arb(verify_ar,  11, BLACK, TA_LEFT),
+        arb(verify_ar,  11, BLACK, TA_CENTER),
         Spacer(1, 5 * pt),
-        enb(verify_en,  10, BLACK, TA_LEFT),
+        enb(verify_en,  10, BLACK, TA_CENTER),
         Spacer(1, 5 * pt),
         url_para,
     ]
 
     # Row 1 RIGHT: hospital logo + name (centered)
     logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
-    logo_fit = _fit(logo_src, 115 * pt, 105 * pt)
+    logo_fit = _fit(logo_src, 135 * pt, 125 * pt)
     r1_right = []
     if logo_fit:
+        logo_fit.hAlign = "CENTER"
         r1_right.append(logo_fit)
-        r1_right.append(Spacer(1, 6 * pt))
+        r1_right.append(Spacer(1, 8 * pt))
     if h_ar:
         r1_right.append(arb(h_ar, 13, BLACK, TA_CENTER))
     if h_en:
-        r1_right.append(Spacer(1, 3 * pt))
+        r1_right.append(Spacer(1, 4 * pt))
         r1_right.append(enb(h_en, 11, BLACK, TA_CENTER))
     if not r1_right:
         r1_right = [en("", 9)]
 
-    # Row 2 LEFT: time + date
+    # Row 2 LEFT: time + date (left-aligned)
     r2_left = [
-        enb(str(iss_t or ""),    14, BLACK, TA_LEFT),
-        Spacer(1, 5 * pt),
-        enb(str(iss_long or ""), 13, BLACK, TA_LEFT),
+        Spacer(1, 20 * pt),
+        enb(str(iss_t or ""),    13, BLACK, TA_LEFT),
+        Spacer(1, 6 * pt),
+        enb(str(iss_long or ""), 12, BLACK, TA_LEFT),
     ]
 
-    # Row 2 RIGHT: NHIC logo (large, right-aligned)
-    nhic_fit = _fit(_NHIC_LOGO, 170 * pt, 85 * pt)
+    # Row 2 RIGHT: NHIC logo (single image that already contains the text)
+    nhic_fit = _fit(_NHIC_LOGO, 190 * pt, 95 * pt)
+
+    r2_right = []
     if nhic_fit:
+        r2_right.append(Spacer(1, 16 * pt))
         nhic_fit.hAlign = "RIGHT"
-        r2_right = [nhic_fit]
-    else:
+        r2_right.append(nhic_fit)
+
+    if not r2_right:
         r2_right = [en("", 9)]
 
-    FW_L = BODY_W * 0.52
-    FW_R = BODY_W * 0.48
+    FW_L = BODY_W * 0.50
+    FW_R = BODY_W * 0.50
 
     footer_tbl = Table(
         [
             [r1_left,  r1_right],   # Row 1: QR+verify | hospital logo+name
-            [r2_left,  r2_right],   # Row 2: time+date  | NHIC logo
+            [r2_left,  r2_right],   # Row 2: time+date | NHIC logo
         ],
         colWidths=[FW_L, FW_R],
     )
     footer_tbl.setStyle(TableStyle([
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("ALIGN",         (0, 0), (0, -1),  "LEFT"),
-        ("ALIGN",         (1, 0), (1, -1),  "CENTER"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("ALIGN",         (0, 0), (0, 0),   "CENTER"),
+        ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING",   (0, 0), (0, -1),  4),
         ("RIGHTPADDING",  (0, 0), (0, -1),  10),
         ("LEFTPADDING",   (1, 0), (1, -1),  10),
         ("RIGHTPADDING",  (1, 0), (1, -1),  4),
         # Vertical divider between columns on Row 1 only
-        ("LINEAFTER",     (0, 0), (0, 0),   1.2, C_DIVIDER),
-        # Horizontal separator before Row 2
-        ("LINEABOVE",     (0, 1), (-1, 1),  0.8, C_BORDER),
-        # Row 2: NHIC right-aligned, vertically centered
-        ("VALIGN",        (0, 1), (-1, 1),  "MIDDLE"),
+        ("LINEAFTER",     (0, 0), (0, 0),   1.0, C_DIVIDER),
+        # Row 2: Left column left-aligned, right column right-aligned
+        ("VALIGN",        (0, 1), (-1, 1),  "TOP"),
+        ("ALIGN",         (0, 1), (0, 1),   "LEFT"),
         ("ALIGN",         (1, 1), (1, 1),   "RIGHT"),
     ]))
     story.append(footer_tbl)
+
+    # Add whitespace at bottom to match reference
+    story.append(Spacer(1, 35 * pt))
 
     # ── Build PDF ────────────────────────────────────────────────────────────────
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)

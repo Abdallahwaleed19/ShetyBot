@@ -1,48 +1,368 @@
 """
-db/database.py — Async SQLAlchemy engine متصل بـ MySQL (seha_db).
+db/database.py — Unified Auth, Subscription, Verification, and Audit Database.
+Provides synchronous core functions and async wrappers for FastAPI.
+Fast, reliable, zero-deadlock SQLite storage.
 """
-import sys, os
+from __future__ import annotations
+import os
+import sys
+import sqlite3
+import hashlib
+import random
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any
+from pathlib import Path
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from config import BASE_DIR
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from config import DATABASE_URL
+logger = logging.getLogger(__name__)
 
-# ── Engine ────────────────────────────────────────────────────────────────────
-# pool_pre_ping=True يضمن إن الاتصال شغّال دايماً حتى بعد انتهاء المهلة
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=3600,   # تجديد الاتصالات كل ساعة
-)
+DB_PATH = BASE_DIR / "seha_auth.db"
 
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+
+def _get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+class UserRecord:
+    def __init__(self, row: sqlite3.Row | dict):
+        d = dict(row)
+        self.id = d["id"]
+        self.telegram_user_id = str(d["telegram_user_id"])
+        self.username = d.get("username")
+        self.role = d.get("role", "user")
+        self.is_active = bool(d.get("is_active", 1))
+
+        # Parse datetimes
+        s_start = d.get("subscription_start")
+        if isinstance(s_start, str):
+            try:
+                self.subscription_start = datetime.fromisoformat(s_start)
+            except Exception:
+                self.subscription_start = None
+        else:
+            self.subscription_start = s_start
+
+        s_end = d.get("subscription_end")
+        if isinstance(s_end, str):
+            try:
+                self.subscription_end = datetime.fromisoformat(s_end)
+            except Exception:
+                self.subscription_end = None
+        else:
+            self.subscription_end = s_end
+
+        self.created_at = d.get("created_at")
+
+    def __repr__(self):
+        return f"<User id={self.id} tg={self.telegram_user_id} role={self.role}>"
+
+
+def init_db_sync() -> None:
+    """Initializes tables for users, verifications, subscriptions, and audits."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_user_id TEXT UNIQUE NOT NULL,
+        username TEXT,
+        role TEXT DEFAULT 'user',
+        subscription_start TEXT,
+        subscription_end TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS verification_codes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        code_hash TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS report_ownership (
+        service_code TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        telegram_user_id TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info("Database schema initialized successfully at %s", DB_PATH)
 
 
 async def init_db() -> None:
-    """
-    بنتأكد إن الاتصال بـ MySQL شغّال.
-    لو MySQL مش شغّال، بنسجّل تحذير ومش بنوقّف البوت.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
-        logger.info("MySQL connected OK — seha_db ready.")
-    except Exception as e:
-        logger.warning(
-            f"MySQL not available yet: {e}\n"
-            "The bot will still run but saving reports will fail "
-            "until MySQL is started."
+    init_db_sync()
+
+
+async def get_session():
+    """Async generator compatible with FastAPI Depends(get_session)."""
+    class DummySession:
+        pass
+    yield DummySession()
+
+
+# ── User Management ───────────────────────────────────────────────────────────
+def get_or_create_user_sync(telegram_user_id: str = "0", username: str = None) -> UserRecord:
+    conn = _get_conn()
+    cur = conn.cursor()
+    tg_id = str(telegram_user_id)
+    cur.execute("SELECT * FROM users WHERE telegram_user_id = ?", (tg_id,))
+    row = cur.fetchone()
+
+    if not row:
+        admin_id = os.getenv("ADMIN_TELEGRAM_ID", "").strip()
+        role = "admin" if (admin_id and tg_id == admin_id) else "user"
+
+        now = datetime.now(timezone.utc)
+        sub_end = now + timedelta(days=30)
+        cur.execute(
+            """INSERT INTO users (telegram_user_id, username, role, subscription_start, subscription_end, is_active)
+               VALUES (?, ?, ?, ?, ?, 1)""",
+            (tg_id, username, role, now.isoformat(), sub_end.isoformat())
         )
+        conn.commit()
+        user_id = cur.lastrowid
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        log_audit(user_id, "USER_CREATED", f"User {username or tg_id} created with initial 30d subscription")
+
+    conn.close()
+    return UserRecord(row)
 
 
-async def get_session() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
+async def get_or_create_user(session=None, telegram_user_id: str = "0", username: str = None) -> UserRecord:
+    return get_or_create_user_sync(telegram_user_id, username)
+
+
+def get_all_users_sync() -> List[UserRecord]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users ORDER BY id ASC")
+    rows = cur.fetchall()
+    conn.close()
+    return [UserRecord(r) for r in rows]
+
+
+async def get_all_users(session=None) -> List[UserRecord]:
+    return get_all_users_sync()
+
+
+# ── Subscription Management ───────────────────────────────────────────────────
+def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return {"active": False, "days_remaining": 0, "message": "المستخدم غير موجود"}
+
+    user = UserRecord(row)
+    if not user.is_active:
+        return {"active": False, "days_remaining": 0, "message": "الحساب معطل"}
+
+    if not user.subscription_end:
+        return {"active": False, "days_remaining": 0, "message": "لا يوجد اشتراك"}
+
+    now = datetime.now(timezone.utc)
+    sub_end = user.subscription_end
+    if sub_end.tzinfo is None:
+        sub_end = sub_end.replace(tzinfo=timezone.utc)
+
+    diff = sub_end - now
+    days_remaining = diff.days
+
+    if diff.total_seconds() <= 0 or days_remaining < 0:
+        return {"active": False, "days_remaining": 0, "message": "انتهى الاشتراك"}
+
+    if days_remaining == 0 and diff.total_seconds() > 0:
+        message = "متبقي على انتهاء الاشتراك 1 يوم"
+        return {"active": True, "days_remaining": 1, "message": message}
+
+    message = f"متبقي على انتهاء الاشتراك {days_remaining} يوم" if days_remaining > 1 else "متبقي على انتهاء الاشتراك 1 يوم"
+    return {"active": True, "days_remaining": days_remaining, "message": message}
+
+
+async def check_subscription(session=None, user_id: int = 0) -> Dict[str, Any]:
+    return check_subscription_sync(user_id)
+
+
+def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        raise ValueError("User not found")
+
+    user = UserRecord(row)
+    now = datetime.now(timezone.utc)
+
+    current_end = user.subscription_end
+    if current_end and current_end.tzinfo is None:
+        current_end = current_end.replace(tzinfo=timezone.utc)
+
+    if current_end and current_end > now:
+        new_end = current_end + timedelta(days=days)
+        new_start = user.subscription_start or now
+    else:
+        new_start = now
+        new_end = now + timedelta(days=days)
+
+    cur.execute(
+        """UPDATE users 
+           SET subscription_start = ?, subscription_end = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (new_start.isoformat(), new_end.isoformat(), user_id)
+    )
+    conn.commit()
+
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    updated_row = cur.fetchone()
+    conn.close()
+
+    log_audit(user_id, "RENEW_SUBSCRIPTION", f"Subscription renewed by {days} days until {new_end.isoformat()}")
+    return UserRecord(updated_row)
+
+
+async def renew_subscription(session=None, user_id: int = 0, days: int = 30) -> UserRecord:
+    return renew_subscription_sync(user_id, days)
+
+
+# ── Verification Codes (5-digit, strictly 10s expiry) ─────────────────────────
+def create_verification_code_sync(user_id: int = 0) -> str:
+    code = f"{random.randint(10000, 99999)}"
+    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=10)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO verification_codes (user_id, code_hash, expires_at, used)
+           VALUES (?, ?, ?, 0)""",
+        (user_id, code_hash, expires_at.isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+    log_audit(user_id, "CODE_REQUESTED", "Verification code generated (10s expiry)")
+    return code
+
+
+async def create_verification_code(session=None, user_id: int = 0) -> str:
+    return create_verification_code_sync(user_id)
+
+
+def verify_code_sync(user_id: int = 0, code: str = "") -> bool:
+    code_hash = hashlib.sha256(str(code).strip().encode("utf-8")).hexdigest()
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, expires_at FROM verification_codes 
+           WHERE user_id = ? AND code_hash = ? AND used = 0
+           ORDER BY id DESC LIMIT 1""",
+        (user_id, code_hash)
+    )
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        log_audit(user_id, "CODE_FAILED", "Invalid code attempted")
+        return False
+
+    code_id = row["id"]
+    exp_dt = datetime.fromisoformat(row["expires_at"])
+    if exp_dt.tzinfo is None:
+        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+
+    if datetime.now(timezone.utc) > exp_dt:
+        cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (code_id,))
+        conn.commit()
+        conn.close()
+        log_audit(user_id, "CODE_EXPIRED", "Verification code expired (exceeded 10 seconds)")
+        return False
+
+    cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (code_id,))
+    conn.commit()
+    conn.close()
+
+    log_audit(user_id, "CODE_VERIFIED", "Verification code verified successfully")
+    return True
+
+
+async def verify_code(session=None, user_id: int = 0, code: str = "") -> bool:
+    return verify_code_sync(user_id, code)
+
+
+# ── Data Isolation & Report Ownership ─────────────────────────────────────────
+def record_report_ownership_sync(service_code: str = "", user_id: int = 0, telegram_user_id: str = "0"):
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT OR REPLACE INTO report_ownership (service_code, user_id, telegram_user_id)
+           VALUES (?, ?, ?)""",
+        (str(service_code), int(user_id), str(telegram_user_id))
+    )
+    conn.commit()
+    conn.close()
+
+
+async def record_report_ownership(session=None, service_code: str = "", user_id: int = 0, telegram_user_id: str = "0"):
+    record_report_ownership_sync(service_code, user_id, telegram_user_id)
+
+
+def verify_report_ownership_sync(service_code_or_id: Any = "", user_id: int = 0) -> bool:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT user_id FROM report_ownership WHERE service_code = ?",
+        (str(service_code_or_id),)
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return True
+    return row["user_id"] == int(user_id)
+
+
+async def verify_report_ownership(session=None, service_code_or_id: Any = "", user_id: int = 0) -> bool:
+    return verify_report_ownership_sync(service_code_or_id, user_id)
+
+
+# ── Audit Logging ─────────────────────────────────────────────────────────────
+def log_audit(user_id: Optional[int], action: str, details: str = ""):
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)",
+            (user_id, str(action), str(details))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to write audit log: {e}")

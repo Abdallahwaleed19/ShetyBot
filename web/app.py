@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup: ensure local database tables are created
+    from db.database import init_db_sync
+    try:
+        init_db_sync()
+        logger.info("✅ Auth and ownership database initialized.")
+    except Exception as e:
+        logger.warning(f"⚠️ Auth database init error: {e}")
+
     # Startup: warm up the HTTP client & check Worker
     await get_client()
     ok = await health_check()

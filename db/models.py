@@ -1,13 +1,10 @@
 """
-db/models.py — SQLAlchemy ORM model يطابق جدول sick_leave_reports بالظبط.
-
-الجدول موجود في قاعدة بيانات seha_db التابعة لموقع Laravel،
-البوت يحفظ فيه مباشرة عشان الموقع يقدر يعرض البيانات.
+db/models.py — SQLAlchemy ORM models
 """
 import enum
 from sqlalchemy import (
-    BigInteger, Column, Date, Enum, Index,
-    SmallInteger, String, Text, Time, TIMESTAMP, UniqueConstraint,
+    BigInteger, Column, Date, Enum, Index, Integer,
+    SmallInteger, String, Text, Time, TIMESTAMP, UniqueConstraint, Boolean, DateTime,
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func
@@ -20,6 +17,43 @@ class Base(DeclarativeBase):
 class HospitalType(str, enum.Enum):
     government = "government"
     private    = "private"
+
+
+class UserRole(str, enum.Enum):
+    user = "user"
+    admin = "admin"
+
+
+class User(Base):
+    """User accounts with subscription management"""
+    __tablename__ = "users"
+
+    id                = Column(BigInteger, primary_key=True, autoincrement=True)
+    telegram_user_id  = Column(String(50),  nullable=False, unique=True, index=True)
+    username          = Column(String(100), nullable=True)
+    role              = Column(Enum(UserRole), nullable=False, default=UserRole.user)
+
+    # Subscription
+    subscription_start = Column(DateTime, nullable=True)
+    subscription_end   = Column(DateTime, nullable=True)
+    is_active         = Column(Boolean,   nullable=False, default=True)
+
+    # Timestamps
+    created_at        = Column(TIMESTAMP, server_default=func.now(), nullable=True)
+    updated_at        = Column(TIMESTAMP, server_default=func.now(),
+                               onupdate=func.now(), nullable=True)
+
+
+class VerificationCode(Base):
+    """Temporary 5-digit verification codes (10-second expiry)"""
+    __tablename__ = "verification_codes"
+
+    id          = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id     = Column(BigInteger, nullable=False, index=True)
+    code_hash   = Column(String(100), nullable=False)  # Hashed, not plain text
+    expires_at  = Column(DateTime,   nullable=False)
+    used        = Column(Boolean,    nullable=False, default=False)
+    created_at  = Column(TIMESTAMP,   server_default=func.now(), nullable=True)
 
 
 class SickLeaveReport(Base):
@@ -65,6 +99,9 @@ class SickLeaveReport(Base):
     # ── حقول إضافية (موجودة في الجدول) ──────────────────────────────────
     companion_name      = Column(String(255), nullable=True)
     relationship        = Column(String(100), nullable=True)
+
+    # ── User ownership (for data isolation) ───────────────────────────────
+    user_id             = Column(BigInteger, nullable=False, index=True)
 
     # ── Timestamps (Laravel convention) ───────────────────────────────────
     created_at          = Column(TIMESTAMP, server_default=func.now(), nullable=True)

@@ -50,9 +50,15 @@
     .field input::placeholder{color:rgba(255,255,255,0.38)}
     .field select option{background:#0d3a8e;color:#fff}
     .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:right}
-    /* Remove browser default placeholder on date inputs */
-    .field input[type=date]:not(.has-value){color:rgba(255,255,255,0.4)}
-    .field input[type=date].has-value{color:#fff}
+    /* Clean date inputs - no placeholder text */
+    .field input[type=date]::-webkit-datetime-edit { padding: 0; }
+    .field input[type=date]::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+    .field input[type=date]::-webkit-datetime-edit-text { color: rgba(255,255,255,0.5); }
+    .field input[type=date]::-webkit-datetime-edit-month-field,
+    .field input[type=date]::-webkit-datetime-edit-day-field,
+    .field input[type=date]::-webkit-datetime-edit-year-field { color: #fff; }
+    .field input[type=date]:not(.has-value) { color: rgba(255,255,255,0.3); }
+    .field input[type=date].has-value { color: #fff; }
 
     /* ── Row (2 cols) ─────────────────────────────────── */
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -179,6 +185,7 @@
     <div class="step-dot" id="d3"></div>
   </div>
   <div class="progress-label" id="progress-lbl">الصفحة 1 من 3 — تفاصيل الإجازة</div>
+  <div class="subscription-status" id="subscription_status" style="font-size:11px;opacity:.8;text-align:center;margin-top:4px"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -195,6 +202,18 @@
       <div class="tog"     id="trt_psl" onclick="pickReportType('PSL')">PSL</div>
     </div>
     <input type="hidden" id="report_type" value="GSL">
+  </div>
+
+  <!-- رمز الخدمة — ظاهر وقابل للتعديل بالكامل مع توليد تلقائي -->
+  <div class="field">
+    <label>🔑 رمز الخدمة / الإجازة (يمكنك تعديله)</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="service_code" placeholder="مثال: GSL26080311625 أو PSL26102005781" required
+             style="flex:1;font-weight:700;font-family:monospace;letter-spacing:1px;font-size:15px"
+             oninput="onServiceCodeManualEdit()">
+      <button type="button" class="btn" style="padding:10px 14px;background:rgba(255,255,255,0.15);border-radius:10px;font-size:12px;white-space:nowrap" onclick="regenerateServiceCode(true)">🔄 توليد</button>
+    </div>
+    <div style="font-size:11px;opacity:.7;margin-top:4px">يتغير تلقائيًا عند اختيار حكومي (GSL) أو خاص (PSL)، ويمكنك تعديله وكتابته يدويًا</div>
   </div>
 
   <!-- تاريخ الدخول / الخروج — compact, no placeholder text -->
@@ -246,8 +265,7 @@
 <div class="page" id="p2">
   <p class="page-title">👤 بيانات المريض</p>
 
-  <!-- Service code: HIDDEN from display -->
-  <input type="hidden" id="service_code">
+  <!-- رمز الخدمة موجود في الصفحة 1 -->
 
   <div class="field">
     <label>🪪 رقم الهوية / الإقامة</label>
@@ -383,20 +401,24 @@
 const tg = window.Telegram?.WebApp;
 if(tg){ tg.ready(); tg.expand(); }
 
-// ── Service Code Generator ───────────────────────────────────────────────────
-// Format: {PREFIX}{YY}{MM}{DD}{5 random digits}
-// GSL = Government Sick Leave  /  PSL = Private Sick Leave
-function generateServiceCode(prefix) {
-  const now = new Date();
-  const yy  = String(now.getFullYear()).slice(2);
-  const mm  = String(now.getMonth() + 1).padStart(2, '0');
-  const dd  = String(now.getDate()).padStart(2, '0');
-  const rand = Math.floor(Math.random() * 1e5).toString().padStart(5, '0');
-  return `${prefix}${yy}${mm}${dd}${rand}`;
-}
-// Initial generation (GSL = government, default)
-(function(){
-  document.getElementById('service_code').value = generateServiceCode('GSL');
+// ── Check Subscription Status ───────────────────────────────────────────────
+(async function(){
+  const uid = tg?.initDataUnsafe?.user?.id || 0;
+  if (!uid) return;
+
+  try {
+    const res = await fetch(`/api/subscription-status?telegram_user_id=${uid}`);
+    if (res.ok) {
+      const data = await res.json();
+      const statusEl = document.getElementById('subscription_status');
+      if (statusEl) {
+        statusEl.textContent = data.message;
+        statusEl.style.color = data.active ? '#4caf50' : '#f44336';
+      }
+    }
+  } catch (e) {
+    console.error('Failed to check subscription:', e);
+  }
 })();
 
 // ── Edit mode: pre-fill form if ?edit=SERVICE_CODE in URL ───────────────────
@@ -428,8 +450,10 @@ function generateServiceCode(prefix) {
       document.getElementById('tg').classList.toggle('sel', ht === 'government');
       document.getElementById('tp').classList.toggle('sel', ht === 'private');
     }
+    if (d.issue_date)          { document.getElementById('issue_date').value = d.issue_date; markDateFilled('issue_date'); }
+    if (d.report_time)         { document.getElementById('issue_time').value = d.report_time; }
 
-    // Page 2 — always restore original service_code in edit mode
+    // Page 2 — restore service_code in edit mode
     if (d.service_code)         document.getElementById('service_code').value = d.service_code;
     if (d.national_id)          document.getElementById('national_id').value = d.national_id;
     if (d.patient_name_ar)      document.getElementById('patient_name_ar').value = d.patient_name_ar;
@@ -467,6 +491,7 @@ function generateServiceCode(prefix) {
   const pad = n => String(n).padStart(2,'0');
   const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   document.getElementById('issue_date').value = dateStr;
+  markDateFilled('issue_date');
 
   // Set time (24h for input value, AM/PM for display)
   const h24 = now.getHours();
@@ -489,12 +514,49 @@ function setAmPm(val, updateTime=true) {
     const timeEl = document.getElementById('issue_time');
     if (timeEl.value) {
       let [h, m] = timeEl.value.split(':').map(Number);
+      // Convert from current display to preserve user's hour
       if (val === 'PM' && h < 12)  h += 12;
       if (val === 'AM' && h >= 12) h -= 12;
+      // Handle midnight/noon special cases
+      if (h === 24) h = 0;
+      if (h === 12 && val === 'AM') h = 0;
+      if (h === 0 && val === 'PM') h = 12;
       timeEl.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
     }
   }
 }
+
+// ── Service Code Generation & Manual Edit ────────────────────────────────────
+let _serviceCodeUserEdited = false;
+
+function generateServiceCode(prefix) {
+  const now = new Date();
+  const yy  = String(now.getFullYear()).slice(2);
+  const mm  = String(now.getMonth() + 1).padStart(2, '0');
+  const dd  = String(now.getDate()).padStart(2, '0');
+  // 5 random digits matching format: GSL26080311625 / PSL26102005781
+  const rand = Math.floor(10000 + Math.random() * 90000).toString();
+  return `${prefix}${yy}${mm}${dd}${rand}`;
+}
+
+function onServiceCodeManualEdit() {
+  _serviceCodeUserEdited = true;
+}
+
+function regenerateServiceCode(force = false) {
+  const rType = document.getElementById('report_type').value || 'GSL';
+  const prefix = (rType === 'PSL') ? 'PSL' : 'GSL';
+  document.getElementById('service_code').value = generateServiceCode(prefix);
+  if (force) _serviceCodeUserEdited = false;
+}
+
+// Initial code generation on page load
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('edit')) {
+    regenerateServiceCode(false);
+  }
+})();
 
 // ── Report type toggle ───────────────────────────────────────────────────────
 // GSL → Government hospital,  PSL → Private hospital
@@ -505,12 +567,11 @@ function pickReportType(t) {
 
   // Sync hospital type to match
   const hospType = (t === 'GSL') ? 'government' : 'private';
-  pickType(hospType, false);   // pass false to avoid regenerating twice
+  pickType(hospType, false);
 
-  // Regenerate service code with new prefix
-  const existing = document.getElementById('service_code').value;
-  // Only regenerate if not in edit mode (edit mode keeps original code)
-  if (!new URLSearchParams(window.location.search).get('edit')) {
+  // Auto-update service code prefix if not in edit mode and not manually typed
+  const isEditMode = Boolean(new URLSearchParams(window.location.search).get('edit'));
+  if (!isEditMode && !_serviceCodeUserEdited) {
     document.getElementById('service_code').value = generateServiceCode(t);
   }
 }
@@ -529,8 +590,8 @@ function pickType(t, syncReportType = true) {
     document.getElementById('trt_gsl').classList.toggle('sel', rType === 'GSL');
     document.getElementById('trt_psl').classList.toggle('sel', rType === 'PSL');
 
-    // Regenerate service code with new prefix
-    if (!new URLSearchParams(window.location.search).get('edit')) {
+    const isEditMode = Boolean(new URLSearchParams(window.location.search).get('edit'));
+    if (!isEditMode && !_serviceCodeUserEdited) {
       document.getElementById('service_code').value = generateServiceCode(rType);
     }
   }
@@ -566,6 +627,7 @@ function onDateChange() {
 
   const admVal = admEl.value;
   const disVal = disEl.value;
+  disEl.min = admVal || '';
 
   if (!admVal || !disVal) {
     disp.textContent = 'اختر التواريخ أولاً';
@@ -574,11 +636,13 @@ function onDateChange() {
     return;
   }
 
-  // Parse dates without timezone issues (use UTC midnight)
-  const adm = new Date(admVal + 'T00:00:00');
-  const dis = new Date(disVal + 'T00:00:00');
+  // Parse ISO calendar dates as UTC components, independent of local timezone.
+  const [ay, am, ad] = admVal.split('-').map(Number);
+  const [dy, dm, dd] = disVal.split('-').map(Number);
+  const admTime = Date.UTC(ay, am - 1, ad);
+  const disTime = Date.UTC(dy, dm - 1, dd);
 
-  if (dis < adm) {
+  if (disTime < admTime) {
     disp.textContent = '⚠️ تاريخ الخروج قبل تاريخ الدخول';
     disp.className = 'duration-display invalid';
     durEl.value = '';
@@ -587,7 +651,7 @@ function onDateChange() {
 
   // Inclusive day count: (dis - adm) / ms_per_day + 1
   const msPerDay = 86400000;
-  const days = Math.round((dis - adm) / msPerDay) + 1;
+  const days = Math.round((disTime - admTime) / msPerDay) + 1;
   disp.textContent = `${days} يوم`;
   disp.className = 'duration-display';
   durEl.value = days;
@@ -630,6 +694,7 @@ function validate(n) {
     if (!document.getElementById('issue_date').value)      return 'أدخل تاريخ الإصدار';
   }
   if (n === 2) {
+    if (!document.getElementById('service_code').value.trim()) return 'أدخل رمز الخدمة';
     if (!document.getElementById('national_id').value.trim())     return 'أدخل رقم الهوية';
     if (!document.getElementById('patient_name_ar').value.trim()) return 'أدخل اسم المريض بالعربية';
   }

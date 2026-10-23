@@ -7,6 +7,10 @@ Routes:
 - GET  /api/verify                 : JSON verification API
 - GET  /api/my-reports             : Reports by telegram_user_id
 - GET  /api/download/{service_code}: Download PDF
+- GET  /admin                      : Admin panel
+- POST /api/admin/renew            : Renew subscription
+- POST /api/admin/verify-code      : Request verification code
+- POST /api/admin/check-code      : Check verification code
 """
 import os
 import sys
@@ -18,7 +22,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Request, Query
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Request, Query, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 
@@ -28,10 +32,35 @@ from db.worker_client import (
     search_by_national_id,
     upload_logo,
 )
+from db.database import (
+    get_session,
+    get_or_create_user,
+    get_all_users,
+    check_subscription,
+    renew_subscription,
+    create_verification_code,
+    verify_code,
+    get_user_reports,
+    verify_report_ownership,
+    record_report_ownership,
+)
+from db.models import User
 from config import BASE_DIR, UPLOADS_DIR, REPORTS_DIR
+from web.form_logic import inclusive_duration
 
 router    = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
+
+
+# ── Dependency: Get current user from Telegram ───────────────────────────────
+async def get_current_user(request: Request) -> User:
+    """Get or create user from Telegram WebApp data"""
+    telegram_user_id = request.query_params.get("telegram_user_id") or "0"
+    username = request.query_params.get("username")
+
+    async for session in get_session():
+        user = await get_or_create_user(session, telegram_user_id, username)
+        return user
 
 
 # ── WebApp Form ────────────────────────────────────────────────────────────────
@@ -43,6 +72,7 @@ async def form_page(request: Request):
 # ── Submit Report API ──────────────────────────────────────────────────────────
 @router.post("/api/submit-report", summary="Receive form data, save via Worker, generate PDF")
 async def submit_report(
+    current_user: User = Depends(get_current_user),
     # Page 1
     service_code:         str = Form(...),
     report_type:          str = Form("GSL"),
@@ -68,10 +98,19 @@ async def submit_report(
     hospital_name_ar:     str = Form(""),
     hospital_name_en:     str = Form(""),
     hospital_type:        str = Form("government"),
-    telegram_user_id:     str = Form("0"),
     logo: Optional[UploadFile] = File(None),
 ):
     try:
+        # ── Check subscription ───────────────────────────────────────────────────
+        async for session in get_session():
+            sub_status = await check_subscription(session, current_user.id)
+            if not sub_status["active"]:
+                return JSONResponse({
+                    "success": False,
+                    "error": sub_status["message"],
+                    "subscription_expired": True
+                })
+
         # ── Arabia Standard Time (UTC+3) for fallback timestamps ──────────────
         now_dt = datetime.now(timezone(timedelta(hours=3)))
 
@@ -88,6 +127,10 @@ async def submit_report(
         dis = pd(discharge_date)
         if not adm or not dis:
             return JSONResponse({"success": False, "error": "تاريخ غير صحيح"})
+        if dis < adm:
+            return JSONResponse({"success": False, "error": "تاريخ الخروج يجب ألا يسبق تاريخ الدخول"})
+        if report_type not in {"GSL", "PSL"}:
+            return JSONResponse({"success": False, "error": "نوع التقرير غير صالح"})
 
         # ── Issue date: use form value if valid, else server date ─────────────
         iss = pd(issue_date) if issue_date.strip() else None
@@ -106,13 +149,7 @@ async def submit_report(
             rt = now_dt.time().replace(second=0, microsecond=0)
 
         # ── Leave duration: sent by frontend (auto-calculated) ─────────────────
-        dur = 1
-        try:
-            dur = int(leave_duration_days)
-            if dur < 1:
-                dur = max((dis - adm).days + 1, 1)
-        except Exception:
-            dur = max((dis - adm).days + 1, 1)
+        dur = inclusive_duration(adm, dis)
 
         # ── Include barcode flag ───────────────────────────────────────────────
         with_barcode = (include_barcode.strip() == "1")
@@ -184,6 +221,13 @@ async def submit_report(
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, generate_pdf, pdf_data, pdf_path)
 
+        # ── Track ownership in database for data isolation ────────────────────
+        try:
+            async for s in get_session():
+                await record_report_ownership(s, service_code, current_user.id, current_user.telegram_user_id)
+        except Exception as e:
+            pass
+
         # ── Save to Cloudflare Worker (D1) — best effort ──────────────────────
         report_data = {
             "service_code":         service_code,
@@ -208,7 +252,8 @@ async def submit_report(
             "hospital_name_en":     hospital_name_en,
             "hospital_type":        hospital_type,
             "logo_url":             logo_url or "",
-            "telegram_user_id":     telegram_user_id,
+            "telegram_user_id":     current_user.telegram_user_id,
+            "user_id":              current_user.id,  # For data isolation
         }
         worker_result = await create_report(report_data)
         if not worker_result.get("success"):
@@ -280,13 +325,138 @@ async def my_reports(telegram_user_id: str = Query(...)):
         raise HTTPException(500, str(e))
 
 
+@router.get("/api/subscription-status")
+async def subscription_status(telegram_user_id: str = Query(...)):
+    """Get subscription status for user"""
+    async for session in get_session():
+        result = await session.execute(
+            select(User).where(User.telegram_user_id == telegram_user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return {"active": False, "message": "المستخدم غير موجود"}
+
+        sub_status = await check_subscription(session, user.id)
+        return sub_status
+
+
 @router.get("/api/download/{service_code}")
-async def download_pdf(service_code: str):
+async def download_pdf(service_code: str, current_user: User = Depends(get_current_user)):
+    """Download PDF with ownership verification"""
     pdf = REPORTS_DIR / f"{service_code}.pdf"
     if not pdf.exists():
         raise HTTPException(404, "PDF not found")
+
+    # Verify ownership (data isolation)
+    async for session in get_session():
+        record = await get_report(service_code)
+        if record and record.get("telegram_user_id") != current_user.telegram_user_id:
+            raise HTTPException(403, "Unauthorized: You can only download your own reports")
+
     return FileResponse(
         str(pdf),
         media_type="application/pdf",
         filename=f"SickLeave_{service_code}.pdf",
     )
+
+
+# ── Admin Panel ───────────────────────────────────────────────────────────────
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request, current_user: User = Depends(get_current_user)):
+    """Admin panel for user management and subscription renewal"""
+    admin_key = request.query_params.get("key") or request.headers.get("x-admin-key")
+    is_authorized = (current_user.role == "admin") or (admin_key and admin_key == os.getenv("ADMIN_KEY", "admin123"))
+    if not is_authorized:
+        raise HTTPException(403, "Access denied: Admin authorization required")
+
+    async for session in get_session():
+        # Get all users
+        users = await get_all_users(session)
+
+        users_data = []
+        for user in users:
+            sub_status = await check_subscription(session, user.id)
+            users_data.append({
+                "id": user.id,
+                "telegram_user_id": user.telegram_user_id,
+                "username": user.username,
+                "role": user.role,
+                "subscription_start": user.subscription_start,
+                "subscription_end": user.subscription_end,
+                "is_active": user.is_active,
+                "days_remaining": sub_status["days_remaining"],
+                "subscription_message": sub_status["message"],
+            })
+
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {"users": users_data}
+    )
+
+
+@router.post("/api/admin/renew")
+async def renew_subscription_api(
+    user_id: int = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Renew user subscription (admin only)"""
+    admin_key = request.query_params.get("key") or request.headers.get("x-admin-key")
+    is_authorized = (current_user.role == "admin") or (admin_key and admin_key == os.getenv("ADMIN_KEY", "admin123"))
+    if not is_authorized:
+        raise HTTPException(403, "Access denied: Admin authorization required")
+
+    async for session in get_session():
+        user = await renew_subscription(session, user_id, days=30)
+        return JSONResponse({
+            "success": True,
+            "subscription_end": user.subscription_end.isoformat(),
+            "message": "تم تجديد الاشتراك لمدة 30 يوم"
+        })
+
+
+@router.post("/api/admin/verify-code")
+async def request_verification_code(
+    user_id: int = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Request a 5-digit verification code (admin only)"""
+    admin_key = request.query_params.get("key") or request.headers.get("x-admin-key")
+    is_authorized = (current_user.role == "admin") or (admin_key and admin_key == os.getenv("ADMIN_KEY", "admin123"))
+    if not is_authorized:
+        raise HTTPException(403, "Access denied: Admin authorization required")
+
+    async for session in get_session():
+        code = await create_verification_code(session, user_id)
+        return JSONResponse({
+            "success": True,
+            "code": code,
+            "message": "الرمز صالح لمدة 10 ثوانٍ فقط"
+        })
+
+
+@router.post("/api/admin/check-code")
+async def check_verification_code_api(
+    user_id: int = Form(...),
+    code: str = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Check verification code (admin only)"""
+    admin_key = request.query_params.get("key") or request.headers.get("x-admin-key")
+    is_authorized = (current_user.role == "admin") or (admin_key and admin_key == os.getenv("ADMIN_KEY", "admin123"))
+    if not is_authorized:
+        raise HTTPException(403, "Access denied: Admin authorization required")
+
+    async for session in get_session():
+        valid = await verify_code(session, user_id, code)
+        if valid:
+            return JSONResponse({
+                "success": True,
+                "message": "الرمز صحيح"
+            })
+        else:
+            return JSONResponse({
+                "success": False,
+                "message": "الرمز غير صحيح أو منتهي الصلاحية"
+            })

@@ -25,6 +25,13 @@ WORKER_URL: str = os.getenv(
 # Optional secret token to protect your Worker endpoints
 WORKER_SECRET: str = os.getenv("WORKER_SECRET", "").strip()
 
+# ── Database (SQLite for local/Fly.io auth, or MySQL/Postgres if configured) ──
+DEFAULT_DB_PATH = BASE_DIR / "seha_auth.db"
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    f"sqlite+aiosqlite:///{DEFAULT_DB_PATH.as_posix()}"
+)
+
 # ── File Storage (local cache for PDF generation) ────────────────────────────
 UPLOADS_DIR: Path = BASE_DIR / "uploads"
 REPORTS_DIR: Path = BASE_DIR / "reports"
