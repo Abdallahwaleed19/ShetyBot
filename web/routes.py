@@ -14,7 +14,7 @@ import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -71,8 +71,8 @@ async def submit_report(
     logo: Optional[UploadFile] = File(None),
 ):
     try:
-        # ── Auto issue date & time (server-side) ─────────────────────────────
-        now_dt          = datetime.now()
+        # ── Auto issue date & time (Arabia Standard Time, UTC+3) ─────────────
+        now_dt          = datetime.now(timezone(timedelta(hours=3)))
         auto_issue_date = now_dt.date()
         auto_time       = now_dt.time().replace(second=0, microsecond=0)
 

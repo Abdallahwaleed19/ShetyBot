@@ -102,8 +102,8 @@ _ARB = _try_register(
 # ── Colors (from official template) ────────────────────────────────────────────
 C_DARK_BLUE  = colors.HexColor("#1B3A6B")
 C_TITLE      = colors.HexColor("#2A6A9A")
-C_LABEL_TEXT = colors.HexColor("#1A5276")
-C_VALUE      = colors.HexColor("#1B6A9A")
+C_LABEL_TEXT = colors.HexColor("#1A6F96")
+C_VALUE      = colors.HexColor("#1A7AAB")
 C_LINK       = colors.HexColor("#1155CC")
 C_GREY_TEXT  = colors.HexColor("#4A4A4A")
 C_GREY_LINE  = colors.HexColor("#BFBFBF")
@@ -162,13 +162,13 @@ def arabic_bold(text, sz=9, color=BLACK, align=TA_RIGHT):
     return _p(ar(text), _ARB if _ARB else _AR, sz, color, align)
 
 
-def smart(text, sz=9, color=None, align=TA_CENTER):
+def smart(text, sz=9.5, color=None, align=TA_CENTER):
     if color is None:
         color = C_VALUE
     s = str(text or "")
     if has_ar(s):
-        return _p(ar(s), _AR, sz, color, TA_CENTER)
-    return _p(s, _EN, sz, color, align)
+        return _p(ar(s), _ARB if _ARB else _AR, sz, color, TA_CENTER)
+    return _p(s, _ENB if _ENB else _EN, sz, color, align)
 
 
 # ── Image helpers ──────────────────────────────────────────────────────────────
@@ -281,10 +281,10 @@ def generate_pdf(data: dict, output_path) -> Path:
     dur_en_val = f"{dur} day(s) ( {ad_g} to {dd_g} )"
     dur_ar_inner = Table(
         [[
-            _p(f"{dur} {ar('يوم')}", _AR, 8, WHITE, TA_CENTER),
-            en(str(ad_h), 8, WHITE, TA_CENTER),
-            arabic("الى", 8, WHITE, TA_CENTER),
-            en(str(dd_h), 8, WHITE, TA_CENTER),
+            _p(f"{dur} {ar('يوم')}", _ARB if _ARB else _AR, 8, WHITE, TA_CENTER),
+            en_bold(str(ad_h), 8, WHITE, TA_CENTER),
+            arabic_bold("الى", 8, WHITE, TA_CENTER),
+            en_bold(str(dd_h), 8, WHITE, TA_CENTER),
         ]],
         colWidths=[1.45 * cm, 1.45 * cm, 0.55 * cm, 1.45 * cm],
         hAlign="CENTER",
@@ -363,19 +363,19 @@ def generate_pdf(data: dict, output_path) -> Path:
     CV = usable_w * 0.30
 
     def lbl_en(t):
-        return en(t, 9, C_LABEL_TEXT, TA_CENTER)
+        return en_bold(t, 9, C_LABEL_TEXT, TA_CENTER)
 
     def lbl_ar(t):
-        return arabic(t, 9, C_LABEL_TEXT, TA_CENTER)
+        return arabic_bold(t, 9, C_LABEL_TEXT, TA_CENTER)
 
     rows_spec = [
         ([lbl_en("Leave ID"), smart(leave_id, 9), "", lbl_ar("رمز الإجازة")], True, False),
         (
             [
-                en("Leave Duration", 9, WHITE, TA_CENTER),
-                en(dur_en_val, 8, WHITE, TA_CENTER),
+                en_bold("Leave Duration", 9, WHITE, TA_CENTER),
+                en_bold(dur_en_val, 8, WHITE, TA_CENTER),
                 dur_ar_inner,
-                arabic("مدة الإجازة", 9, WHITE, TA_CENTER),
+                arabic_bold("مدة الإجازة", 9, WHITE, TA_CENTER),
             ],
             False,
             True,
