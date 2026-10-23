@@ -372,39 +372,34 @@ def generate_pdf(data: dict, output_path) -> Path:
         c.restoreState()
 
     # ── Build story (flowable content) ──────────────────────────────────────────
-    # Top margin covers header area (from top to just below KSA text ~200pt)
+    # Top margin covers header area (~200pt). Footer fully in story → small bottom margin.
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=(PAGE_W, PAGE_H),
         leftMargin=MAR_L,
         rightMargin=MAR_R,
-        topMargin=200 * pt,     # header occupies top ~200pt
-        bottomMargin=270 * pt,  # footer + time/date area at bottom
+        topMargin=200 * pt,
+        bottomMargin=36 * pt,   # minimal — all footer content is in the story
     )
 
     story = []
     BODY_W = USABLE_W  # 770pt
 
     # ── TITLES ─────────────────────────────────────────────────────────────────
-    # Reference: "تقرير إجازة مرضية" sz=22.5 bold #306db5, y=150 (from top)
-    #            "Sick Leave Report"  sz=19.7 bold #2e3f7b, y=194
     story.append(arb("تقرير إجازة مرضية", 22.5, C_TITLE, TA_CENTER))
     story.append(Spacer(1, 6 * pt))
     story.append(enb("Sick Leave Report", 19.7, C_TITLE_EN, TA_CENTER))
-    story.append(Spacer(1, 20 * pt))
+    story.append(Spacer(1, 18 * pt))
 
     # ── DATA TABLE ──────────────────────────────────────────────────────────────
-    # Reference: 4 columns.
-    # Col widths from reference image: label-EN ~17%, val-EN ~30%, val-AR ~30%, label-AR ~23%
-    CL_EN = BODY_W * 0.175   # EN label column
-    CV    = BODY_W * 0.300   # value column (EN values)
-    CV2   = BODY_W * 0.300   # value column (AR values)
-    CL_AR = BODY_W * 0.225   # AR label column
+    CL_EN = BODY_W * 0.175
+    CV    = BODY_W * 0.300
+    CV2   = BODY_W * 0.300
+    CL_AR = BODY_W * 0.225
 
-    # Reference font sizes: labels sz=13.5 bold; values sz=13.5 (12.4 for long names)
-    LSZ = 9.5    # label font size (scaled for our doc)
-    VSZ = 9.5    # value font size
-    NSZ = 8.8    # smaller for long names
+    LSZ = 10.0   # label font size
+    VSZ = 10.0   # value font size
+    NSZ = 9.0    # smaller for long names
 
     def lbl_e(t):
         return enb(t, LSZ, C_LABEL, TA_CENTER)
@@ -418,33 +413,30 @@ def generate_pdf(data: dict, output_path) -> Path:
     def val_a(t, sz=VSZ):
         return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
 
-    # Row heights — reference rows ~42pt each
-    ROW_H = 32 * pt
+    ROW_H = 33 * pt
 
-    # Build rows — order matches reference exactly:
     rows = [
-        # (en_label, en_val, ar_val, ar_label, span_val, dark_bg)
-        (lbl_e("Leave ID"),           val_e(leave_id),  "",                   lbl_a("رمز الإجازة"),        True,  False),
+        (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
         (enb("Leave Duration", LSZ, WHITE, TA_CENTER),
-                                      en(dur_en, 8.2, WHITE, TA_CENTER),
-                                                        arabic(dur_ar, 8.2, WHITE, TA_CENTER),
-                                                                              arb("مدة الإجازة", LSZ, WHITE, TA_CENTER),
-                                                                                              False, True),
-        (lbl_e("Admission Date"),     val_e(ad_g),       val_a(ad_h),         lbl_a("تاريخ الدخول"),      False, False),
-        (lbl_e("Discharge Date"),     val_e(dd_g),       val_a(dd_h),         lbl_a("تاريخ الخروج"),      False, False),
-        (lbl_e("Issue Date"),         val_e(iss_g),      "",                  lbl_a("تاريخ إصدار التقرير"), True, False),
-        (lbl_e("Name"),               val_e(name_en, NSZ), val_a(name_ar, NSZ), lbl_a("الاسم"),           False, False),
-        (lbl_e("National ID / Iqama"),val_e(nid),        "",                  arb("رقم الهوية / الإقامة", LSZ, C_LABEL, TA_CENTER),
-                                                                                              True,  False),
-        (lbl_e("Nationality"),        val_e(nat_en),     val_a(nat_ar),       lbl_a("الجنسية"),           False, False),
-        (lbl_e("Employer"),           val_e(emp_en),     val_a(emp_ar),       lbl_a("جهة العمل"),         False, False),
-        (lbl_e("Practitioner Name"),  val_e(p_en, NSZ),  val_a(p_ar, NSZ),    lbl_a("اسم الممارس"),       False, False),
-        (lbl_e("Position"),           val_e(pos_en),     val_a(pos_ar),       lbl_a("المسمى الوظيفى"),    False, False),
+                                       en(dur_en, 8.5, WHITE, TA_CENTER),
+                                                              arabic(dur_ar, 8.5, WHITE, TA_CENTER),
+                                                                                      arb("مدة الإجازة", LSZ, WHITE, TA_CENTER),
+                                                                                                      False, True),
+        (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
+        (lbl_e("Discharge Date"),      val_e(dd_g),            val_a(dd_h),            lbl_a("تاريخ الخروج"),          False, False),
+        (lbl_e("Issue Date"),          val_e(iss_g),           "",                     lbl_a("تاريخ إصدار التقرير"),   True,  False),
+        (lbl_e("Name"),                val_e(name_en, NSZ),    val_a(name_ar, NSZ),    lbl_a("الاسم"),                 False, False),
+        (lbl_e("National ID / Iqama"), val_e(nid),             "",                     arb("رقم الهوية / الإقامة", LSZ, C_LABEL, TA_CENTER),
+                                                                                                      True,  False),
+        (lbl_e("Nationality"),         val_e(nat_en),          val_a(nat_ar),          lbl_a("الجنسية"),               False, False),
+        (lbl_e("Employer"),            val_e(emp_en),          val_a(emp_ar),          lbl_a("جهة العمل"),             False, False),
+        (lbl_e("Practitioner Name"),   val_e(p_en, NSZ),       val_a(p_ar, NSZ),       lbl_a("اسم الممارس"),           False, False),
+        (lbl_e("Position"),            val_e(pos_en),          val_a(pos_ar),          lbl_a("المسمى الوظيفى"),        False, False),
     ]
 
     tdata  = []
     extras = []
-    alt_rows = {2, 4, 6, 8, 10}   # 0-indexed rows that get alt background
+    alt_rows = {2, 4, 6, 8, 10}
 
     for i, (le, ve, va, la, span, dark) in enumerate(rows):
         tdata.append([le, ve, va, la])
@@ -455,50 +447,49 @@ def generate_pdf(data: dict, output_path) -> Path:
             ]
         if dark:
             extras += [
-                ("BACKGROUND", (0, i), (-1, i), C_DARK),
-                ("TOPPADDING",    (0, i), (-1, i), 8),
-                ("BOTTOMPADDING", (0, i), (-1, i), 8),
+                ("BACKGROUND",    (0, i), (-1, i), C_DARK),
+                ("TOPPADDING",    (0, i), (-1, i), 9),
+                ("BOTTOMPADDING", (0, i), (-1, i), 9),
             ]
         elif i in alt_rows:
             extras.append(("BACKGROUND", (1, i), (2, i), C_ALTBG))
 
     tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
     tbl.setStyle(TableStyle([
-        # base
-        ("TOPPADDING",    (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING",    (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("LEFTPADDING",   (0, 0), (-1, -1), 6),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        # backgrounds
+        # ALL white background — labels same bg as values (only text color differs)
         ("BACKGROUND",    (0, 0), (-1, -1), WHITE),
-        ("BACKGROUND",    (0, 0), (0, -1),  C_LBLBG),
-        ("BACKGROUND",    (3, 0), (3, -1),  C_LBLBG),
-        # grid
         ("GRID",          (0, 0), (-1, -1), 0.5, C_BORDER),
         ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
     ] + extras))
 
     story.append(tbl)
-    story.append(Spacer(1, 24 * pt))
+    story.append(Spacer(1, 16 * pt))
 
-    # ── FOOTER: QR left | hospital logo+name right (with vertical divider) ──────
-    # Reference: QR at (170-283, 719-832) → ~113×113pt; logo at (563-685, 733-844)
-    # verify text: y≈831-909; URL: y≈907
+    # ══════════════════════════════════════════════════════════════════════════
+    # FOOTER — 2-row table:
+    #
+    #  Row 1:  QR + verify text  (left) | hospital logo + name (right)
+    #  Row 2:  time + date       (left) | NHIC logo             (right)
+    # ══════════════════════════════════════════════════════════════════════════
 
-    verify_ar  = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
-    verify_en  = "To check the report please visit Seha's offical website"
+    verify_ar       = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
+    verify_en       = "To check the report please visit Seha's offical website"
     verify_url_text = "www.seha.sa/#/inquiries/slenquiry"
     verify_url_href = "https://www.seha.sa/#/inquiries/slenquiry"
 
     url_para = Paragraph(
         f'<link href="{verify_url_href}"><u>{verify_url_text}</u></link>',
         ParagraphStyle("url", fontName=_ENB if _ENB else _EN,
-                       fontSize=9, textColor=C_LINK,
-                       alignment=TA_LEFT, leading=11),
+                       fontSize=10, textColor=C_LINK,
+                       alignment=TA_LEFT, leading=13),
     )
 
-    # ── QR code (optional) ────────────────────────────────────────────────────
+    # ── QR code ────────────────────────────────────────────────────────────────
     qr_flowable = None
     if with_qr:
         try:
@@ -506,64 +497,89 @@ def generate_pdf(data: dict, output_path) -> Path:
             target = f"https://sehtybot.fly.dev/verify?q={leave_id}" if leave_id else verify_url_href
             qr_obj = qr_lib.QRCode(version=3,
                                    error_correction=qr_lib.constants.ERROR_CORRECT_M,
-                                   box_size=7, border=2)
+                                   box_size=8, border=2)
             qr_obj.add_data(target)
             qr_obj.make(fit=True)
             qr_img = qr_obj.make_image(fill_color="black", back_color="white")
             buf = BytesIO()
             qr_img.save(buf, "PNG")
             buf.seek(0)
-            qr_size = 95 * pt   # reference ≈113pt but slightly smaller looks better
+            qr_size = 112 * pt
             qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
             qr_flowable.hAlign = "LEFT"
         except ImportError:
             pass
 
-    # Footer LEFT column
-    footer_left_items = []
+    # Row 1 LEFT: QR + verify text
+    r1_left = []
     if qr_flowable:
-        footer_left_items.append(qr_flowable)
-        footer_left_items.append(Spacer(1, 6 * pt))
-    footer_left_items += [
-        arb(verify_ar,  10, BLACK, TA_LEFT),
-        Spacer(1, 4 * pt),
-        enb(verify_en,  9,  BLACK, TA_LEFT),
-        Spacer(1, 4 * pt),
+        r1_left.append(qr_flowable)
+        r1_left.append(Spacer(1, 8 * pt))
+    r1_left += [
+        arb(verify_ar,  11, BLACK, TA_LEFT),
+        Spacer(1, 5 * pt),
+        enb(verify_en,  10, BLACK, TA_LEFT),
+        Spacer(1, 5 * pt),
         url_para,
     ]
 
-    # Footer RIGHT column: hospital logo + name
-    logo_fit = _fit(logo_src, 100 * pt, 90 * pt)
-    footer_right_items = []
+    # Row 1 RIGHT: hospital logo + name (centered)
+    logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
+    logo_fit = _fit(logo_src, 115 * pt, 105 * pt)
+    r1_right = []
     if logo_fit:
-        footer_right_items.append(logo_fit)
-        footer_right_items.append(Spacer(1, 5 * pt))
+        r1_right.append(logo_fit)
+        r1_right.append(Spacer(1, 6 * pt))
     if h_ar:
-        footer_right_items.append(arb(h_ar, 12, BLACK, TA_CENTER))
+        r1_right.append(arb(h_ar, 13, BLACK, TA_CENTER))
     if h_en:
-        footer_right_items.append(Spacer(1, 2 * pt))
-        footer_right_items.append(enb(h_en, 10, BLACK, TA_CENTER))
-    if not footer_right_items:
-        footer_right_items = [en("", 9)]
+        r1_right.append(Spacer(1, 3 * pt))
+        r1_right.append(enb(h_en, 11, BLACK, TA_CENTER))
+    if not r1_right:
+        r1_right = [en("", 9)]
+
+    # Row 2 LEFT: time + date
+    r2_left = [
+        enb(str(iss_t or ""),    14, BLACK, TA_LEFT),
+        Spacer(1, 5 * pt),
+        enb(str(iss_long or ""), 13, BLACK, TA_LEFT),
+    ]
+
+    # Row 2 RIGHT: NHIC logo (large, right-aligned)
+    nhic_fit = _fit(_NHIC_LOGO, 170 * pt, 85 * pt)
+    if nhic_fit:
+        nhic_fit.hAlign = "RIGHT"
+        r2_right = [nhic_fit]
+    else:
+        r2_right = [en("", 9)]
 
     FW_L = BODY_W * 0.52
     FW_R = BODY_W * 0.48
 
     footer_tbl = Table(
-        [[footer_left_items, footer_right_items]],
+        [
+            [r1_left,  r1_right],   # Row 1: QR+verify | hospital logo+name
+            [r2_left,  r2_right],   # Row 2: time+date  | NHIC logo
+        ],
         colWidths=[FW_L, FW_R],
     )
     footer_tbl.setStyle(TableStyle([
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("ALIGN",         (0, 0), (0, 0),   "LEFT"),
-        ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING",   (0, 0), (0, 0),   4),
-        ("RIGHTPADDING",  (0, 0), (0, 0),   12),
-        ("LEFTPADDING",   (1, 0), (1, 0),   12),
-        ("RIGHTPADDING",  (1, 0), (1, 0),   4),
-        ("LINEAFTER",     (0, 0), (0, -1),  1.0, C_DIVIDER),
+        ("ALIGN",         (0, 0), (0, -1),  "LEFT"),
+        ("ALIGN",         (1, 0), (1, -1),  "CENTER"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING",   (0, 0), (0, -1),  4),
+        ("RIGHTPADDING",  (0, 0), (0, -1),  10),
+        ("LEFTPADDING",   (1, 0), (1, -1),  10),
+        ("RIGHTPADDING",  (1, 0), (1, -1),  4),
+        # Vertical divider between columns on Row 1 only
+        ("LINEAFTER",     (0, 0), (0, 0),   1.2, C_DIVIDER),
+        # Horizontal separator before Row 2
+        ("LINEABOVE",     (0, 1), (-1, 1),  0.8, C_BORDER),
+        # Row 2: NHIC right-aligned, vertically centered
+        ("VALIGN",        (0, 1), (-1, 1),  "MIDDLE"),
+        ("ALIGN",         (1, 1), (1, 1),   "RIGHT"),
     ]))
     story.append(footer_tbl)
 
