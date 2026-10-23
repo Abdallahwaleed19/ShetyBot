@@ -23,7 +23,7 @@ WORKER_URL: str = os.getenv(
 ).rstrip("/")
 
 # Optional secret token to protect your Worker endpoints
-WORKER_SECRET: str = os.getenv("WORKER_SECRET", "")
+WORKER_SECRET: str = os.getenv("WORKER_SECRET", "").strip()
 
 # ── File Storage (local cache for PDF generation) ────────────────────────────
 UPLOADS_DIR: Path = BASE_DIR / "uploads"

@@ -21,6 +21,11 @@ def _headers() -> dict:
     h = {"Content-Type": "application/json"}
     if WORKER_SECRET:
         h["Authorization"] = f"Bearer {WORKER_SECRET}"
+    else:
+        logger.warning(
+            "WORKER_SECRET is empty — Cloudflare Worker will return 401. "
+            "Set it in .env and `flyctl secrets set WORKER_SECRET=...`"
+        )
     return h
 
 
@@ -45,6 +50,8 @@ async def close_client():
 
 async def create_report(data: dict) -> dict:
     """POST /api/reports — Save a new sick leave report."""
+    if not WORKER_SECRET:
+        return {"success": False, "error": "WORKER_SECRET is not configured"}
     client = await get_client()
     try:
         resp = await client.post("/api/reports", json=data)
@@ -52,7 +59,7 @@ async def create_report(data: dict) -> dict:
         return resp.json()
     except httpx.HTTPStatusError as e:
         logger.error(f"Worker create_report error: {e.response.text}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"Worker HTTP {e.response.status_code}"}
     except Exception as e:
         logger.error(f"Worker create_report exception: {e}")
         return {"success": False, "error": str(e)}
@@ -88,6 +95,9 @@ async def search_by_national_id(national_id: str) -> list[dict]:
 
 async def upload_logo(filename: str, file_bytes: bytes, content_type: str = "image/jpeg") -> str | None:
     """POST /api/upload — Upload logo to R2, returns public URL."""
+    if not WORKER_SECRET:
+        logger.warning("Skipping R2 upload — WORKER_SECRET is not configured")
+        return None
     client = await get_client()
     try:
         resp = await client.post(

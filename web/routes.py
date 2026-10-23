@@ -109,37 +109,12 @@ async def submit_report(
             local_path.write_bytes(file_bytes)
             logo_local_path = str(local_path)
 
-            # Upload to R2 via Worker
+            # Upload to R2 via Worker (optional — local file is enough for the PDF)
             content_type = logo.content_type or "image/jpeg"
-            logo_url = await upload_logo(unique_name, file_bytes, content_type)
-
-        # ── Save to Cloudflare D1 via Worker ──────────────────────────────────
-        report_data = {
-            "service_code":        service_code,
-            "report_type":         report_type,
-            "admission_date":      str(adm),
-            "discharge_date":      str(dis),
-            "leave_duration_days": dur,
-            "issue_date":          str(iss),
-            "report_time":         rt.strftime("%H:%M"),
-            "national_id":         national_id,
-            "patient_name_ar":     patient_name_ar,
-            "patient_name_en":     patient_name_en,
-            "nationality":         nationality,
-            "employer":            employer,
-            "practitioner_name_ar": practitioner_name_ar,
-            "practitioner_name_en": practitioner_name_en,
-            "job_title_ar":        job_title_ar,
-            "job_title_en":        job_title_en,
-            "hospital_name_ar":    hospital_name_ar,
-            "hospital_name_en":    hospital_name_en,
-            "hospital_type":       hospital_type,
-            "logo_url":            logo_url or "",
-            "telegram_user_id":    telegram_user_id,
-        }
-        worker_result = await create_report(report_data)
-        if not worker_result.get("success"):
-            return JSONResponse({"success": False, "error": worker_result.get("error", "Worker error")})
+            try:
+                logo_url = await upload_logo(unique_name, file_bytes, content_type)
+            except Exception:
+                logo_url = None
 
         # ── Generate PDF ──────────────────────────────────────────────────────
         def _hijri(d):
@@ -184,6 +159,38 @@ async def submit_report(
         pdf_path = REPORTS_DIR / f"{service_code}.pdf"
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, generate_pdf, pdf_data, pdf_path)
+
+        # Best-effort save to Cloudflare Worker (D1). PDF is already created.
+        report_data = {
+            "service_code":         service_code,
+            "report_type":          report_type,
+            "admission_date":       str(adm),
+            "discharge_date":       str(dis),
+            "leave_duration_days":  dur,
+            "issue_date":           str(iss),
+            "report_time":          rt.strftime("%H:%M"),
+            "national_id":          national_id,
+            "patient_name_ar":      patient_name_ar,
+            "patient_name_en":      patient_name_en,
+            "nationality":          nationality,
+            "employer":             employer,
+            "practitioner_name_ar": practitioner_name_ar,
+            "practitioner_name_en": practitioner_name_en,
+            "job_title_ar":         job_title_ar,
+            "job_title_en":         job_title_en,
+            "hospital_name_ar":     hospital_name_ar,
+            "hospital_name_en":     hospital_name_en,
+            "hospital_type":        hospital_type,
+            "logo_url":             logo_url or "",
+            "telegram_user_id":     telegram_user_id,
+        }
+        worker_result = await create_report(report_data)
+        if not worker_result.get("success"):
+            import logging
+            logging.getLogger(__name__).warning(
+                "Worker save skipped/failed: %s",
+                worker_result.get("error"),
+            )
 
         return JSONResponse({"success": True, "service_code": service_code})
 
