@@ -204,17 +204,6 @@
     <input type="hidden" id="report_type" value="GSL">
   </div>
 
-  <!-- رمز الخدمة — ظاهر وقابل للتعديل بالكامل مع توليد تلقائي -->
-  <div class="field">
-    <label>🔑 رمز الخدمة / الإجازة (يمكنك تعديله)</label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" id="service_code" placeholder="مثال: GSL26080311625 أو PSL26102005781" required
-             style="flex:1;font-weight:700;font-family:monospace;letter-spacing:1px;font-size:15px"
-             oninput="onServiceCodeManualEdit()">
-      <button type="button" class="btn" style="padding:10px 14px;background:rgba(255,255,255,0.15);border-radius:10px;font-size:12px;white-space:nowrap" onclick="regenerateServiceCode(true)">🔄 توليد</button>
-    </div>
-    <div style="font-size:11px;opacity:.7;margin-top:4px">يتغير تلقائيًا عند اختيار حكومي (GSL) أو خاص (PSL)، ويمكنك تعديله وكتابته يدويًا</div>
-  </div>
 
   <!-- تاريخ الدخول / الخروج — compact, no placeholder text -->
   <div class="row">
@@ -265,7 +254,17 @@
 <div class="page" id="p2">
   <p class="page-title">👤 بيانات المريض</p>
 
-  <!-- رمز الخدمة موجود في الصفحة 1 -->
+  <!-- رمز الخدمة — أول خانة في الصفحة الثانية وقابل للتعديل بالكامل -->
+  <div class="field">
+    <label>🔑 رمز الخدمة / الإجازة (يمكنك تعديله)</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="service_code" placeholder="مثال: GSL26080311625 أو PSL26102005781" required
+             style="flex:1;font-weight:700;font-family:monospace;letter-spacing:1px;font-size:15px"
+             oninput="onServiceCodeManualEdit()">
+      <button type="button" class="btn" style="padding:10px 14px;background:rgba(255,255,255,0.15);border-radius:10px;font-size:12px;white-space:nowrap" onclick="regenerateServiceCode(true)">🔄 توليد</button>
+    </div>
+    <div style="font-size:11px;opacity:.7;margin-top:4px">يتحدد تلقائيًا بناءً على نوع التقرير المختار (GSL / PSL)، ويمكنك تعديله وكتابته يدويًا</div>
+  </div>
 
   <div class="field">
     <label>🪪 رقم الهوية / الإقامة</label>
