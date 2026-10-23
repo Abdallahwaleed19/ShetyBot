@@ -38,4 +38,5 @@ REPORTS_DIR.mkdir(exist_ok=True)
 
 # ── Web App ──────────────────────────────────────────────────────────────────
 WEB_HOST: str = os.getenv("WEB_HOST", "0.0.0.0")
-WEB_PORT: int = int(os.getenv("WEB_PORT", "8000"))
+# Railway injects PORT env var automatically
+WEB_PORT: int = int(os.getenv("PORT", os.getenv("WEB_PORT", "8000")))
