@@ -353,6 +353,19 @@ async def verify_report_ownership(session=None, service_code_or_id: Any = "", us
     return verify_report_ownership_sync(service_code_or_id, user_id)
 
 
+def get_user_reports_sync(user_id: int = 0) -> list[str]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT service_code FROM report_ownership WHERE user_id = ?", (int(user_id),))
+    rows = cur.fetchall()
+    conn.close()
+    return [r["service_code"] for r in rows]
+
+
+async def get_user_reports(session=None, user_id: int = 0) -> list[str]:
+    return get_user_reports_sync(user_id)
+
+
 # ── Audit Logging ─────────────────────────────────────────────────────────────
 def log_audit(user_id: Optional[int], action: str, details: str = ""):
     try:
