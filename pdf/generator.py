@@ -100,14 +100,16 @@ _ARB = _try_register(
 )
 
 # ── Colors (from official template) ────────────────────────────────────────────
-C_DARK_BLUE  = colors.HexColor("#1B3A6B")
-C_TITLE      = colors.HexColor("#2A6A9A")
-C_LABEL_TEXT = colors.HexColor("#1A6F96")
-C_VALUE      = colors.HexColor("#1A7AAB")
-C_LINK       = colors.HexColor("#1155CC")
-C_GREY_TEXT  = colors.HexColor("#4A4A4A")
-C_GREY_LINE  = colors.HexColor("#BFBFBF")
-C_DIVIDER    = colors.HexColor("#B0B0B0")
+C_DARK_BLUE  = colors.HexColor("#1C3A5C")
+C_TITLE      = colors.HexColor("#4A9BC8")
+C_TITLE_EN   = colors.HexColor("#2F5878")
+C_BLUE       = colors.HexColor("#3A7EA8")
+C_LABEL_TEXT = C_BLUE
+C_VALUE      = C_BLUE
+C_LINK       = colors.HexColor("#2B6CB0")
+C_GREY_TEXT  = colors.HexColor("#555555")
+C_GREY_LINE  = colors.HexColor("#B8C4CE")
+C_DIVIDER    = colors.HexColor("#A8B0B8")
 WHITE        = colors.white
 BLACK        = colors.black
 
@@ -162,13 +164,13 @@ def arabic_bold(text, sz=9, color=BLACK, align=TA_RIGHT):
     return _p(ar(text), _ARB if _ARB else _AR, sz, color, align)
 
 
-def smart(text, sz=9.5, color=None, align=TA_CENTER):
+def smart(text, sz=9, color=None, align=TA_CENTER):
     if color is None:
         color = C_VALUE
     s = str(text or "")
     if has_ar(s):
-        return _p(ar(s), _ARB if _ARB else _AR, sz, color, TA_CENTER)
-    return _p(s, _ENB if _ENB else _EN, sz, color, align)
+        return _p(ar(s), _AR, sz, color, TA_CENTER)
+    return _p(s, _EN, sz, color, align)
 
 
 # ── Image helpers ──────────────────────────────────────────────────────────────
@@ -243,6 +245,8 @@ def _draw_image(c, reader, x, y, max_w, max_h, anchor="sw"):
     w, h = iw * scale, ih * scale
     if anchor == "ne":
         x, y = x - w, y - h
+    elif anchor == "se":
+        x, y = x - w, y
     elif anchor == "n":
         x, y = x - w / 2, y - h
     elif anchor == "c":
@@ -278,15 +282,16 @@ def generate_pdf(data: dict, output_path) -> Path:
     leave_id  = data.get("leave_id", "")
     hosp_logo = data.get("hospital_logo_path", "")
 
-    dur_en_val = f"{dur} day(s) ( {ad_g} to {dd_g} )"
+    day_word = "day" if str(dur) == "1" else "days"
+    dur_en_val = f"{dur} {day_word} ( {ad_g} to {dd_g} )"
     dur_ar_inner = Table(
         [[
-            _p(f"{dur} {ar('يوم')}", _ARB if _ARB else _AR, 8, WHITE, TA_CENTER),
-            en_bold(str(ad_h), 8, WHITE, TA_CENTER),
-            arabic_bold("الى", 8, WHITE, TA_CENTER),
-            en_bold(str(dd_h), 8, WHITE, TA_CENTER),
+            _p(f"{dur} {ar('يوم')}", _AR, 8, WHITE, TA_CENTER),
+            en(f"( {ad_h}", 8, WHITE, TA_CENTER),
+            arabic("الى", 8, WHITE, TA_CENTER),
+            en(f"{dd_h} )", 8, WHITE, TA_CENTER),
         ]],
-        colWidths=[1.45 * cm, 1.45 * cm, 0.55 * cm, 1.45 * cm],
+        colWidths=[1.15 * cm, 1.65 * cm, 0.48 * cm, 1.55 * cm],
         hAlign="CENTER",
     )
     dur_ar_inner.setStyle(
@@ -306,6 +311,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     seha_r = _reader(_SEHA_LOGO)
     ksa_r  = _reader(_KSA_CALLIGRAPHY)
     mesh_r = _reader(_GEOMETRIC_MESH)
+    nhic_r = _reader(_NHIC_LOGO)
 
     logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
 
@@ -314,31 +320,41 @@ def generate_pdf(data: dict, output_path) -> Path:
     def _on_page(c, doc):
         c.saveState()
 
-        # Geometric mesh — flush to the top-right page corner
-        _draw_image(c, mesh_r, PAGE_W + 6, PAGE_H + 8, 6.4 * cm, 3.45 * cm, anchor="ne")
-
-        # Seha logo — top-left
+        _draw_image(c, mesh_r, PAGE_W + 4, PAGE_H + 6, 6.2 * cm, 3.2 * cm, anchor="ne")
         _draw_image(
             c, seha_r,
             MARGIN,
-            PAGE_H - 0.55 * cm - 1.95 * cm,
-            4.15 * cm,
-            1.95 * cm,
+            PAGE_H - 0.58 * cm - 1.85 * cm,
+            4.0 * cm,
+            1.85 * cm,
             anchor="sw",
         )
-
-        # KSA calligraphy + English kingdom line, centered
         _draw_image(
             c, ksa_r,
             PAGE_W / 2,
-            PAGE_H - 0.38 * cm,
-            5.9 * cm,
-            1.35 * cm,
+            PAGE_H - 0.40 * cm,
+            5.6 * cm,
+            1.28 * cm,
             anchor="n",
         )
         c.setFillColor(C_DARK_BLUE)
-        c.setFont(_EN, 9)
-        c.drawCentredString(PAGE_W / 2, PAGE_H - 2.12 * cm, "Kingdom of Saudi Arabia")
+        c.setFont(_EN, 8.5)
+        c.drawCentredString(PAGE_W / 2, PAGE_H - 2.05 * cm, "Kingdom of Saudi Arabia")
+
+        # Timestamp + NHIC pinned to the page bottom (official layout)
+        c.setFillColor(BLACK)
+        c.setFont(_ENB if _ENB else _EN, 10)
+        c.drawString(MARGIN, 1.70 * cm, str(iss_t or ""))
+        c.setFont(_ENB if _ENB else _EN, 9)
+        c.drawString(MARGIN, 1.28 * cm, str(iss_long or ""))
+        _draw_image(
+            c, nhic_r,
+            PAGE_W - MARGIN,
+            1.05 * cm,
+            4.15 * cm,
+            1.45 * cm,
+            anchor="se",
+        )
 
         c.restoreState()
 
@@ -348,14 +364,14 @@ def generate_pdf(data: dict, output_path) -> Path:
         leftMargin=MARGIN,
         rightMargin=MARGIN,
         topMargin=HEADER_H,
-        bottomMargin=1.15 * cm,
+        bottomMargin=2.55 * cm,
     )
     story = []
 
     # ── TITLE (standalone, like the official template) ────────────────────────
-    story.append(arabic("تقرير إجازة مرضية", 16, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 1.2 * mm))
-    story.append(en("Sick Leave Report", 12, C_DARK_BLUE, TA_CENTER))
+    story.append(arabic("تقرير إجازة مرضية", 17, C_TITLE, TA_CENTER))
+    story.append(Spacer(1, 1.0 * mm))
+    story.append(en("Sick Leave Report", 12, C_TITLE_EN, TA_CENTER))
     story.append(Spacer(1, 6.5 * mm))
 
     # ── DATA TABLE ────────────────────────────────────────────────────────────
@@ -363,19 +379,19 @@ def generate_pdf(data: dict, output_path) -> Path:
     CV = usable_w * 0.30
 
     def lbl_en(t):
-        return en_bold(t, 9, C_LABEL_TEXT, TA_CENTER)
+        return en(t, 8.5, C_LABEL_TEXT, TA_CENTER)
 
     def lbl_ar(t):
-        return arabic_bold(t, 9, C_LABEL_TEXT, TA_CENTER)
+        return arabic(t, 9, C_LABEL_TEXT, TA_CENTER)
 
     rows_spec = [
         ([lbl_en("Leave ID"), smart(leave_id, 9), "", lbl_ar("رمز الإجازة")], True, False),
         (
             [
-                en_bold("Leave Duration", 9, WHITE, TA_CENTER),
-                en_bold(dur_en_val, 8, WHITE, TA_CENTER),
+                en("Leave Duration", 8.5, WHITE, TA_CENTER),
+                en(dur_en_val, 8, WHITE, TA_CENTER),
                 dur_ar_inner,
-                arabic_bold("مدة الإجازة", 9, WHITE, TA_CENTER),
+                arabic("مدة الإجازة", 9, WHITE, TA_CENTER),
             ],
             False,
             True,
@@ -404,8 +420,8 @@ def generate_pdf(data: dict, output_path) -> Path:
             extras += [
                 ("BACKGROUND", (0, i), (-1, i), C_DARK_BLUE),
                 ("TEXTCOLOR", (0, i), (-1, i), WHITE),
-                ("TOPPADDING", (0, i), (-1, i), 7),
-                ("BOTTOMPADDING", (0, i), (-1, i), 7),
+                ("TOPPADDING", (0, i), (-1, i), 6),
+                ("BOTTOMPADDING", (0, i), (-1, i), 6),
                 ("ALIGN", (1, i), (2, i), "CENTER"),
             ]
 
@@ -413,33 +429,36 @@ def generate_pdf(data: dict, output_path) -> Path:
     tbl.setStyle(
         TableStyle(
             [
-                ("TOPPADDING", (0, 0), (-1, -1), 7.5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7.5),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 6.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                ("ALIGN", (1, 0), (2, -1), "CENTER"),
                 ("ALIGN", (3, 0), (3, -1), "CENTER"),
                 ("BACKGROUND", (0, 0), (-1, -1), WHITE),
-                ("GRID", (0, 0), (-1, -1), 0.55, C_GREY_LINE),
-                ("BOX", (0, 0), (-1, -1), 0.7, C_GREY_LINE),
+                ("GRID", (0, 0), (-1, -1), 0.45, C_GREY_LINE),
+                ("BOX", (0, 0), (-1, -1), 0.55, C_GREY_LINE),
             ]
             + extras
         )
     )
     story.append(tbl)
-    story.append(Spacer(1, 11 * mm))
+    story.append(Spacer(1, 10 * mm))
 
-    # ── FOOTER : verify (left) | hospital logo + name (right, MoH slot) ───────
-    verify_ar = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
+    # ── FOOTER : verify (centered under table, left) | logo + hospital name ──
+    verify_ar_1 = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة"
+    verify_ar_2 = "الرسمي"
     verify_en = "To check the report please visit Seha's official website"
     verify_url = '<link href="https://www.seha.sa/#/inquiries/slenquiry"><u>www.seha.sa/#/inquiries/slenquiry</u></link>'
 
     footer_left = [
-        arabic_bold(verify_ar, 9, BLACK, TA_CENTER),
-        Spacer(1, 2.2 * mm),
+        arabic_bold(verify_ar_1, 9.5, BLACK, TA_CENTER),
+        arabic_bold(verify_ar_2, 9.5, BLACK, TA_CENTER),
+        Spacer(1, 2.4 * mm),
         en(verify_en, 8, C_GREY_TEXT, TA_CENTER),
-        Spacer(1, 4 * mm),
+        Spacer(1, 3.5 * mm),
         Paragraph(
             verify_url,
             ParagraphStyle(
@@ -454,19 +473,19 @@ def generate_pdf(data: dict, output_path) -> Path:
     ]
 
     logo_flow = _fit_flowable(logo_src, 3.15 * cm, 3.15 * cm) or en("", 8)
-    name_block = [logo_flow, Spacer(1, 2.2 * mm)]
+    name_block = [logo_flow, Spacer(1, 2.4 * mm)]
     if h_ar_s.strip():
-        name_block.append(arabic_bold(h_ar_s.strip(), 11, BLACK, TA_CENTER))
+        name_block.append(arabic_bold(h_ar_s.strip(), 12, BLACK, TA_CENTER))
     if h_en_s.strip():
-        name_block.append(Spacer(1, 0.8 * mm))
-        name_block.append(en_bold(h_en_s.strip(), 10, BLACK, TA_CENTER))
+        name_block.append(Spacer(1, 0.6 * mm))
+        name_block.append(en_bold(h_en_s.strip(), 11, BLACK, TA_CENTER))
     if not h_ar_s.strip() and not h_en_s.strip():
         name_block.append(en("", 8))
 
     footer_tbl = Table(
         [[footer_left, name_block]],
-        colWidths=[usable_w * 0.56, usable_w * 0.44],
-        rowHeights=[4.7 * cm],
+        colWidths=[usable_w * 0.52, usable_w * 0.48],
+        rowHeights=[4.3 * cm],
     )
     footer_tbl.setStyle(
         TableStyle(
@@ -485,31 +504,6 @@ def generate_pdf(data: dict, output_path) -> Path:
         )
     )
     story.append(footer_tbl)
-    story.append(Spacer(1, 14 * mm))
-
-    # ── BOTTOM : time + long date (official: compact black, stacked left) ────
-    time_para = en(iss_t, 10, BLACK, TA_LEFT)
-    date_para = en(iss_long, 9, BLACK, TA_LEFT)
-    nhic_flow = _fit_flowable(_NHIC_LOGO, 4.4 * cm, 1.55 * cm) or en("", 8)
-
-    bottom = Table(
-        [[[time_para, Spacer(1, 1.2 * mm), date_para], nhic_flow]],
-        colWidths=[usable_w * 0.55, usable_w * 0.45],
-    )
-    bottom.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-                ("TOPPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LEFTPADDING", (0, 0), (0, 0), 2),
-                ("RIGHTPADDING", (1, 0), (1, 0), 0),
-            ]
-        )
-    )
-    story.append(bottom)
 
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
     return output_path

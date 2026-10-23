@@ -123,12 +123,12 @@ async def submit_report(
             try:
                 from hijri_converter import convert
                 h = convert.Gregorian(d.year, d.month, d.day).to_hijri()
-                return f"{h.year}/{h.month:02d}/{h.day:02d}"
+                return f"{h.day:02d}-{h.month:02d}-{h.year}"
             except Exception:
                 return str(d)
 
         def _fmt(d):
-            return d.strftime("%d/%m/%Y") if d else ""
+            return d.strftime("%d-%m-%Y") if d else ""
 
         pdf_data = {
             "leave_id":                 service_code,
