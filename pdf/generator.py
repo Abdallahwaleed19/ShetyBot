@@ -185,7 +185,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     # ══════════════════════════════════════════════════════════════
     seha_cell = _img(_SEHA_LOGO,       3.5*cm, 2.5*cm)   # prominent, left
     ksa_img   = _img(_KSA_CALLIGRAPHY, 4.5*cm, 1.7*cm)
-    mesh_cell = _img(_GEOMETRIC_MESH,  4.0*cm, 2.5*cm)
+    mesh_cell = _img(_GEOMETRIC_MESH,  5.0*cm, 3.0*cm)   # large, fills top-right
 
     ksa_block = [
         ksa_img,
