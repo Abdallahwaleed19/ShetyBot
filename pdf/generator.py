@@ -122,10 +122,17 @@ _EN = _try_register(
 _ENB = _try_register(
     "ENB",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    r"C:\Windows\Fonts\calibrib.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
-    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\calibrib.ttf",
     _FONTS_DIR / "Latin.ttf",
+)
+_SERIF_B = _try_register(
+    "SERIF_B",
+    r"C:\Windows\Fonts\timesbd.ttf",
+    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
+    "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
 )
 
 # ── Exact colors from reference ──────────────────────────────────────────────────
@@ -321,37 +328,31 @@ def generate_pdf(data: dict, output_path) -> Path:
         c.saveState()
         H = PAGE_H  # total page height in points
 
-        # ── GEOMETRIC MESH — top-right corner ─────────────────────────────────
-        # Reference: rect(543, 36, 806, 143)
-        mesh_w_ref = 806 - 543   # ≈ 263pt
-        mesh_h_ref = 143 - 36    # ≈ 107pt
+        # ── GEOMETRIC MESH — top-right corner (fills top-right space nicely) ──
         _draw_img(c, mesh_r,
-                  PAGE_W - MAR_R - 10, H - MAR_T - 5,
-                  mesh_w_ref, mesh_h_ref,
+                  PAGE_W - MAR_R, H - MAR_T,
+                  245 * pt, 110 * pt,
                   anchor="ne")
 
         # ── SEHA LOGO — top-left ───────────────────────────────────────────────
-        # Reference: rect(36, 36, 186, 102) → 150×66pt
         _draw_img(c, seha_r,
-                  MAR_L + 10, H - MAR_T - 5,
-                  150, 66,
+                  MAR_L + 6, H - MAR_T - 4,
+                  150 * pt, 66 * pt,
                   anchor="nw")
 
-        # ── KSA CALLIGRAPHY — center top ──────────────────────────────────────
-        # Reference: rect(288, 36, 551, 160) → center of page at top
-        ksa_w_ref = 551 - 288    # ≈ 263pt
-        ksa_h_ref = 160 - 36     # ≈ 124pt
-        _draw_img(c, ksa_r,
-                  PAGE_W / 2, H - MAR_T - 5,
-                  ksa_w_ref, ksa_h_ref,
-                  anchor="n")
+        # ── KSA CALLIGRAPHY — center top (compact, matching original crop) ────
+        w_ksa, h_ksa = _draw_img(
+            c, ksa_r,
+            PAGE_W / 2, H - MAR_T - 4,
+            195 * pt, 55 * pt,
+            anchor="n"
+        )
+        ksa_bottom_y = H - MAR_T - 4 - h_ksa
 
-        # "Kingdom of Saudi Arabia" — directly under KSA calligraphy
-        # Reference: y≈104 from top (calligraphy bottom is at 160, text is at ~170)
-        ksa_bottom_y = H - 150   # bottom of KSA calligraphy in pdf coords
+        # "Kingdom of Saudi Arabia" — directly under calligraphy with no big gap
         c.setFillColor(BLACK)
-        c.setFont(_ENB if _ENB else "Helvetica-Bold", 11)
-        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 12, "Kingdom of Saudi Arabia")
+        c.setFont(_SERIF_B, 11)
+        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 10, "Kingdom of Saudi Arabia")
 
         # ── TIME & DATE — bottom left (footer in story, not canvas) ─────────────
         # Moved to story for better positioning control
@@ -515,7 +516,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         url_para,
     ]
 
-    # Row 1 RIGHT: hospital logo + name (centered)
+    # Row 1 RIGHT: hospital logo + name (very bold, matching crop)
     logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
     logo_fit = _fit(logo_src, 135 * pt, 115 * pt)
     r1_right = []
@@ -524,19 +525,33 @@ def generate_pdf(data: dict, output_path) -> Path:
         r1_right.append(logo_fit)
         r1_right.append(Spacer(1, 8 * pt))
     if h_ar:
-        r1_right.append(arb(h_ar, 13.5, BLACK, TA_CENTER))
+        r1_right.append(arb(h_ar, 14.0, BLACK, TA_CENTER))
     if h_en:
         r1_right.append(Spacer(1, 3 * pt))
-        r1_right.append(enb(h_en, 11.5, BLACK, TA_CENTER))
+        r1_right.append(enb(h_en, 12.5, BLACK, TA_CENTER))
     if not r1_right:
         r1_right = [en("", 9)]
 
-    # Row 2 LEFT: time + date (left-aligned)
+    # Row 2 LEFT: time + date (very bold serif, matching crop)
+    def _time_para(text, sz=13.5):
+        return Paragraph(
+            f"<b>{text}</b>",
+            ParagraphStyle("time_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
+                           alignment=TA_LEFT, leading=sz + 4)
+        )
+
+    def _date_para(text, sz=12.0):
+        return Paragraph(
+            f"<b>{text}</b>",
+            ParagraphStyle("date_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
+                           alignment=TA_LEFT, leading=sz + 4)
+        )
+
     r2_left = [
         Spacer(1, 15 * pt),
-        enb(str(iss_t or ""),    13, BLACK, TA_LEFT),
+        _time_para(str(iss_t or ""), 13.5),
         Spacer(1, 4 * pt),
-        enb(str(iss_long or ""), 11.5, BLACK, TA_LEFT),
+        _date_para(str(iss_long or ""), 12.0),
     ]
 
     # Row 2 RIGHT: NHIC logo (single image that already contains the text)
