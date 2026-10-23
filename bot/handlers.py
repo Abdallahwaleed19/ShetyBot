@@ -10,7 +10,7 @@ import sys
 import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from config import REPORTS_DIR
@@ -29,12 +29,14 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
+    keyboard = ReplyKeyboardMarkup(
+        [[KeyboardButton(
             "📋 فتح نموذج الإجازة المرضية",
             web_app=WebAppInfo(url=webapp_url),
-        )
-    ]])
+        )]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
     await update.message.reply_text(
         "🏥 *مرحباً في نظام الإجازات المرضية* (@SehtyBot)\n\n"
