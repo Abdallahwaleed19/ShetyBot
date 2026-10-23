@@ -1,0 +1,42 @@
+app = "sehtybot"
+primary_region = "cdg"   # Paris — أقرب لمصر/السعودية
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  WEB_HOST = "0.0.0.0"
+  WEB_PORT = "8080"
+  PORT     = "8080"
+
+[[services]]
+  internal_port = 8080
+  protocol      = "tcp"
+
+  [[services.ports]]
+    port     = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port     = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type       = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.http_checks]]
+    interval    = 30000
+    timeout     = 5000
+    grace_period = "10s"
+    method      = "get"
+    path        = "/"
+
+[deploy]
+  release_command = ""
+
+[[vm]]
+  cpu_kind  = "shared"
+  cpus      = 1
+  memory_mb = 512

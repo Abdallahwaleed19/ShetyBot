@@ -1,0 +1,25 @@
+# Docker
+.dockerignore
+Dockerfile
+
+# Environment
+.env
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Generated files
+reports/
+uploads/
+
+# Windows tools
+cloudflared.exe
+start_all.ps1
+
+# Large files
+*.pptx
