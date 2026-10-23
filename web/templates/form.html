@@ -16,6 +16,7 @@
       --accent:#3b9eff;
       --green:#4caf50;
       --red:#f44336;
+      --orange:#ff9800;
     }
     html,body{min-height:100vh;background:linear-gradient(170deg,var(--bg1) 0%,var(--bg2) 100%);color:#fff;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl}
 
@@ -45,21 +46,35 @@
     }
     .field input[dir=ltr],.field select[dir=ltr]{direction:ltr;text-align:left}
     .field input:focus,.field select:focus{border-color:var(--accent);background:var(--input-focus)}
-    .field input[readonly]{opacity:.55;cursor:default}
+    .field input[readonly]{opacity:.65;cursor:default;background:rgba(255,255,255,0.06)}
     .field input::placeholder{color:rgba(255,255,255,0.38)}
     .field select option{background:#0d3a8e;color:#fff}
-    .field input[type=date],.field input[type=time]{color-scheme:dark}
-
-    /* ── Issue datetime display ──────────────────────── */
-    .issue-display{
-      background:rgba(59,158,255,0.12);border:1px solid rgba(59,158,255,0.3);
-      border-radius:10px;padding:10px 14px;font-size:13px;
-      color:rgba(255,255,255,0.75);text-align:center;margin-bottom:14px;
-      letter-spacing:.2px
-    }
+    .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:right}
+    /* Remove browser default placeholder on date inputs */
+    .field input[type=date]:not(.has-value){color:rgba(255,255,255,0.4)}
+    .field input[type=date].has-value{color:#fff}
 
     /* ── Row (2 cols) ─────────────────────────────────── */
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+    /* ── Issue date/time row ──────────────────────────── */
+    .issue-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+    .ampm-group{display:flex;flex-direction:column;gap:4px}
+    .ampm-btn{
+      padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;
+      background:var(--input);color:#fff;font-size:12px;font-weight:700;
+      cursor:pointer;text-align:center;transition:all .2s;white-space:nowrap
+    }
+    .ampm-btn.sel{background:var(--accent);border-color:var(--accent)}
+
+    /* ── Duration display ────────────────────────────── */
+    .duration-display{
+      background:rgba(59,158,255,0.10);border:1.5px solid rgba(59,158,255,0.3);
+      border-radius:12px;padding:13px 14px;font-size:14.5px;
+      color:#fff;text-align:center;font-weight:700;letter-spacing:.3px
+    }
+    .duration-display.invalid{border-color:rgba(244,67,54,0.5);color:rgba(244,67,54,0.9);background:rgba(244,67,54,0.08)}
 
     /* ── Toggle buttons ──────────────────────────────── */
     .toggle-group{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -79,6 +94,30 @@
     .logo-box input{display:none}
     .logo-preview{width:72px;height:72px;border-radius:10px;object-fit:contain;background:#fff;display:none;margin:0 auto 8px}
     .logo-hint{font-size:12px;opacity:.6}
+
+    /* ── Barcode toggle ───────────────────────────────── */
+    .barcode-toggle{
+      display:flex;align-items:center;gap:12px;
+      background:var(--input);border:1.5px solid var(--border);border-radius:12px;
+      padding:14px;cursor:pointer;transition:border-color .2s
+    }
+    .barcode-toggle:hover{border-color:var(--accent)}
+    .barcode-toggle.enabled{border-color:var(--accent);background:rgba(59,158,255,0.12)}
+    .toggle-switch{
+      position:relative;width:46px;height:26px;flex-shrink:0
+    }
+    .toggle-switch input{opacity:0;width:0;height:0}
+    .toggle-slider{
+      position:absolute;inset:0;background:rgba(255,255,255,0.2);
+      border-radius:26px;cursor:pointer;transition:.3s
+    }
+    .toggle-slider:before{
+      content:'';position:absolute;height:20px;width:20px;
+      left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s
+    }
+    input:checked + .toggle-slider{background:var(--accent)}
+    input:checked + .toggle-slider:before{transform:translateX(20px)}
+    .barcode-label{font-size:14px;font-weight:600;flex:1}
 
     /* ── Buttons ─────────────────────────────────────── */
     .btn-row{display:flex;gap:10px;margin-top:20px;padding-bottom:20px}
@@ -100,6 +139,13 @@
     }
     .err.show{display:block}
 
+    /* ── Edit mode notice ─────────────────────────────── */
+    .edit-notice{
+      background:rgba(255,152,0,0.15);border:1px solid rgba(255,152,0,0.4);
+      border-radius:10px;padding:10px 14px;font-size:13px;
+      text-align:center;margin:8px 16px 0;
+    }
+
     /* ── Loading ─────────────────────────────────────── */
     #loading{
       display:none;position:fixed;inset:0;
@@ -113,6 +159,14 @@
       animation:spin .75s linear infinite
     }
     @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Nationality LTR inside RTL layout ───────────── */
+    .ltr-field input{direction:ltr;text-align:left}
+    .section-divider{
+      font-size:11px;opacity:.5;text-align:center;
+      padding:4px 0;border-top:1px solid rgba(255,255,255,0.1);
+      margin-bottom:12px
+    }
   </style>
 </head>
 <body>
@@ -133,35 +187,52 @@
 <div class="page active" id="p1">
   <p class="page-title">📋 تفاصيل الإجازة</p>
 
+  <!-- نوع التقرير: GSL / PSL only -->
   <div class="field">
     <label>نوع التقرير</label>
-    <select id="report_type">
-      <option value="تقرير إجازة مرضية">تقرير إجازة مرضية</option>
-    </select>
+    <div class="toggle-group">
+      <div class="tog sel" id="trt_gsl" onclick="pickReportType('GSL')">GSL</div>
+      <div class="tog"     id="trt_psl" onclick="pickReportType('PSL')">PSL</div>
+    </div>
+    <input type="hidden" id="report_type" value="GSL">
   </div>
 
+  <!-- تاريخ الدخول / الخروج — compact, no placeholder text -->
   <div class="row">
     <div class="field">
       <label>📅 تاريخ الدخول</label>
-      <input type="date" id="admission_date" required>
+      <input type="date" id="admission_date" required onchange="onDateChange()">
     </div>
     <div class="field">
       <label>📅 تاريخ الخروج</label>
-      <input type="date" id="discharge_date" required>
+      <input type="date" id="discharge_date" required onchange="onDateChange()">
     </div>
   </div>
 
+  <!-- مدة الإجازة — auto-calculated, read-only -->
   <div class="field">
     <label>⏱️ مدة الإجازة بالأيام</label>
-    <input type="number" id="leave_duration" min="1" placeholder="أدخل عدد أيام الإجازة" required inputmode="numeric">
+    <div class="duration-display" id="duration_display">اختر التواريخ أولاً</div>
+    <input type="hidden" id="leave_duration" value="">
   </div>
 
-  <!-- Hidden inputs auto-set by JS -->
-  <input type="hidden" id="issue_date">
-  <input type="hidden" id="report_time">
-
-  <!-- Read-only display of issue datetime -->
-  <div class="issue-display" id="issue_display">🕐 تاريخ وقت الإصدار: …</div>
+  <!-- تاريخ الإصدار — editable date -->
+  <div class="row">
+    <div class="field">
+      <label>🗓️ تاريخ الإصدار</label>
+      <input type="date" id="issue_date" required>
+    </div>
+    <div class="field">
+      <label>🕐 وقت الإصدار</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="time" id="issue_time" style="flex:1" dir="ltr">
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <div class="ampm-btn sel" id="am_btn" onclick="setAmPm('AM')">ص</div>
+          <div class="ampm-btn"     id="pm_btn" onclick="setAmPm('PM')">م</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="err" id="e1"></div>
   <div class="btn-row">
@@ -175,10 +246,8 @@
 <div class="page" id="p2">
   <p class="page-title">👤 بيانات المريض</p>
 
-  <div class="field">
-    <label>🔑 رمز الخدمة</label>
-    <input type="text" id="service_code" readonly>
-  </div>
+  <!-- Service code: HIDDEN from display -->
+  <input type="hidden" id="service_code">
 
   <div class="field">
     <label>🪪 رقم الهوية / الإقامة</label>
@@ -191,7 +260,7 @@
     <input type="text" id="patient_name_ar" placeholder="الاسم الرباعي بالعربية" required>
   </div>
 
-  <div class="field">
+  <div class="field ltr-field">
     <label>Patient Name — English</label>
     <input type="text" id="patient_name_en" placeholder="Full name in English" dir="ltr">
   </div>
@@ -201,19 +270,21 @@
     <input type="text" id="nationality" placeholder="مثال: سعودي">
   </div>
 
-  <div class="field">
+  <div class="field ltr-field">
     <label>Nationality — English</label>
     <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr">
   </div>
 
+  <!-- جهة العمل (changed from اسم المؤسسة) -->
   <div class="field">
-    <label>🏢 اسم المؤسسة — عربي</label>
-    <input type="text" id="employer" placeholder="اسم الجهة">
+    <label>🏢 جهة العمل</label>
+    <input type="text" id="employer" placeholder="اسم جهة العمل">
   </div>
 
-  <div class="field">
-    <label>Institution Name — English</label>
-    <input type="text" id="employer_en" placeholder="Institution name in English" dir="ltr">
+  <!-- Institution Name — English: OPTIONAL -->
+  <div class="field ltr-field">
+    <label style="opacity:.7">Institution Name — English <span style="font-size:11px;opacity:.6">(اختياري)</span></label>
+    <input type="text" id="employer_en" placeholder="Employer / Institution (optional)" dir="ltr">
   </div>
 
   <div class="err" id="e2"></div>
@@ -234,7 +305,7 @@
     <input type="text" id="practitioner_name_ar" placeholder="د. الاسم الكامل" required>
   </div>
 
-  <div class="field">
+  <div class="field ltr-field">
     <label>Practitioner Name — English</label>
     <input type="text" id="practitioner_name_en" placeholder="Dr. Full Name" dir="ltr">
   </div>
@@ -244,7 +315,7 @@
       <label>المسمى الوظيفي — عربي</label>
       <input type="text" id="job_title_ar" placeholder="طبيب عام">
     </div>
-    <div class="field">
+    <div class="field ltr-field">
       <label>Job Title — English</label>
       <input type="text" id="job_title_en" placeholder="General Practitioner" dir="ltr">
     </div>
@@ -255,7 +326,7 @@
     <input type="text" id="hospital_name_ar" placeholder="مستشفى..." required>
   </div>
 
-  <div class="field">
+  <div class="field ltr-field">
     <label>Hospital Name — English</label>
     <input type="text" id="hospital_name_en" placeholder="... Hospital" dir="ltr">
   </div>
@@ -275,6 +346,22 @@
       <img id="logo_img" class="logo-preview" src="" alt="">
       <input type="file" id="logo_file" accept="image/*" onchange="prevLogo(this)">
       <p class="logo-hint" id="logo_hint">اضغط لرفع الشعار — PNG / JPG</p>
+    </div>
+  </div>
+
+  <!-- ── إضافة الباركود (Optional barcode) ─── -->
+  <div class="field" style="margin-top:18px">
+    <label>الخيارات الإضافية</label>
+    <div class="barcode-toggle" id="barcode_toggle" onclick="toggleBarcode()">
+      <label class="toggle-switch" onclick="event.stopPropagation()">
+        <input type="checkbox" id="include_barcode" onchange="toggleBarcode()">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="barcode-label">إضافة الباركود</span>
+      <span style="font-size:20px">📷</span>
+    </div>
+    <div id="barcode_note" style="font-size:11px;opacity:.55;margin-top:6px;text-align:center;display:none">
+      سيُضاف رمز QR للتحقق في الوثيقة
     </div>
   </div>
 
@@ -317,24 +404,22 @@ if(tg){ tg.ready(); tg.expand(); }
     const d = await res.json();
     if (!d) return;
 
-    // Mark form as edit mode
     document.title = 'تعديل الإجازة المرضية';
 
     // Page 1
-    if (d.admission_date)     document.getElementById('admission_date').value = d.admission_date;
-    if (d.discharge_date)     document.getElementById('discharge_date').value = d.discharge_date;
-    if (d.leave_duration_days) document.getElementById('leave_duration').value = d.leave_duration_days;
-    if (d.report_type)        document.getElementById('report_type').value = d.report_type;
+    if (d.admission_date)      { document.getElementById('admission_date').value = d.admission_date; markDateFilled('admission_date'); }
+    if (d.discharge_date)      { document.getElementById('discharge_date').value = d.discharge_date; markDateFilled('discharge_date'); }
+    if (d.report_type)         pickReportType(d.report_type);
 
-    // Page 2 — keep same service_code (don't generate a new one)
-    if (d.service_code)      document.getElementById('service_code').value = d.service_code;
-    if (d.national_id)       document.getElementById('national_id').value = d.national_id;
-    if (d.patient_name_ar)   document.getElementById('patient_name_ar').value = d.patient_name_ar;
-    if (d.patient_name_en)   document.getElementById('patient_name_en').value = d.patient_name_en;
-    if (d.nationality)       document.getElementById('nationality').value = d.nationality;
-    if (d.nationality_en)    document.getElementById('nationality_en').value = d.nationality_en;
-    if (d.employer)          document.getElementById('employer').value = d.employer;
-    if (d.employer_en)       document.getElementById('employer_en').value = d.employer_en;
+    // Page 2 — keep same service_code
+    if (d.service_code)         document.getElementById('service_code').value = d.service_code;
+    if (d.national_id)          document.getElementById('national_id').value = d.national_id;
+    if (d.patient_name_ar)      document.getElementById('patient_name_ar').value = d.patient_name_ar;
+    if (d.patient_name_en)      document.getElementById('patient_name_en').value = d.patient_name_en;
+    if (d.nationality)          document.getElementById('nationality').value = d.nationality;
+    if (d.nationality_en)       document.getElementById('nationality_en').value = d.nationality_en;
+    if (d.employer)             document.getElementById('employer').value = d.employer;
+    if (d.employer_en)          document.getElementById('employer_en').value = d.employer_en;
 
     // Page 3
     if (d.practitioner_name_ar) document.getElementById('practitioner_name_ar').value = d.practitioner_name_ar;
@@ -343,161 +428,244 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.job_title_en)         document.getElementById('job_title_en').value = d.job_title_en;
     if (d.hospital_name_ar)     document.getElementById('hospital_name_ar').value = d.hospital_name_ar;
     if (d.hospital_name_en)     document.getElementById('hospital_name_en').value = d.hospital_name_en;
-    if (d.hospital_type) {
-      document.getElementById('hospital_type').value = d.hospital_type;
-      pickType(d.hospital_type);
-    }
+    if (d.hospital_type)        pickType(d.hospital_type);
+
+    // Recalculate duration after pre-fill
+    onDateChange();
 
     // Show edit notice banner
     const notice = document.createElement('div');
-    notice.style.cssText = 'background:rgba(255,165,0,0.18);border:1px solid rgba(255,165,0,0.45);border-radius:10px;padding:10px 14px;font-size:13px;text-align:center;margin:10px 16px 0;';
+    notice.className = 'edit-notice';
     notice.textContent = `✏️ وضع التعديل — رمز الخدمة: ${editCode}`;
     document.querySelector('.progress-wrap').insertAdjacentElement('afterend', notice);
-
   } catch(e) {
     console.error('Edit pre-fill error:', e);
   }
 })();
 
-// ── Auto-set issue date & time (now) ────────────────────────────────────────
+// ── Auto-set issue date & time ───────────────────────────────────────────────
 (function(){
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-
-  // Hidden inputs (machine format)
   const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  document.getElementById('issue_date').value  = dateStr;
-  document.getElementById('report_time').value = timeStr;
+  document.getElementById('issue_date').value = dateStr;
 
-  // Human-readable display (Arabic locale, 12h format)
-  const dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
-                      'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-
-  const dd   = pad(now.getDate());
-  const mon  = monthNames[now.getMonth()];
-  const yyyy = now.getFullYear();
-
-  let hours = now.getHours();
+  // Set time (24h for input value, AM/PM for display)
+  const h24 = now.getHours();
   const mins = pad(now.getMinutes());
-  const ampm = hours >= 12 ? 'م' : 'ص';
-  hours = hours % 12 || 12;
+  document.getElementById('issue_time').value = `${pad(h24)}:${mins}`;
 
-  const displayStr = `🕐 تاريخ وقت الإصدار: ${dd}/${pad(now.getMonth()+1)}/${yyyy} | ${pad(hours)}:${mins} ${ampm}`;
-  document.getElementById('issue_display').textContent = displayStr;
+  // Set AM/PM toggle
+  const isAm = h24 < 12;
+  setAmPm(isAm ? 'AM' : 'PM', false);
 })();
 
-// ── Hospital type toggle ────────────────────────────────────────────────────
-function pickType(t){
-  document.getElementById('hospital_type').value=t;
-  document.getElementById('tg').classList.toggle('sel',t==='government');
-  document.getElementById('tp').classList.toggle('sel',t==='private');
+// ── AM/PM toggle ─────────────────────────────────────────────────────────────
+let _ampm = 'AM';
+function setAmPm(val, updateTime=true) {
+  _ampm = val;
+  document.getElementById('am_btn').classList.toggle('sel', val === 'AM');
+  document.getElementById('pm_btn').classList.toggle('sel', val === 'PM');
+  if (updateTime) {
+    // Adjust the time field to match am/pm
+    const timeEl = document.getElementById('issue_time');
+    if (timeEl.value) {
+      let [h, m] = timeEl.value.split(':').map(Number);
+      if (val === 'PM' && h < 12)  h += 12;
+      if (val === 'AM' && h >= 12) h -= 12;
+      timeEl.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+  }
 }
 
-// ── Logo preview ────────────────────────────────────────────────────────────
-function prevLogo(inp){
-  if(!inp.files||!inp.files[0])return;
-  const r=new FileReader();
-  r.onload=e=>{
-    const img=document.getElementById('logo_img');
-    img.src=e.target.result; img.style.display='block';
-    document.getElementById('logo_hint').textContent=inp.files[0].name;
+// ── Report type toggle ───────────────────────────────────────────────────────
+function pickReportType(t) {
+  document.getElementById('report_type').value = t;
+  document.getElementById('trt_gsl').classList.toggle('sel', t === 'GSL');
+  document.getElementById('trt_psl').classList.toggle('sel', t === 'PSL');
+}
+
+// ── Hospital type toggle ──────────────────────────────────────────────────────
+function pickType(t) {
+  document.getElementById('hospital_type').value = t;
+  document.getElementById('tg').classList.toggle('sel', t === 'government');
+  document.getElementById('tp').classList.toggle('sel', t === 'private');
+}
+
+// ── Barcode toggle ────────────────────────────────────────────────────────────
+function toggleBarcode() {
+  const cb  = document.getElementById('include_barcode');
+  const tog = document.getElementById('barcode_toggle');
+  const note = document.getElementById('barcode_note');
+  // If called from the wrapper div (not the checkbox itself), toggle the checkbox
+  cb.checked = !cb.checked;
+  tog.classList.toggle('enabled', cb.checked);
+  note.style.display = cb.checked ? 'block' : 'none';
+}
+// Prevent double-toggle when clicking the label/checkbox directly
+document.getElementById('include_barcode').addEventListener('change', function(e){
+  const tog = document.getElementById('barcode_toggle');
+  const note = document.getElementById('barcode_note');
+  tog.classList.toggle('enabled', this.checked);
+  note.style.display = this.checked ? 'block' : 'none';
+});
+
+// ── Leave duration auto-calculation ──────────────────────────────────────────
+function onDateChange() {
+  const admEl = document.getElementById('admission_date');
+  const disEl = document.getElementById('discharge_date');
+  const durEl = document.getElementById('leave_duration');
+  const disp  = document.getElementById('duration_display');
+
+  markDateFilled('admission_date');
+  markDateFilled('discharge_date');
+
+  const admVal = admEl.value;
+  const disVal = disEl.value;
+
+  if (!admVal || !disVal) {
+    disp.textContent = 'اختر التواريخ أولاً';
+    disp.className = 'duration-display';
+    durEl.value = '';
+    return;
+  }
+
+  // Parse dates without timezone issues (use UTC midnight)
+  const adm = new Date(admVal + 'T00:00:00');
+  const dis = new Date(disVal + 'T00:00:00');
+
+  if (dis < adm) {
+    disp.textContent = '⚠️ تاريخ الخروج قبل تاريخ الدخول';
+    disp.className = 'duration-display invalid';
+    durEl.value = '';
+    return;
+  }
+
+  // Inclusive day count: (dis - adm) / ms_per_day + 1
+  const msPerDay = 86400000;
+  const days = Math.round((dis - adm) / msPerDay) + 1;
+  disp.textContent = `${days} يوم`;
+  disp.className = 'duration-display';
+  durEl.value = days;
+}
+
+function markDateFilled(id) {
+  const el = document.getElementById(id);
+  if (el.value) el.classList.add('has-value');
+  else          el.classList.remove('has-value');
+}
+
+// ── Logo preview ─────────────────────────────────────────────────────────────
+function prevLogo(inp) {
+  if (!inp.files || !inp.files[0]) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const img = document.getElementById('logo_img');
+    img.src = e.target.result; img.style.display = 'block';
+    document.getElementById('logo_hint').textContent = inp.files[0].name;
   };
   r.readAsDataURL(inp.files[0]);
 }
 
-// ── Page Navigation ─────────────────────────────────────────────────────────
-const LABELS=['','الصفحة 1 من 3 — تفاصيل الإجازة',
-                  'الصفحة 2 من 3 — بيانات المريض',
-                  'الصفحة 3 من 3 — الممارس والمستشفى'];
+// ── Page Navigation ───────────────────────────────────────────────────────────
+const LABELS = ['','الصفحة 1 من 3 — تفاصيل الإجازة',
+                    'الصفحة 2 من 3 — بيانات المريض',
+                    'الصفحة 3 من 3 — الممارس والمستشفى'];
 
-function showErr(id,msg){
-  const el=document.getElementById(id);
-  el.textContent=msg; el.classList.add('show');
-  setTimeout(()=>el.classList.remove('show'),5000);
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 5000);
 }
 
-function validate(n){
-  if(n===1){
-    if(!document.getElementById('admission_date').value) return 'أدخل تاريخ الدخول';
-    if(!document.getElementById('discharge_date').value)  return 'أدخل تاريخ الخروج';
-    const a=new Date(document.getElementById('admission_date').value);
-    const d=new Date(document.getElementById('discharge_date').value);
-    if(d<a) return 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول';
-    const dur=document.getElementById('leave_duration').value;
-    if(!dur||parseInt(dur)<1) return 'أدخل عدد أيام الإجازة (1 على الأقل)';
+function validate(n) {
+  if (n === 1) {
+    if (!document.getElementById('admission_date').value) return 'أدخل تاريخ الدخول';
+    if (!document.getElementById('discharge_date').value)  return 'أدخل تاريخ الخروج';
+    if (!document.getElementById('leave_duration').value)  return 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول';
+    if (!document.getElementById('issue_date').value)      return 'أدخل تاريخ الإصدار';
   }
-  if(n===2){
-    if(!document.getElementById('national_id').value.trim())     return 'أدخل رقم الهوية';
-    if(!document.getElementById('patient_name_ar').value.trim()) return 'أدخل اسم المريض بالعربية';
+  if (n === 2) {
+    if (!document.getElementById('national_id').value.trim())     return 'أدخل رقم الهوية';
+    if (!document.getElementById('patient_name_ar').value.trim()) return 'أدخل اسم المريض بالعربية';
   }
-  if(n===3){
-    if(!document.getElementById('practitioner_name_ar').value.trim()) return 'أدخل اسم الممارس';
-    if(!document.getElementById('hospital_name_ar').value.trim())     return 'أدخل اسم المستشفى';
+  if (n === 3) {
+    if (!document.getElementById('practitioner_name_ar').value.trim()) return 'أدخل اسم الممارس';
+    if (!document.getElementById('hospital_name_ar').value.trim())     return 'أدخل اسم المستشفى';
   }
   return null;
 }
 
-function go(from,to){
-  if(to>from){ const err=validate(from); if(err){showErr(`e${from}`,'⚠️ '+err);return;} }
+function go(from, to) {
+  if (to > from) { const err = validate(from); if (err) { showErr(`e${from}`, '⚠️ ' + err); return; } }
   document.getElementById(`p${from}`).classList.remove('active');
   document.getElementById(`p${to}`).classList.add('active');
-  // update progress dots
-  for(let i=1;i<=3;i++){
-    const el=document.getElementById(`d${i}`);
-    el.className='step-dot'+(i<to?' done':i===to?' active':'');
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById(`d${i}`);
+    el.className = 'step-dot' + (i < to ? ' done' : i === to ? ' active' : '');
   }
-  document.getElementById('progress-lbl').textContent=LABELS[to];
-  window.scrollTo(0,0);
+  document.getElementById('progress-lbl').textContent = LABELS[to];
+  window.scrollTo(0, 0);
 }
 
-// ── Submit ───────────────────────────────────────────────────────────────────
-async function submitForm(){
-  const err=validate(3); if(err){showErr('e3','⚠️ '+err);return;}
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitForm() {
+  const err = validate(3); if (err) { showErr('e3', '⚠️ ' + err); return; }
 
   document.getElementById('loading').classList.add('show');
 
-  const fd=new FormData();
-  const fields={
-    service_code:'service_code', report_type:'report_type',
-    admission_date:'admission_date', discharge_date:'discharge_date',
-    leave_duration_days:'leave_duration', issue_date:'issue_date',
-    report_time:'report_time', national_id:'national_id',
-    patient_name_ar:'patient_name_ar', patient_name_en:'patient_name_en',
-    nationality:'nationality', nationality_en:'nationality_en',
-    employer:'employer', employer_en:'employer_en',
-    practitioner_name_ar:'practitioner_name_ar', practitioner_name_en:'practitioner_name_en',
-    job_title_ar:'job_title_ar', job_title_en:'job_title_en',
-    hospital_name_ar:'hospital_name_ar', hospital_name_en:'hospital_name_en',
-    hospital_type:'hospital_type'
-  };
-  Object.entries(fields).forEach(([k,id])=>{
-    const el=document.getElementById(id);
-    fd.append(k, el?el.value:'');
-  });
+  const fd = new FormData();
+
+  // Page 1 fields
+  fd.append('service_code',         document.getElementById('service_code').value);
+  fd.append('report_type',          document.getElementById('report_type').value);
+  fd.append('admission_date',       document.getElementById('admission_date').value);
+  fd.append('discharge_date',       document.getElementById('discharge_date').value);
+  fd.append('leave_duration_days',  document.getElementById('leave_duration').value);
+  fd.append('issue_date',           document.getElementById('issue_date').value);
+  fd.append('report_time',          document.getElementById('issue_time').value);
+  fd.append('include_barcode',      document.getElementById('include_barcode').checked ? '1' : '0');
+
+  // Page 2 fields
+  fd.append('national_id',          document.getElementById('national_id').value);
+  fd.append('patient_name_ar',      document.getElementById('patient_name_ar').value);
+  fd.append('patient_name_en',      document.getElementById('patient_name_en').value);
+  fd.append('nationality',          document.getElementById('nationality').value);
+  fd.append('nationality_en',       document.getElementById('nationality_en').value);
+  fd.append('employer',             document.getElementById('employer').value);
+  fd.append('employer_en',          document.getElementById('employer_en').value);
+
+  // Page 3 fields
+  fd.append('practitioner_name_ar', document.getElementById('practitioner_name_ar').value);
+  fd.append('practitioner_name_en', document.getElementById('practitioner_name_en').value);
+  fd.append('job_title_ar',         document.getElementById('job_title_ar').value);
+  fd.append('job_title_en',         document.getElementById('job_title_en').value);
+  fd.append('hospital_name_ar',     document.getElementById('hospital_name_ar').value);
+  fd.append('hospital_name_en',     document.getElementById('hospital_name_en').value);
+  fd.append('hospital_type',        document.getElementById('hospital_type').value);
 
   // Telegram user ID
-  const uid=tg?.initDataUnsafe?.user?.id||0;
+  const uid = tg?.initDataUnsafe?.user?.id || 0;
   fd.append('telegram_user_id', uid);
 
-  const logo=document.getElementById('logo_file').files[0];
-  if(logo) fd.append('logo',logo);
+  // Logo file
+  const logo = document.getElementById('logo_file').files[0];
+  if (logo) fd.append('logo', logo);
 
-  try{
-    const res=await fetch('/api/submit-report',{method:'POST',body:fd});
-    const json=await res.json();
-    if(json.success){
-      if(tg) tg.sendData(JSON.stringify({service_code:json.service_code,status:'success'}));
-      else    alert('تم الإرسال! رمز الخدمة: '+json.service_code);
-      if(tg) tg.close();
+  try {
+    const res  = await fetch('/api/submit-report', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.success) {
+      if (tg) tg.sendData(JSON.stringify({ service_code: json.service_code, status: 'success' }));
+      else    alert('تم الإرسال! رمز الخدمة: ' + json.service_code);
+      if (tg) tg.close();
     } else {
       document.getElementById('loading').classList.remove('show');
-      showErr('e3','❌ '+(json.error||'حدث خطأ، حاول مجدداً'));
+      showErr('e3', '❌ ' + (json.error || 'حدث خطأ، حاول مجدداً'));
     }
-  } catch(ex){
+  } catch (ex) {
     document.getElementById('loading').classList.remove('show');
-    showErr('e3','❌ فشل الاتصال بالخادم');
+    showErr('e3', '❌ فشل الاتصال بالخادم');
     console.error(ex);
   }
 }

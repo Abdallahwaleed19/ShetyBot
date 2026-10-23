@@ -100,15 +100,16 @@ _ARB = _try_register(
 )
 
 # ── Colors (from official template) ────────────────────────────────────────────
-C_DARK_BLUE  = colors.HexColor("#1C3A5C")
-C_TITLE      = colors.HexColor("#4A9BC8")
-C_TITLE_EN   = colors.HexColor("#2F5878")
-C_BLUE       = colors.HexColor("#3A7EA8")
-C_LABEL_TEXT = C_BLUE
-C_VALUE      = C_BLUE
+C_DARK_BLUE  = colors.HexColor("#1A365D")
+C_TITLE      = colors.HexColor("#3B8FBF")
+C_TITLE_EN   = colors.HexColor("#2A4F70")
+C_LABEL_TEXT = colors.HexColor("#3A7A9A")
+C_VALUE      = colors.HexColor("#4A90A8")
+C_LABEL_BG   = colors.HexColor("#E9E9E9")
+C_ALT_BG     = colors.HexColor("#F4F4F4")
 C_LINK       = colors.HexColor("#2B6CB0")
 C_GREY_TEXT  = colors.HexColor("#555555")
-C_GREY_LINE  = colors.HexColor("#B8C4CE")
+C_GREY_LINE  = colors.HexColor("#C8C8C8")
 C_DIVIDER    = colors.HexColor("#A8B0B8")
 WHITE        = colors.white
 BLACK        = colors.black
@@ -280,7 +281,8 @@ def generate_pdf(data: dict, output_path) -> Path:
     name_en   = data.get("patient_name_en", "")
     name_ar   = data.get("patient_name_ar", "")
     leave_id  = data.get("leave_id", "")
-    hosp_logo = data.get("hospital_logo_path", "")
+    hosp_logo     = data.get("hospital_logo_path", "")
+    include_barcode = data.get("include_barcode", False)
 
     day_word = "day" if str(dur) == "1" else "days"
     dur_en_val = f"{dur} {day_word} ( {ad_g} to {dd_g} )"
@@ -355,6 +357,9 @@ def generate_pdf(data: dict, output_path) -> Path:
             1.45 * cm,
             anchor="se",
         )
+        c.setFillColor(C_GREY_TEXT)
+        c.setFont(_EN, 8)
+        c.drawString(MARGIN, 0.48 * cm, "1/1")
 
         c.restoreState()
 
@@ -369,9 +374,9 @@ def generate_pdf(data: dict, output_path) -> Path:
     story = []
 
     # ── TITLE (standalone, like the official template) ────────────────────────
-    story.append(arabic("تقرير إجازة مرضية", 17, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 1.0 * mm))
-    story.append(en("Sick Leave Report", 12, C_TITLE_EN, TA_CENTER))
+    story.append(arabic_bold("تقرير إجازة مرضية", 18, C_TITLE, TA_CENTER))
+    story.append(Spacer(1, 1.2 * mm))
+    story.append(en_bold("Sick Leave Report", 13, C_TITLE_EN, TA_CENTER))
     story.append(Spacer(1, 6.5 * mm))
 
     # ── DATA TABLE ────────────────────────────────────────────────────────────
@@ -382,16 +387,16 @@ def generate_pdf(data: dict, output_path) -> Path:
         return en(t, 8.5, C_LABEL_TEXT, TA_CENTER)
 
     def lbl_ar(t):
-        return arabic(t, 9, C_LABEL_TEXT, TA_CENTER)
+        return arabic_bold(t, 9.5, C_LABEL_TEXT, TA_CENTER)
 
     rows_spec = [
         ([lbl_en("Leave ID"), smart(leave_id, 9), "", lbl_ar("رمز الإجازة")], True, False),
         (
             [
-                en("Leave Duration", 8.5, WHITE, TA_CENTER),
+                en_bold("Leave Duration", 8.5, WHITE, TA_CENTER),
                 en(dur_en_val, 8, WHITE, TA_CENTER),
                 dur_ar_inner,
-                arabic("مدة الإجازة", 9, WHITE, TA_CENTER),
+                arabic_bold("مدة الإجازة", 9.5, WHITE, TA_CENTER),
             ],
             False,
             True,
@@ -400,7 +405,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         ([lbl_en("Discharge Date"), smart(dd_g, 9), smart(dd_h, 9), lbl_ar("تاريخ الخروج")], False, False),
         ([lbl_en("Issue Date"), smart(iss_g, 9), "", lbl_ar("تاريخ إصدار التقرير")], True, False),
         ([lbl_en("Name"), smart(name_en, 9), smart(name_ar, 9), lbl_ar("الاسم")], False, False),
-        ([lbl_en("National ID / Iqama"), smart(nid, 9), "", lbl_ar("رقم الهوية / الإقامة")], True, False),
+        ([lbl_en("National ID / Iqama"), smart(nid, 9), "", lbl_ar("رقم الهوية/الاقامه")], True, False),
         ([lbl_en("Nationality"), smart(nat_en, 9), smart(nat_ar, 9), lbl_ar("الجنسية")], False, False),
         ([lbl_en("Employer"), smart(emp_en, 9), smart(emp_ar, 9), lbl_ar("جهة العمل")], False, False),
         (
@@ -412,6 +417,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     ]
 
     tdata, extras = [], []
+    alt_rows = {3, 5, 7, 9}
     for i, (row, span, dark) in enumerate(rows_spec):
         tdata.append(row)
         if span:
@@ -424,6 +430,8 @@ def generate_pdf(data: dict, output_path) -> Path:
                 ("BOTTOMPADDING", (0, i), (-1, i), 6),
                 ("ALIGN", (1, i), (2, i), "CENTER"),
             ]
+        elif i in alt_rows:
+            extras.append(("BACKGROUND", (1, i), (2, i), C_ALT_BG))
 
     tbl = Table(tdata, colWidths=[CL, CV, CV, CL])
     tbl.setStyle(
@@ -438,6 +446,8 @@ def generate_pdf(data: dict, output_path) -> Path:
                 ("ALIGN", (1, 0), (2, -1), "CENTER"),
                 ("ALIGN", (3, 0), (3, -1), "CENTER"),
                 ("BACKGROUND", (0, 0), (-1, -1), WHITE),
+                ("BACKGROUND", (0, 0), (0, -1), C_LABEL_BG),
+                ("BACKGROUND", (3, 0), (3, -1), C_LABEL_BG),
                 ("GRID", (0, 0), (-1, -1), 0.45, C_GREY_LINE),
                 ("BOX", (0, 0), (-1, -1), 0.55, C_GREY_LINE),
             ]
@@ -445,7 +455,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         )
     )
     story.append(tbl)
-    story.append(Spacer(1, 10 * mm))
+    story.append(Spacer(1, 12 * mm))
 
     # ── FOOTER : verify (centered under table, left) | logo + hospital name ──
     verify_ar_1 = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة"
@@ -454,8 +464,8 @@ def generate_pdf(data: dict, output_path) -> Path:
     verify_url = '<link href="https://www.seha.sa/#/inquiries/slenquiry"><u>www.seha.sa/#/inquiries/slenquiry</u></link>'
 
     footer_left = [
-        arabic_bold(verify_ar_1, 9.5, BLACK, TA_CENTER),
-        arabic_bold(verify_ar_2, 9.5, BLACK, TA_CENTER),
+        arabic_bold(verify_ar_1, 10.5, BLACK, TA_CENTER),
+        arabic_bold(verify_ar_2, 10.5, BLACK, TA_CENTER),
         Spacer(1, 2.4 * mm),
         en(verify_en, 8, C_GREY_TEXT, TA_CENTER),
         Spacer(1, 3.5 * mm),
@@ -504,6 +514,58 @@ def generate_pdf(data: dict, output_path) -> Path:
         )
     )
     story.append(footer_tbl)
+
+    # ── OPTIONAL QR BARCODE ────────────────────────────────────────────────────
+    if include_barcode:
+        try:
+            import qrcode
+            from qrcode.image.pil import PilImage
+            # Use the seha verification link (or demo link if no real code)
+            verify_target = f"https://www.seha.sa/#/inquiries/slenquiry"
+            if leave_id:
+                verify_target = f"https://sehtybot.fly.dev/verify?q={leave_id}"
+
+            qr = qrcode.QRCode(
+                version=3,
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=8,
+                border=2,
+            )
+            qr.add_data(verify_target)
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+
+            # Convert to reportlab-compatible buffer
+            buf = BytesIO()
+            qr_img.save(buf, format="PNG")
+            buf.seek(0)
+            qr_size = 2.8 * cm
+            qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
+
+            barcode_label_ar = arabic("امسح الرمز للتحقق", 8, C_GREY_TEXT, TA_CENTER)
+            barcode_label_en = en("Scan to verify report", 7, C_GREY_TEXT, TA_CENTER)
+
+            barcode_tbl = Table(
+                [[qr_flowable, [barcode_label_ar, Spacer(1, 1*mm), barcode_label_en]]],
+                colWidths=[qr_size + 4*mm, usable_w - qr_size - 4*mm],
+                hAlign="CENTER",
+            )
+            barcode_tbl.setStyle(TableStyle([
+                ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                ("ALIGN",         (0,0), (0,0),   "CENTER"),
+                ("ALIGN",         (1,0), (1,0),   "CENTER"),
+                ("TOPPADDING",    (0,0), (-1,-1), 4),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+                ("LEFTPADDING",   (0,0), (-1,-1), 0),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 0),
+            ]))
+            story.append(Spacer(1, 5*mm))
+            story.append(barcode_tbl)
+        except ImportError:
+            # qrcode not installed — skip silently
+            pass
+        except Exception:
+            pass
 
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
     return output_path

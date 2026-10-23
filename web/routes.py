@@ -5,11 +5,11 @@ Routes:
 - POST /api/submit-report          : Save report → Cloudflare Worker, generate PDF
 - GET  /verify  or /inquiries      : Verification HTML page
 - GET  /api/verify                 : JSON verification API
+- GET  /api/my-reports             : Reports by telegram_user_id
 - GET  /api/download/{service_code}: Download PDF
 """
 import os
 import sys
-import uuid
 import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -45,12 +45,13 @@ async def form_page(request: Request):
 async def submit_report(
     # Page 1
     service_code:         str = Form(...),
-    report_type:          str = Form("تقرير إجازة مرضية"),
+    report_type:          str = Form("GSL"),
     admission_date:       str = Form(...),
     discharge_date:       str = Form(...),
     leave_duration_days:  str = Form("1"),
-    issue_date:           str = Form(...),
-    report_time:          str = Form(""),
+    issue_date:           str = Form(""),          # user-editable, sent from form
+    report_time:          str = Form(""),          # user-editable HH:MM
+    include_barcode:      str = Form("0"),         # "1" or "0"
     # Page 2
     national_id:          str = Form(...),
     patient_name_ar:      str = Form(...),
@@ -71,12 +72,10 @@ async def submit_report(
     logo: Optional[UploadFile] = File(None),
 ):
     try:
-        # ── Auto issue date & time (Arabia Standard Time, UTC+3) ─────────────
-        now_dt          = datetime.now(timezone(timedelta(hours=3)))
-        auto_issue_date = now_dt.date()
-        auto_time       = now_dt.time().replace(second=0, microsecond=0)
+        # ── Arabia Standard Time (UTC+3) for fallback timestamps ──────────────
+        now_dt = datetime.now(timezone(timedelta(hours=3)))
 
-        # ── Parse dates ───────────────────────────────────────────────────────
+        # ── Parse helper ──────────────────────────────────────────────────────
         def pd(s):
             for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
                 try:
@@ -90,35 +89,53 @@ async def submit_report(
         if not adm or not dis:
             return JSONResponse({"success": False, "error": "تاريخ غير صحيح"})
 
-        iss = auto_issue_date
-        rt  = auto_time
-        dur = (
-            int(leave_duration_days)
-            if str(leave_duration_days).strip().isdigit()
-            else max((dis - adm).days, 1)
-        )
+        # ── Issue date: use form value if valid, else server date ─────────────
+        iss = pd(issue_date) if issue_date.strip() else None
+        if not iss:
+            iss = now_dt.date()
+
+        # ── Issue time: use form value if valid (HH:MM), else server time ─────
+        rt = None
+        if report_time.strip():
+            try:
+                rt_parsed = datetime.strptime(report_time.strip(), "%H:%M")
+                rt = rt_parsed.time()
+            except Exception:
+                pass
+        if rt is None:
+            rt = now_dt.time().replace(second=0, microsecond=0)
+
+        # ── Leave duration: sent by frontend (auto-calculated) ─────────────────
+        dur = 1
+        try:
+            dur = int(leave_duration_days)
+            if dur < 1:
+                dur = max((dis - adm).days + 1, 1)
+        except Exception:
+            dur = max((dis - adm).days + 1, 1)
+
+        # ── Include barcode flag ───────────────────────────────────────────────
+        with_barcode = (include_barcode.strip() == "1")
 
         # ── Upload logo to R2 ─────────────────────────────────────────────────
         logo_url = None
         logo_local_path = None
         if logo and logo.filename:
-            ext        = Path(logo.filename).suffix or ".jpg"
+            ext         = Path(logo.filename).suffix or ".jpg"
             unique_name = f"logo_{service_code}{ext}"
             file_bytes  = await logo.read()
 
-            # Save locally for PDF generation
             local_path = UPLOADS_DIR / unique_name
             local_path.write_bytes(file_bytes)
             logo_local_path = str(local_path)
 
-            # Upload to R2 via Worker (optional — local file is enough for the PDF)
             content_type = logo.content_type or "image/jpeg"
             try:
                 logo_url = await upload_logo(unique_name, file_bytes, content_type)
             except Exception:
                 logo_url = None
 
-        # ── Generate PDF ──────────────────────────────────────────────────────
+        # ── Hijri conversion helper ───────────────────────────────────────────
         def _hijri(d):
             try:
                 from hijri_converter import convert
@@ -130,41 +147,44 @@ async def submit_report(
         def _fmt(d):
             return d.strftime("%d-%m-%Y") if d else ""
 
+        # ── Build PDF data dict ───────────────────────────────────────────────
         pdf_data = {
-            "leave_id":                 service_code,
-            "national_id":              national_id,
-            "patient_name_ar":          patient_name_ar,
-            "patient_name_en":          patient_name_en,
-            "nationality":              nationality,
-            "nationality_en":           nationality_en,
-            "employer":                 employer,
-            "employer_en":              employer_en,
-            "report_type":              report_type,
-            "admission_date_gregorian": _fmt(adm),
-            "admission_date_hijri":     _hijri(adm),
-            "discharge_date_gregorian": _fmt(dis),
-            "discharge_date_hijri":     _hijri(dis),
-            "leave_duration_days":      dur,
-            "issue_date_gregorian":     _fmt(iss),
-            "issue_date_hijri":         _hijri(iss),
-            "issue_date_long":          f"{iss.strftime('%A')}, {iss.day} {iss.strftime('%B %Y')}",
-            "issue_time":               rt.strftime("%I:%M %p").lstrip("0"),
-            "practitioner_name_ar":     practitioner_name_ar,
-            "practitioner_name_en":     practitioner_name_en,
-            "practitioner_position_ar": job_title_ar,
-            "practitioner_position_en": job_title_en,
-            "hospital_name_ar":         hospital_name_ar,
-            "hospital_name_en":         hospital_name_en,
-            "hospital_type":            hospital_type,
-            "hospital_logo_path":       logo_local_path,
+            "leave_id":                  service_code,
+            "national_id":               national_id,
+            "patient_name_ar":           patient_name_ar,
+            "patient_name_en":           patient_name_en,
+            "nationality":               nationality,
+            "nationality_en":            nationality_en,
+            "employer":                  employer,
+            "employer_en":               employer_en,
+            "report_type":               report_type,
+            "admission_date_gregorian":  _fmt(adm),
+            "admission_date_hijri":      _hijri(adm),
+            "discharge_date_gregorian":  _fmt(dis),
+            "discharge_date_hijri":      _hijri(dis),
+            "leave_duration_days":       dur,
+            "issue_date_gregorian":      _fmt(iss),
+            "issue_date_hijri":          _hijri(iss),
+            "issue_date_long":           f"{iss.strftime('%A')} ,{iss.day} {iss.strftime('%B %Y')}",
+            "issue_time":                rt.strftime("%I:%M %p").lstrip("0"),
+            "practitioner_name_ar":      practitioner_name_ar,
+            "practitioner_name_en":      practitioner_name_en,
+            "practitioner_position_ar":  job_title_ar,
+            "practitioner_position_en":  job_title_en,
+            "hospital_name_ar":          hospital_name_ar,
+            "hospital_name_en":          hospital_name_en,
+            "hospital_type":             hospital_type,
+            "hospital_logo_path":        logo_local_path,
+            "include_barcode":           with_barcode,
         }
 
+        # ── Generate PDF ──────────────────────────────────────────────────────
         from pdf.generator import generate_pdf
         pdf_path = REPORTS_DIR / f"{service_code}.pdf"
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, generate_pdf, pdf_data, pdf_path)
 
-        # Best-effort save to Cloudflare Worker (D1). PDF is already created.
+        # ── Save to Cloudflare Worker (D1) — best effort ──────────────────────
         report_data = {
             "service_code":         service_code,
             "report_type":          report_type,
@@ -216,13 +236,12 @@ async def index(request: Request):
     )
 
 
-@router.get("/verify",     response_class=HTMLResponse)
-@router.get("/inquiries",  response_class=HTMLResponse)
+@router.get("/verify",    response_class=HTMLResponse)
+@router.get("/inquiries", response_class=HTMLResponse)
 async def verify_page(request: Request, q: Optional[str] = Query(None)):
     record = None
     error  = None
     if q:
-        # Try exact service_code first, then national_id search
         record = await get_report(q)
         if not record:
             results = await search_by_national_id(q)
@@ -249,7 +268,7 @@ async def api_verify(q: str = Query(...)):
 
 @router.get("/api/my-reports")
 async def my_reports(telegram_user_id: str = Query(...)):
-    """Get reports by telegram_user_id."""
+    """Get reports by telegram_user_id (latest first)."""
     from db.worker_client import get_client
     client = await get_client()
     try:
