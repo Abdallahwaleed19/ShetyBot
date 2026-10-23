@@ -2,28 +2,20 @@
 pdf/generator.py
 Exact replica of the official Saudi Sick Leave Report (Seha Platform).
 
-HEADER (3 cols):
-  LEFT   → Seha logo (static, large)
-  CENTER → KSA calligraphy image + "Kingdom of Saudi Arabia"
-  RIGHT  → Geometric mesh image (top-right corner style)
-
-TITLE:
-  تقرير إجازة مرضية  (teal, large)
-  Sick Leave Report   (dark-blue, medium)
-
-DATA TABLE (4 cols):
-  [EN label | EN value | AR value | AR label]
-  Label cols: light-blue background, blue text
-  Leave Duration row: full dark-blue, white text
-  Alternating row tints on value cols
-
-FOOTER (2 cols):
-  LEFT  → Arabic verify text + English + URL
-  RIGHT → وزارة الصحة logo + text + hospital name
-
-BOTTOM (2 cols):
-  LEFT  → timestamp (time \n date)
-  RIGHT → NHIC logo  (+ uploaded hospital logo if provided)
+Layout matches Image 1 (reference) exactly:
+  ┌─────────────────────────────────────────────────┐
+  │ [Seha logo]  │ KSA calligraphy + text │ [mesh]  │  HEADER
+  ├─────────────────────────────────────────────────┤
+  │            تقرير إجازة مرضية                    │  TITLE
+  │              Sick Leave Report                   │
+  ├─────────────────────────────────────────────────┤
+  │ EN lbl │ EN value │ AR value │ AR lbl │          │  TABLE
+  │ ...    │   ...    │   ...    │  ...   │          │
+  ├─────────────────────────────────────────────────┤
+  │ Verify text (left) │ MOH logo + hosp name (rt)  │  FOOTER
+  ├─────────────────────────────────────────────────┤
+  │ timestamp (left)   │  NHIC + hosp logo (right)  │  BOTTOM
+  └─────────────────────────────────────────────────┘
 """
 from __future__ import annotations
 import os, sys
@@ -46,15 +38,15 @@ from reportlab.pdfbase.ttfonts import TTFont
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-# ── Static assets ─────────────────────────────────────────────────────────────
+# ── Static assets ──────────────────────────────────────────────────────────────
 _ASSETS          = Path(__file__).parent / "assets"
-_KSA_CALLIGRAPHY = _ASSETS / "ksa_calligraphy.png"   # KSA Arabic calligraphy
-_GEOMETRIC_MESH  = _ASSETS / "geometric_mesh.png"     # blue triangular lines
-_SEHA_LOGO       = _ASSETS / "seha_logo.png"          # صحة | Seha logo
-_MOH_LOGO        = _ASSETS / "moh_logo.png"           # وزارة الصحة logo
-_NHIC_LOGO       = _ASSETS / "nhic_logo.png"          # NHIC logo
+_KSA_CALLIGRAPHY = _ASSETS / "ksa_calligraphy.png"
+_GEOMETRIC_MESH  = _ASSETS / "geometric_mesh.png"
+_SEHA_LOGO       = _ASSETS / "seha_logo.png"
+_MOH_LOGO        = _ASSETS / "moh_logo.png"
+_NHIC_LOGO       = _ASSETS / "nhic_logo.png"
 
-# ── Fonts ─────────────────────────────────────────────────────────────────────
+# ── Fonts ──────────────────────────────────────────────────────────────────────
 _FONTS_DIR = Path(__file__).parent / "fonts"
 _FONTS_DIR.mkdir(exist_ok=True)
 
@@ -89,7 +81,7 @@ _EN = _try_register(
     _FONTS_DIR / "Latin.ttf",
 )
 
-# ── Colors ────────────────────────────────────────────────────────────────────
+# ── Colors ─────────────────────────────────────────────────────────────────────
 C_DARK_BLUE  = colors.HexColor("#1B3A6B")
 C_TEAL       = colors.HexColor("#1A7898")
 C_LABEL_TEXT = colors.HexColor("#1A5276")
@@ -97,11 +89,11 @@ C_LABEL_BG   = colors.HexColor("#D6E4F0")
 C_ALT_BG     = colors.HexColor("#EBF3FA")
 C_LINK       = colors.HexColor("#1155CC")
 C_GREY_TEXT  = colors.HexColor("#444444")
-C_GREY_LINE  = colors.HexColor("#CCCCCC")
+C_GREY_LINE  = colors.HexColor("#BBBBBB")
 WHITE        = colors.white
 BLACK        = colors.black
 
-# ── Arabic helpers ────────────────────────────────────────────────────────────
+# ── Arabic helpers ─────────────────────────────────────────────────────────────
 def ar(text: str) -> str:
     if not text:
         return ""
@@ -113,13 +105,15 @@ def ar(text: str) -> str:
 def has_ar(text) -> bool:
     return any('\u0600' <= c <= '\u06FF' for c in str(text or ""))
 
-# ── Paragraph factory ─────────────────────────────────────────────────────────
-def _p(text, font, sz, color=BLACK, align=TA_LEFT, lh=1.35) -> Paragraph:
-    st = ParagraphStyle(
-        "x", fontName=font, fontSize=sz, textColor=color,
-        alignment=align, leading=sz * lh, spaceBefore=0, spaceAfter=0,
+# ── Paragraph factory ──────────────────────────────────────────────────────────
+def _p(text, font, sz, color=BLACK, align=TA_LEFT, lh=1.3) -> Paragraph:
+    return Paragraph(
+        str(text or ""),
+        ParagraphStyle(
+            "x", fontName=font, fontSize=sz, textColor=color,
+            alignment=align, leading=sz * lh, spaceBefore=0, spaceAfter=0,
+        )
     )
-    return Paragraph(str(text or ""), st)
 
 def en(text, sz=9, color=BLACK, align=TA_LEFT):
     return _p(text, _EN, sz, color, align)
@@ -128,13 +122,12 @@ def arabic(text, sz=9, color=BLACK, align=TA_RIGHT):
     return _p(ar(text), _AR, sz, color, align)
 
 def smart(text, sz=9, color=BLACK):
-    """Arabic font+RTL if text contains Arabic; else EN centered."""
     s = str(text or "")
     if has_ar(s):
         return _p(ar(s), _AR, sz, color, TA_RIGHT)
     return _p(s, _EN, sz, color, TA_CENTER)
 
-# ── Image helper ──────────────────────────────────────────────────────────────
+# ── Image helper ───────────────────────────────────────────────────────────────
 def _img(path, w, h) -> object:
     p = Path(str(path))
     if p.exists():
@@ -145,21 +138,23 @@ def _img(path, w, h) -> object:
     return en("", 7)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # MAIN GENERATOR
-# ═══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 def generate_pdf(data: dict, output_path) -> Path:
     output_path = Path(output_path)
-    PAGE_W, PAGE_H = A4
-    M = 1.5 * cm                        # page margin
+    PAGE_W, PAGE_H = A4          # 595.27 x 841.89 pt
+    M = 1.4 * cm                 # page margin
 
     doc = SimpleDocTemplate(
         str(output_path), pagesize=A4,
-        leftMargin=M, rightMargin=M, topMargin=M, bottomMargin=M,
+        leftMargin=M, rightMargin=M,
+        topMargin=M, bottomMargin=M,
     )
-    W = PAGE_W - 2 * M                  # usable width ≈ 18.2 cm
+    W = PAGE_W - 2 * M           # usable width ≈ 18.3 cm
+    story = []
 
-    # ── Extract data ──────────────────────────────────────────────────────────
+    # ── Extract fields ────────────────────────────────────────────────────────
     ad_g      = data.get("admission_date_gregorian", "")
     ad_h      = data.get("admission_date_hijri", "")
     dd_g      = data.get("discharge_date_gregorian", "")
@@ -179,22 +174,18 @@ def generate_pdf(data: dict, output_path) -> Path:
     name_en   = data.get("patient_name_en", "")
     name_ar   = data.get("patient_name_ar", "")
     leave_id  = data.get("leave_id", "")
-    hosp_logo = data.get("hospital_logo_path", "")
+    # Hospital uploaded logo path (dynamic, from user)
+    hosp_logo_path = data.get("hospital_logo_path", "")
 
     dur_en_val = f"{dur} day(s)  ( {ad_g} to {dd_g} )"
     dur_ar_val = f"{ar(dur)} يوم  ( {ar(dd_h)} الى {ar(ad_h)} )"
 
-    story = []
-
     # ══════════════════════════════════════════════════════════════
-    # SECTION 1 — HEADER
-    # LEFT : Seha logo (large, ~2.8 cm tall)
-    # CENTER: KSA calligraphy + "Kingdom of Saudi Arabia"
-    # RIGHT : geometric mesh (fills corner)
+    # 1. HEADER — Seha(L) | KSA calligraphy(C) | Mesh(R)
     # ══════════════════════════════════════════════════════════════
-    seha_cell = _img(_SEHA_LOGO,       3.2*cm, 2.8*cm)
-    ksa_img   = _img(_KSA_CALLIGRAPHY, 5.0*cm, 1.9*cm)
-    mesh_cell = _img(_GEOMETRIC_MESH,  3.8*cm, 2.8*cm)
+    seha_cell = _img(_SEHA_LOGO,       3.5*cm, 2.5*cm)   # prominent, left
+    ksa_img   = _img(_KSA_CALLIGRAPHY, 4.5*cm, 1.7*cm)
+    mesh_cell = _img(_GEOMETRIC_MESH,  4.0*cm, 2.5*cm)
 
     ksa_block = [
         ksa_img,
@@ -204,54 +195,52 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     hdr = Table(
         [[seha_cell, ksa_block, mesh_cell]],
-        colWidths=[W * 0.26, W * 0.48, W * 0.26],
+        colWidths=[W * 0.27, W * 0.46, W * 0.27],
     )
     hdr.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
         ("ALIGN",         (0,0), (0,0),   "LEFT"),
         ("ALIGN",         (1,0), (1,0),   "CENTER"),
         ("ALIGN",         (2,0), (2,0),   "RIGHT"),
-        ("TOPPADDING",    (0,0), (-1,-1), 2),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        ("TOPPADDING",    (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
         ("LEFTPADDING",   (0,0), (-1,-1), 0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
     story.append(hdr)
-    story.append(Spacer(1, 6*mm))
+    story.append(Spacer(1, 7*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # SECTION 2 — TITLE
+    # 2. TITLE
     # ══════════════════════════════════════════════════════════════
-    story.append(arabic("تقرير إجازة مرضية", 17, C_TEAL,      TA_CENTER))
-    story.append(Spacer(1, 1*mm))
-    story.append(en    ("Sick Leave Report",  12, C_DARK_BLUE, TA_CENTER))
-    story.append(Spacer(1, 6*mm))
+    story.append(arabic("تقرير إجازة مرضية", 18, C_TEAL,      TA_CENTER))
+    story.append(Spacer(1, 1.5*mm))
+    story.append(en    ("Sick Leave Report",  13, C_DARK_BLUE, TA_CENTER))
+    story.append(Spacer(1, 7*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # SECTION 3 — DATA TABLE
-    # Columns: [EN label | EN value | AR value | AR label]
+    # 3. DATA TABLE  [EN label | EN value | AR value | AR label]
     # ══════════════════════════════════════════════════════════════
-    CL = W * 0.19   # narrow label column
-    CV = W * 0.31   # wide value column
+    CL = W * 0.185   # label columns (narrow, ~19%)
+    CV = W * 0.315   # value columns (wide,  ~31%)
 
-    BASE_STYLE = [
+    BASE = [
         ("TOPPADDING",    (0,0), (-1,-1), 5),
         ("BOTTOMPADDING", (0,0), (-1,-1), 5),
         ("LEFTPADDING",   (0,0), (-1,-1), 5),
         ("RIGHTPADDING",  (0,0), (-1,-1), 5),
         ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
         ("GRID",          (0,0), (-1,-1), 0.5, C_GREY_LINE),
+        # label column backgrounds
         ("BACKGROUND",    (0,0), (0,-1),  C_LABEL_BG),
         ("BACKGROUND",    (3,0), (3,-1),  C_LABEL_BG),
-        ("TEXTCOLOR",     (0,0), (0,-1),  C_LABEL_TEXT),
-        ("TEXTCOLOR",     (3,0), (3,-1),  C_LABEL_TEXT),
     ]
 
     def lbl_en(t): return en(t,     8.5, C_LABEL_TEXT, TA_CENTER)
     def lbl_ar(t): return arabic(t, 8.5, C_LABEL_TEXT, TA_RIGHT)
 
-    # (row_cells, span_value_cols, bg_override)
     rows_spec = [
+        # (cells, span_value_cols_1_2, bg_override)
         ([lbl_en("Leave ID"),
           smart(leave_id, 9), "", lbl_ar("رمز الإجازة")],
          True, None),
@@ -299,61 +288,56 @@ def generate_pdf(data: dict, output_path) -> Path:
          False, None),
     ]
 
-    table_data   = []
-    extra_styles = []
-
-    for i, (row, span_mid, bg) in enumerate(rows_spec):
-        table_data.append(row)
-        if span_mid:
-            extra_styles += [
-                ("SPAN",  (1, i), (2, i)),
-                ("ALIGN", (1, i), (2, i), "CENTER"),
-            ]
+    tdata  = []
+    extras = []
+    for i, (row, span, bg) in enumerate(rows_spec):
+        tdata.append(row)
+        if span:
+            extras += [("SPAN", (1,i), (2,i)), ("ALIGN", (1,i), (2,i), "CENTER")]
         if bg is not None:
             if bg == C_DARK_BLUE:
-                extra_styles += [
-                    ("BACKGROUND", (0, i), (-1, i), C_DARK_BLUE),
-                    ("TEXTCOLOR",  (0, i), (-1, i), WHITE),
+                extras += [
+                    ("BACKGROUND", (0,i), (-1,i), C_DARK_BLUE),
+                    ("TEXTCOLOR",  (0,i), (-1,i), WHITE),
                 ]
             else:
-                extra_styles.append(("BACKGROUND", (1, i), (2, i), bg))
+                extras.append(("BACKGROUND", (1,i), (2,i), bg))
 
-    tbl = Table(table_data, colWidths=[CL, CV, CV, CL])
-    tbl.setStyle(TableStyle(BASE_STYLE + extra_styles))
+    tbl = Table(tdata, colWidths=[CL, CV, CV, CL])
+    tbl.setStyle(TableStyle(BASE + extras))
     story.append(tbl)
-    story.append(Spacer(1, 8*mm))
+    story.append(Spacer(1, 7*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # SECTION 4 — FOOTER
-    # LEFT : verification texts (Arabic right-align, English left)
-    # RIGHT: وزارة الصحة logo + text + hospital name
+    # 4. FOOTER  (matches Image 1 exactly)
+    # LEFT col : Arabic verify text + English + blank line + URL
+    # RIGHT col: MOH logo (large) + "Ministry of Health" + hosp names
     # ══════════════════════════════════════════════════════════════
     verify_ar  = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
     verify_en  = "To check the report please visit Seha's offical website"
     verify_url = "www.seha.sa/#/inquiries/slenquiry"
 
-    # LEFT column of footer
-    footer_left_cells = [
+    footer_left = [
         arabic(verify_ar,  7.5, C_GREY_TEXT, TA_RIGHT),
+        Spacer(1, 1*mm),
         en(verify_en,      7.5, C_GREY_TEXT, TA_LEFT),
         Spacer(1, 3*mm),
         en(verify_url,     8,   C_LINK,      TA_LEFT),
     ]
 
-    # RIGHT column of footer — MOH logo + text + hospital name
-    moh_logo_cell = _img(_MOH_LOGO, 2.2*cm, 2.2*cm)
-    footer_right_cells = [
-        moh_logo_cell,
-        Spacer(1, 1*mm),
-        arabic(h_ar_s,          11, C_DARK_BLUE, TA_RIGHT),
-        en(h_en_s,               9, C_DARK_BLUE, TA_RIGHT),
+    moh_img = _img(_MOH_LOGO, 2.5*cm, 2.5*cm)
+    footer_right = [
+        moh_img,
+        Spacer(1, 1.5*mm),
+        arabic(h_ar_s,         11, C_DARK_BLUE, TA_RIGHT),
+        en(h_en_s,              9, C_DARK_BLUE, TA_RIGHT),
     ]
 
-    footer_tbl = Table(
-        [[footer_left_cells, footer_right_cells]],
+    footer = Table(
+        [[footer_left, footer_right]],
         colWidths=[W * 0.52, W * 0.48],
     )
-    footer_tbl.setStyle(TableStyle([
+    footer.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "TOP"),
         ("ALIGN",         (1,0), (1,0),   "RIGHT"),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
@@ -361,36 +345,40 @@ def generate_pdf(data: dict, output_path) -> Path:
         ("LEFTPADDING",   (0,0), (-1,-1), 0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
-    story.append(footer_tbl)
-    story.append(Spacer(1, 6*mm))
+    story.append(footer)
+    story.append(Spacer(1, 5*mm))
 
     # ══════════════════════════════════════════════════════════════
-    # SECTION 5 — BOTTOM ROW
+    # 5. BOTTOM ROW
     # LEFT : timestamp
-    # RIGHT: NHIC logo  (+ hospital uploaded logo if provided)
+    # RIGHT: NHIC logo + hospital uploaded logo (side by side)
+    #        → same row height, no stacking, page stays compact
     # ══════════════════════════════════════════════════════════════
     ts_text = f"{iss_t}\n{iss_g}"
 
-    nhic_img = _img(_NHIC_LOGO, 3.0*cm, 1.2*cm)
+    nhic_img = _img(_NHIC_LOGO, 2.8*cm, 1.1*cm)
 
-    # Build right-bottom content
-    right_bottom_rows = [[nhic_img]]
-    if hosp_logo and Path(hosp_logo).exists():
-        hosp_img = _img(hosp_logo, 1.8*cm, 1.8*cm)
-        right_bottom_rows.append([hosp_img])
+    # Build right-side: NHIC always, + hospital logo if uploaded
+    if hosp_logo_path and Path(hosp_logo_path).exists():
+        hosp_img  = _img(hosp_logo_path, 1.8*cm, 1.8*cm)
+        right_row = [[nhic_img, hosp_img]]
+        right_col_widths = [W * 0.27, W * 0.21]
+    else:
+        right_row = [[nhic_img]]
+        right_col_widths = [W * 0.48]
 
-    right_bottom_tbl = Table(right_bottom_rows, colWidths=[W * 0.48])
-    right_bottom_tbl.setStyle(TableStyle([
-        ("ALIGN",         (0,0), (-1,-1), "RIGHT"),
+    nhic_tbl = Table(right_row, colWidths=right_col_widths)
+    nhic_tbl.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "BOTTOM"),
-        ("TOPPADDING",    (0,0), (-1,-1), 2),
+        ("ALIGN",         (0,0), (-1,-1), "RIGHT"),
+        ("TOPPADDING",    (0,0), (-1,-1), 0),
         ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-        ("LEFTPADDING",   (0,0), (-1,-1), 0),
+        ("LEFTPADDING",   (0,0), (-1,-1), 2),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
 
     bottom = Table(
-        [[en(ts_text, 8, C_GREY_TEXT, TA_LEFT), right_bottom_tbl]],
+        [[en(ts_text, 8, C_GREY_TEXT, TA_LEFT), nhic_tbl]],
         colWidths=[W * 0.52, W * 0.48],
     )
     bottom.setStyle(TableStyle([
