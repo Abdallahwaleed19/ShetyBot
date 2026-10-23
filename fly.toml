@@ -1,42 +1,45 @@
-app = "sehtybot"
-primary_region = "cdg"   # Paris — أقرب لمصر/السعودية
+# fly.toml app configuration file generated for sehtybot on 2026-10-23T09:57:14+03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'sehtybot'
+primary_region = 'cdg'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
+[deploy]
 [env]
-  WEB_HOST = "0.0.0.0"
-  WEB_PORT = "8080"
-  PORT     = "8080"
+  PORT = '8080'
+  WEB_HOST = '0.0.0.0'
+  WEB_PORT = '8080'
 
 [[services]]
+  protocol = 'tcp'
   internal_port = 8080
-  protocol      = "tcp"
 
   [[services.ports]]
-    port     = 80
-    handlers = ["http"]
+    port = 80
+    handlers = ['http']
 
   [[services.ports]]
-    port     = 443
-    handlers = ["tls", "http"]
+    port = 443
+    handlers = ['tls', 'http']
 
   [services.concurrency]
-    type       = "connections"
+    type = 'connections'
     hard_limit = 25
     soft_limit = 20
 
   [[services.http_checks]]
-    interval    = 30000
-    timeout     = 5000
-    grace_period = "10s"
-    method      = "get"
-    path        = "/"
-
-[deploy]
-  release_command = ""
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'get'
+    path = '/'
 
 [[vm]]
-  cpu_kind  = "shared"
-  cpus      = 1
+  memory = '512mb'
+  cpus = 1
   memory_mb = 512

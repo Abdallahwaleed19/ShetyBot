@@ -1,14 +1,16 @@
 """
 bot/main.py — Bot entry point with WebApp support.
 """
-import logging, os, sys
+import logging
+import os
+import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.request import HTTPXRequest
 
 from config import BOT_TOKEN, PROXY_URL
-from db.database import init_db
+
 from bot.handlers import start, handle_webapp_data, verify
 
 logging.basicConfig(
@@ -17,12 +19,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── WebApp URL (must be HTTPS) ─────────────────────────────────────────────
+# ── WebApp URL (must be HTTPS) ─────────────────────────────────────────────────
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
 
 
 async def post_init(app) -> None:
-    await init_db()
     form_url = (WEBAPP_URL.rstrip("/") + "/form") if WEBAPP_URL else ""
     app.bot_data["webapp_url"] = form_url
     if form_url:
@@ -36,7 +37,8 @@ async def post_init(app) -> None:
 
 def main() -> None:
     if BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        logger.error("BOT_TOKEN not configured!"); sys.exit(1)
+        logger.error("BOT_TOKEN not configured!")
+        sys.exit(1)
 
     req_kwargs = dict(connect_timeout=30, read_timeout=30, write_timeout=30, pool_timeout=30)
     if PROXY_URL:
