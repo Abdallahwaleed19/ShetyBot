@@ -1,6 +1,6 @@
 """
-pdf/generator.py — ReportLab PDF generator.
-Exact replica of the official Saudi Sick Leave Report layout.
+pdf/generator.py — Exact replica of Saudi Sick Leave Report (Seha Platform).
+Layout based on official template analysis.
 """
 from __future__ import annotations
 import os, sys
@@ -27,9 +27,9 @@ from bidi.algorithm import get_display
 _FONTS_DIR = Path(__file__).parent / "fonts"
 _FONTS_DIR.mkdir(exist_ok=True)
 
-def _try_register(name: str, *candidates: str) -> str:
+def _try_register(name: str, *candidates) -> str:
     for path in candidates:
-        p = Path(path)
+        p = Path(str(path))
         if p.exists():
             try:
                 pdfmetrics.registerFont(TTFont(name, str(p)))
@@ -38,8 +38,8 @@ def _try_register(name: str, *candidates: str) -> str:
                 pass
     return "Helvetica"
 
-_AR_FONT = _try_register(
-    "Arabic",
+_AR = _try_register(
+    "AR",
     "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Regular.ttf",
     "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
@@ -47,30 +47,31 @@ _AR_FONT = _try_register(
     "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
     r"C:\Windows\Fonts\arial.ttf",
     r"C:\Windows\Fonts\tahoma.ttf",
-    str(_FONTS_DIR / "Arabic.ttf"),
+    _FONTS_DIR / "Arabic.ttf",
 )
-
-_EN_FONT = _try_register(
-    "Latin",
+_EN = _try_register(
+    "EN",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
     r"C:\Windows\Fonts\calibri.ttf",
     r"C:\Windows\Fonts\arial.ttf",
-    str(_FONTS_DIR / "Latin.ttf"),
+    _FONTS_DIR / "Latin.ttf",
 )
 
-# ── Colors ─────────────────────────────────────────────────────────────────────
-DARK_BLUE  = colors.HexColor("#2C3E77")
-TEAL_BLUE  = colors.HexColor("#1A6B8A")
-LABEL_BG   = colors.HexColor("#D6E4F0")
-ALT_BG     = colors.HexColor("#EBF3FA")
-WHITE      = colors.white
-BLACK      = colors.black
-GREY       = colors.HexColor("#888888")
-MID_GREY   = colors.HexColor("#CCCCCC")
+# ── Color palette ──────────────────────────────────────────────────────────────
+C_DARK_BLUE  = colors.HexColor("#1B3A6B")   # header / dark rows
+C_TEAL       = colors.HexColor("#1A6B8A")   # title text
+C_LABEL_TEXT = colors.HexColor("#1A5276")   # label column text
+C_LABEL_BG   = colors.HexColor("#D6E4F0")   # label column background
+C_ALT_BG     = colors.HexColor("#EBF3FA")   # alternating row background
+C_LINK       = colors.HexColor("#2874A6")   # hyperlink color
+C_GREY_LINE  = colors.HexColor("#CCCCCC")   # border/separator
+C_GREY_TEXT  = colors.HexColor("#666666")   # footer text
+WHITE        = colors.white
+BLACK        = colors.black
 
-# ── Arabic helper ──────────────────────────────────────────────────────────────
-def ar(text: str) -> str:
+# ── Arabic shaping ─────────────────────────────────────────────────────────────
+def ar(text) -> str:
     if not text:
         return ""
     try:
@@ -78,47 +79,46 @@ def ar(text: str) -> str:
     except Exception:
         return str(text)
 
-def _has_arabic(text: str) -> bool:
+def has_ar(text) -> bool:
     return any('\u0600' <= c <= '\u06FF' for c in str(text or ""))
 
-# ── Paragraph helpers ──────────────────────────────────────────────────────────
-def _p(text, font, size, color=BLACK, align=TA_LEFT) -> Paragraph:
-    style = ParagraphStyle(
-        "s", fontName=font, fontSize=size,
-        textColor=color, alignment=align,
-        leading=size * 1.5, spaceBefore=0, spaceAfter=0,
+# ── Paragraph factories ────────────────────────────────────────────────────────
+def _p(text, font, sz, color=BLACK, align=TA_LEFT, leading_ratio=1.4) -> Paragraph:
+    st = ParagraphStyle(
+        "x", fontName=font, fontSize=sz, textColor=color,
+        alignment=align, leading=sz * leading_ratio, spaceBefore=0, spaceAfter=0,
     )
-    return Paragraph(str(text or ""), style)
+    return Paragraph(str(text or ""), st)
 
-def _ar(text, size=9, color=BLACK, align=TA_RIGHT):
-    return _p(ar(text), _AR_FONT, size, color, align)
+def en(text, sz=9, color=BLACK, align=TA_LEFT):
+    return _p(text, _EN, sz, color, align)
 
-def _en(text, size=9, color=BLACK, align=TA_LEFT):
-    return _p(str(text or ""), _EN_FONT, size, color, align)
+def arabic(text, sz=9, color=BLACK, align=TA_RIGHT):
+    return _p(ar(text), _AR, sz, color, align)
 
-def _val(text, size=9, color=BLACK, align=TA_CENTER):
-    """Auto-detect Arabic text and render with correct font."""
+def smart(text, sz=9, color=BLACK, center_if_latin=True):
+    """Render value using Arabic font if text contains Arabic chars."""
     s = str(text or "")
-    if _has_arabic(s):
-        return _p(ar(s), _AR_FONT, size, color, TA_RIGHT)
-    return _p(s, _EN_FONT, size, color, align)
+    if has_ar(s):
+        return _p(ar(s), _AR, sz, color, TA_RIGHT)
+    align = TA_CENTER if center_if_latin else TA_LEFT
+    return _p(s, _EN, sz, color, align)
 
 
-# ── Main generator ─────────────────────────────────────────────────────────────
+# ── Main PDF generator ─────────────────────────────────────────────────────────
 def generate_pdf(data: dict, output_path) -> Path:
     output_path = Path(output_path)
     PAGE_W, PAGE_H = A4
-    M = 1.5 * cm
+    M = 1.4 * cm
 
     doc = SimpleDocTemplate(
         str(output_path), pagesize=A4,
-        leftMargin=M, rightMargin=M,
-        topMargin=M, bottomMargin=M,
+        leftMargin=M, rightMargin=M, topMargin=M, bottomMargin=M,
     )
     story = []
-    W = PAGE_W - 2 * M
+    W = PAGE_W - 2 * M   # usable width
 
-    # ── Data helpers ───────────────────────────────────────────────────────────
+    # ── Unpack data ────────────────────────────────────────────────────────────
     ad_g  = data.get("admission_date_gregorian", "")
     ad_h  = data.get("admission_date_hijri", "")
     dd_g  = data.get("discharge_date_gregorian", "")
@@ -126,170 +126,228 @@ def generate_pdf(data: dict, output_path) -> Path:
     iss_g = data.get("issue_date_gregorian", "")
     iss_h = data.get("issue_date_hijri", "")
     iss_t = data.get("issue_time", "")
-    dur   = data.get("leave_duration_days", "")
-    hosp_ar = data.get("hospital_name_ar", "")
-    hosp_en = data.get("hospital_name_en", "")
+    dur   = str(data.get("leave_duration_days", ""))
+    h_en  = data.get("hospital_name_en", "")
+    h_ar  = data.get("hospital_name_ar", "")
+    p_en  = data.get("practitioner_name_en", "")
+    p_ar  = data.get("practitioner_name_ar", "")
+    pos_en = data.get("practitioner_position_en", "")
+    pos_ar = data.get("practitioner_position_ar", "")
+    nat   = data.get("nationality", "")
+    emp   = data.get("employer", "")
+    nid   = data.get("national_id", "")
+    name_en = data.get("patient_name_en", "")
+    name_ar = data.get("patient_name_ar", "")
+    leave_id = data.get("leave_id", "")
+
+    # Leave Duration formatted strings
+    dur_en_val = f"{dur} day(s)  ( {ad_g} to {dd_g} )"
+    dur_ar_val = f"{ar(dur)} يوم  ( {ar(dd_h)} الى {ar(ad_h)} )"
 
     # ── HEADER ─────────────────────────────────────────────────────────────────
-    # Left: uploaded hospital logo
+    # Load hospital logo if available
     logo_path = data.get("hospital_logo_path", "")
+    logo_cell: object
     if logo_path and Path(logo_path).exists():
         try:
             from reportlab.platypus import Image as RLImage
-            logo_cell = RLImage(logo_path, width=2.2*cm, height=2.2*cm, kind="proportional")
+            logo_cell = RLImage(logo_path, width=2.4*cm, height=2.4*cm, kind="proportional")
         except Exception:
-            logo_cell = _en("", 8)
+            logo_cell = en("", 8)
     else:
-        logo_cell = _en("", 8)
+        logo_cell = en("", 8)
 
-    # Center: KSA title
-    center_content = [
-        _ar("المملكة العربية السعودية", 11, DARK_BLUE, TA_CENTER),
-        _en("Kingdom of Saudi Arabia", 9, DARK_BLUE, TA_CENTER),
+    # Center: KSA text
+    ksa_center = [
+        arabic("المملكة العربية السعودية", 12, C_DARK_BLUE, TA_CENTER),
+        en("Kingdom of Saudi Arabia", 9, C_DARK_BLUE, TA_CENTER),
     ]
 
-    # Right: decorative placeholder (empty in our case)
-    right_content = _en("", 8)
+    # Right: decorative placeholder
+    deco = en("", 8)
 
-    header_tbl = Table(
-        [[logo_cell, center_content, right_content]],
-        colWidths=[W*0.25, W*0.5, W*0.25],
+    header = Table(
+        [[logo_cell, ksa_center, deco]],
+        colWidths=[W * 0.25, W * 0.50, W * 0.25],
     )
-    header_tbl.setStyle(TableStyle([
-        ("VALIGN",  (0,0), (-1,-1), "MIDDLE"),
-        ("ALIGN",   (0,0), (0,0),   "LEFT"),
-        ("ALIGN",   (1,0), (1,0),   "CENTER"),
-        ("ALIGN",   (2,0), (2,0),   "RIGHT"),
-        ("TOPPADDING",    (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    header.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN",  (0,0), (0,0), "LEFT"),
+        ("ALIGN",  (1,0), (1,0), "CENTER"),
+        ("ALIGN",  (2,0), (2,0), "RIGHT"),
+        ("TOPPADDING",    (0,0),(-1,-1), 4),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 4),
     ]))
-    story.append(header_tbl)
-    story.append(Spacer(1, 3*mm))
-
-    # ── TITLE ──────────────────────────────────────────────────────────────────
-    story.append(_ar("تقرير إجازة مرضية", 14, TEAL_BLUE, TA_CENTER))
-    story.append(_en("Sick Leave Report",  11, DARK_BLUE, TA_CENTER))
+    story.append(header)
     story.append(Spacer(1, 4*mm))
 
-    # ── DATA TABLE ─────────────────────────────────────────────────────────────
-    # 4 columns: [EN label | EN value | AR value | AR label]
-    CL = W * 0.20   # label width
-    CV = W * 0.30   # value width
-
-    # Column widths list
-    cw = [CL, CV, CV, CL]
-
-    # ── Row builder ────────────────────────────────────────────────────────────
-    # Normal 4-col row
-    def row4(en_lbl, en_val, ar_val, ar_lbl, lbl_sz=8.5, val_sz=8.5):
-        return [
-            _en(en_lbl,  lbl_sz, DARK_BLUE, TA_CENTER),
-            _val(en_val, val_sz, BLACK,     TA_CENTER),
-            _val(ar_val, val_sz, BLACK,     TA_RIGHT),
-            _ar(ar_lbl,  lbl_sz, DARK_BLUE, TA_RIGHT),
-        ]
-
-    # Span row: value spans cols 1+2 (merged center)
-    def row_span(en_lbl, center_val, ar_lbl, val_sz=8.5):
-        return [
-            _en(en_lbl,    8.5, DARK_BLUE, TA_CENTER),
-            _val(center_val, val_sz, BLACK, TA_CENTER),
-            "",  # will be spanned
-            _ar(ar_lbl, 8.5, DARK_BLUE, TA_RIGHT),
-        ]
-
-    dur_en = f"{dur} day(s)  ( {ad_g} to {dd_g} )"
-    dur_ar = f"{ar(str(dur))} يوم  ( {ar(dd_h)} الى {ar(ad_h)} )"
-
-    rows_data = [
-        # (type, row_data, is_span_col23, is_dark_header, is_alt_bg)
-        ("span", row_span("Leave ID",       data.get("leave_id",""),           "رمز الإجازة"),    False, False),
-        ("4col", row4("Leave Duration",     dur_en,                 dur_ar,    "مدة الإجازة",  8, 7.5), False, True),   # dark header
-        ("4col", row4("Admission Date",     ad_g,                   ad_h,      "تاريخ الدخول"), False, False),
-        ("4col", row4("Discharge Date",     dd_g,                   dd_h,      "تاريخ الخروج"), True,  False),
-        ("span", row_span("Issue Date",     iss_g,                             "تاريخ إصدار التقرير"), False, False),
-        ("4col", row4("Name",               data.get("patient_name_en",""),    data.get("patient_name_ar",""),    "الاسم"),   True, False),
-        ("span", row_span("National ID / Iqama", data.get("national_id",""),   "رقم الهوية / الإقامة"),            False, False),
-        ("4col", row4("Nationality",        data.get("nationality",""),        data.get("nationality",""),        "الجنسية"), True, False),
-        ("4col", row4("Employer",           data.get("employer",""),           data.get("employer",""),           "جهة العمل"), False, False),
-        ("4col", row4("Practitioner Name",  data.get("practitioner_name_en",""), data.get("practitioner_name_ar",""), "اسم الممارس"), True, False),
-        ("4col", row4("Position",           data.get("practitioner_position_en",""), data.get("practitioner_position_ar",""), "المسمى الوظيفي"), False, False),
-    ]
-
-    table_data  = []
-    span_cmds   = []
-    style_cmds  = [
-        ("GRID",          (0,0), (-1,-1), 0.4, MID_GREY),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("LEFTPADDING",   (0,0), (-1,-1), 5),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 5),
-        # Label cols background
-        ("BACKGROUND",    (0,0), (0,-1), LABEL_BG),
-        ("BACKGROUND",    (3,0), (3,-1), LABEL_BG),
-    ]
-
-    dark_header_idx = None
-
-    for i, entry in enumerate(rows_data):
-        if len(entry) == 5:
-            rtype, rdata, is_alt, is_dark, _ = entry
-        else:
-            rtype, rdata, is_alt, is_dark = entry[0], entry[1], entry[2], entry[3]
-
-        table_data.append(rdata)
-
-        if rtype == "span":
-            span_cmds.append(("SPAN", (1, i), (2, i)))
-            style_cmds.append(("ALIGN", (1, i), (2, i), "CENTER"))
-
-        if is_dark:
-            dark_header_idx = i
-            style_cmds.extend([
-                ("BACKGROUND", (0, i), (-1, i), DARK_BLUE),
-                ("TEXTCOLOR",  (0, i), (-1, i), WHITE),
-            ])
-        elif is_alt:
-            style_cmds.append(("BACKGROUND", (1, i), (2, i), ALT_BG))
-
-    all_cmds = style_cmds + span_cmds
-    data_table = Table(table_data, colWidths=cw, repeatRows=0)
-    data_table.setStyle(TableStyle(all_cmds))
-    story.append(data_table)
+    # ── TITLE ──────────────────────────────────────────────────────────────────
+    story.append(arabic("تقرير إجازة مرضية", 15, C_TEAL, TA_CENTER))
+    story.append(en("Sick Leave Report",     11, C_DARK_BLUE, TA_CENTER))
     story.append(Spacer(1, 5*mm))
 
-    # ── FOOTER ─────────────────────────────────────────────────────────────────
-    # Left: verification text + link
-    footer_left = [
-        _ar("للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي", 7.5, GREY, TA_LEFT),
-        _en("To check the report please visit Seha's official website", 7.5, GREY, TA_LEFT),
-        _en("www.seha.sa/#/inquiries/slenquiry", 7.5, TEAL_BLUE, TA_LEFT),
+    # ── MAIN TABLE ─────────────────────────────────────────────────────────────
+    # Column widths: [EN label | EN value | AR value | AR label]
+    CL = W * 0.20   # label (narrow)
+    CV = W * 0.30   # value (wide)
+
+    PAD = [
+        ("TOPPADDING",    (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+        ("LEFTPADDING",   (0,0),(-1,-1), 5),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 5),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ("GRID",          (0,0),(-1,-1), 0.4, C_GREY_LINE),
     ]
 
-    # Right: hospital info
-    footer_right = [
-        _ar(hosp_ar, 8, DARK_BLUE, TA_RIGHT),
-        _en(hosp_en, 8, DARK_BLUE, TA_RIGHT),
+    # Label cells background (cols 0 and 3 for all rows)
+    LABEL_STYLE = [
+        ("BACKGROUND", (0,0),(0,-1), C_LABEL_BG),
+        ("BACKGROUND", (3,0),(3,-1), C_LABEL_BG),
+    ]
+
+    def lbl_en(t): return en(t,   8.5, C_LABEL_TEXT, TA_CENTER)
+    def lbl_ar(t): return arabic(t, 8.5, C_LABEL_TEXT, TA_RIGHT)
+
+    # ── Row definitions ────────────────────────────────────────────────────────
+    # Each entry: (row_list, span_middle, row_bg_override)
+    # span_middle=True → merge cols 1+2 into one centered value cell
+    # row_bg_override → color for entire row (None = use alternating)
+
+    rows_spec = [
+        # Leave ID — single centered value (span cols 1+2)
+        (
+            [lbl_en("Leave ID"), smart(leave_id, 9, BLACK), "", lbl_ar("رمز الإجازة")],
+            True, None
+        ),
+        # Leave Duration — DARK BLUE full-width header row
+        (
+            [
+                en("Leave Duration", 8, WHITE, TA_CENTER),
+                en(dur_en_val,       7.5, WHITE, TA_CENTER),
+                arabic(dur_ar_val,   7.5, WHITE, TA_RIGHT),
+                arabic("مدة الإجازة", 8, WHITE, TA_RIGHT),
+            ],
+            False, C_DARK_BLUE
+        ),
+        # Admission Date
+        (
+            [lbl_en("Admission Date"), smart(ad_g, 8.5), smart(ad_h, 8.5), lbl_ar("تاريخ الدخول")],
+            False, None
+        ),
+        # Discharge Date (alt)
+        (
+            [lbl_en("Discharge Date"), smart(dd_g, 8.5), smart(dd_h, 8.5), lbl_ar("تاريخ الخروج")],
+            False, C_ALT_BG
+        ),
+        # Issue Date — single centered value (span)
+        (
+            [lbl_en("Issue Date"), smart(iss_g, 8.5), "", lbl_ar("تاريخ إصدار التقرير")],
+            True, None
+        ),
+        # Name (alt)
+        (
+            [lbl_en("Name"), smart(name_en, 8.5), smart(name_ar, 8.5), lbl_ar("الاسم")],
+            False, C_ALT_BG
+        ),
+        # National ID — single centered value (span)
+        (
+            [lbl_en("National ID / Iqama"), smart(nid, 8.5), "", lbl_ar("رقم الهوية / الإقامة")],
+            True, None
+        ),
+        # Nationality (alt)
+        (
+            [lbl_en("Nationality"), smart(nat, 8.5), smart(nat, 8.5), lbl_ar("الجنسية")],
+            False, C_ALT_BG
+        ),
+        # Employer
+        (
+            [lbl_en("Employer"), smart(emp, 8.5), smart(emp, 8.5), lbl_ar("جهة العمل")],
+            False, None
+        ),
+        # Practitioner Name (alt)
+        (
+            [lbl_en("Practitioner Name"), smart(p_en, 8.5), smart(p_ar, 8.5), lbl_ar("اسم الممارس")],
+            False, C_ALT_BG
+        ),
+        # Position
+        (
+            [lbl_en("Position"), smart(pos_en, 8.5), smart(pos_ar, 8.5), lbl_ar("المسمى الوظيفي")],
+            False, None
+        ),
+    ]
+
+    table_data = []
+    extra_styles = []
+
+    for i, (row, span_mid, bg) in enumerate(rows_spec):
+        table_data.append(row)
+
+        if span_mid:
+            extra_styles.append(("SPAN",  (1, i), (2, i)))
+            extra_styles.append(("ALIGN", (1, i), (2, i), "CENTER"))
+
+        if bg is not None:
+            if bg == C_DARK_BLUE:
+                # Full dark row overrides label bg too
+                extra_styles.append(("BACKGROUND", (0, i), (-1, i), C_DARK_BLUE))
+                extra_styles.append(("TEXTCOLOR",  (0, i), (-1, i), WHITE))
+            else:
+                # Only value cols get alt bg (labels keep their own bg)
+                extra_styles.append(("BACKGROUND", (1, i), (2, i), bg))
+
+    tbl = Table(table_data, colWidths=[CL, CV, CV, CL])
+    tbl.setStyle(TableStyle(PAD + LABEL_STYLE + extra_styles))
+    story.append(tbl)
+    story.append(Spacer(1, 6*mm))
+
+    # ── FOOTER ─────────────────────────────────────────────────────────────────
+    story.append(HRFlowable(width="100%", thickness=0.5, color=C_GREY_LINE))
+    story.append(Spacer(1, 3*mm))
+
+    # Footer: two columns — left (verification) | right (hospital info)
+    verify_ar  = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
+    verify_en  = "To check the report please visit Seha's official website"
+    verify_url = "www.seha.sa/#/inquiries/slenquiry"
+
+    left_col = [
+        arabic(verify_ar,  7.5, C_GREY_TEXT, TA_LEFT),
+        en(verify_en,      7.5, C_GREY_TEXT, TA_LEFT),
+        en(verify_url,     7.5, C_LINK,      TA_LEFT),
+    ]
+
+    right_col = [
+        arabic("وزارة الصحة",   9, C_DARK_BLUE, TA_RIGHT),
+        en("Ministry of Health", 8, C_DARK_BLUE, TA_RIGHT),
+        arabic(h_ar,             8, C_DARK_BLUE, TA_RIGHT),
+        en(h_en,                 8, C_DARK_BLUE, TA_RIGHT),
     ]
 
     footer_tbl = Table(
-        [[footer_left, footer_right]],
-        colWidths=[W*0.6, W*0.4],
+        [[left_col, right_col]],
+        colWidths=[W * 0.58, W * 0.42],
     )
     footer_tbl.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("TOPPADDING",    (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ("VALIGN", (0,0),(-1,-1), "TOP"),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
     ]))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=MID_GREY))
-    story.append(Spacer(1, 2*mm))
     story.append(footer_tbl)
-    story.append(Spacer(1, 4*mm))
+    story.append(Spacer(1, 5*mm))
 
-    # Bottom: timestamp left
-    issue_dt = f"{iss_t}\n{iss_g}"
-    story.append(_en(issue_dt, 8, BLACK, TA_LEFT))
+    # Bottom row: timestamp left | NHIC right
+    nhic = "NATIONAL HEALTH INFORMATION CENTER\nالمركز الوطني للمعلومات الصحية"
+    ts   = f"{iss_t}\n{iss_g}"
+    bottom = Table(
+        [[en(ts, 8, BLACK, TA_LEFT), en(nhic, 7, C_GREY_TEXT, TA_RIGHT)]],
+        colWidths=[W*0.5, W*0.5],
+    )
+    bottom.setStyle(TableStyle([
+        ("VALIGN", (0,0),(-1,-1), "BOTTOM"),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
+    ]))
+    story.append(bottom)
 
     doc.build(story)
     return output_path
