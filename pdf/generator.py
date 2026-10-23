@@ -129,17 +129,17 @@ _ENB = _try_register(
 )
 
 # ── Exact colors from reference ──────────────────────────────────────────────────
-C_LABEL   = colors.HexColor("#366fb5")   # EN/AR label text (bold blue)
-C_VALUE   = colors.HexColor("#2c3e77")   # cell values (dark blue)
+C_LABEL   = colors.HexColor("#366fb3")   # EN/AR label text (bold blue)
+C_VALUE   = colors.HexColor("#2a3c76")   # cell values (dark blue)
 C_DARK    = colors.HexColor("#2c3e77")   # Leave Duration row bg  
-C_TITLE   = colors.HexColor("#306db5")   # Arabic title
-C_TITLE_EN= colors.HexColor("#2e3f7b")   # English title
+C_TITLE   = colors.HexColor("#2e6cb3")   # Arabic title
+C_TITLE_EN= colors.HexColor("#2d3e7a")   # English title
 C_LINK    = colors.HexColor("#153bc2")   # URL link
 C_GREY    = colors.HexColor("#555555")   # verify text
-C_LBLBG   = colors.HexColor("#f0f0f0")   # label column background (light grey)
-C_ALTBG   = colors.HexColor("#f8f8f8")   # alt row background
-C_BORDER  = colors.HexColor("#d0d0d0")   # table border
-C_DIVIDER = colors.HexColor("#bbbbbb")   # vertical divider in footer
+C_LBLBG   = colors.HexColor("#ffffff")   # label column background
+C_ALTBG   = colors.HexColor("#f7f7f7")   # alt row background (soft grey in original)
+C_BORDER  = colors.HexColor("#dedede")   # table border (crisp light grey)
+C_DIVIDER = colors.HexColor("#c8c8c8")   # vertical divider in footer
 WHITE     = colors.white
 BLACK     = colors.black
 
@@ -271,12 +271,19 @@ def generate_pdf(data: dict, output_path) -> Path:
     output_path = Path(output_path)
 
     # ── Unpack data ────────────────────────────────────────────────────────────
-    ad_g      = data.get("admission_date_gregorian", "")
-    ad_h      = data.get("admission_date_hijri", "")
-    dd_g      = data.get("discharge_date_gregorian", "")
-    dd_h      = data.get("discharge_date_hijri", "")
-    iss_g     = data.get("issue_date_gregorian", "")
-    iss_long  = data.get("issue_date_long", iss_g)    # "Friday ,3 July 2026"
+    def _norm(d):
+        if not d:
+            return ""
+        return str(d).strip().replace("/", "-")
+
+    ad_g      = _norm(data.get("admission_date_gregorian", ""))
+    ad_h      = _norm(data.get("admission_date_hijri", ""))
+    dd_g      = _norm(data.get("discharge_date_gregorian", ""))
+    dd_h      = _norm(data.get("discharge_date_hijri", ""))
+    iss_g     = _norm(data.get("issue_date_gregorian", ""))
+    iss_long  = data.get("issue_date_long", iss_g)    # "Friday ،3 July 2026"
+    if iss_long:
+        iss_long = str(iss_long).replace(" ,", " ،").replace(",", " ،").replace("  ", " ")
     iss_t     = data.get("issue_time", "")             # "6:20 PM"
     dur       = str(data.get("leave_duration_days", ""))
     h_en      = (data.get("hospital_name_en", "") or "").strip()
@@ -341,10 +348,10 @@ def generate_pdf(data: dict, output_path) -> Path:
 
         # "Kingdom of Saudi Arabia" — directly under KSA calligraphy
         # Reference: y≈104 from top (calligraphy bottom is at 160, text is at ~170)
-        ksa_bottom_y = H - 160   # bottom of KSA calligraphy in pdf coords
+        ksa_bottom_y = H - 150   # bottom of KSA calligraphy in pdf coords
         c.setFillColor(BLACK)
-        c.setFont(_EN if _EN != "Helvetica" else "Helvetica", 11)
-        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 16, "Kingdom of Saudi Arabia")
+        c.setFont(_ENB if _ENB else "Helvetica-Bold", 11)
+        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 12, "Kingdom of Saudi Arabia")
 
         # ── TIME & DATE — bottom left (footer in story, not canvas) ─────────────
         # Moved to story for better positioning control
@@ -358,7 +365,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         pagesize=(PAGE_W, PAGE_H),
         leftMargin=MAR_L,
         rightMargin=MAR_R,
-        topMargin=200 * pt,
+        topMargin=158 * pt,
         bottomMargin=36 * pt,   # minimal — all footer content is in the story
     )
 
@@ -366,10 +373,10 @@ def generate_pdf(data: dict, output_path) -> Path:
     BODY_W = USABLE_W  # 770pt
 
     # ── TITLES ─────────────────────────────────────────────────────────────────
-    story.append(arb("تقرير إجازة مرضية", 24, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 8 * pt))
-    story.append(enb("Sick Leave Report", 20, C_TITLE_EN, TA_CENTER))
-    story.append(Spacer(1, 20 * pt))
+    story.append(arb("تقرير إجازة مرضية", 23, C_TITLE, TA_CENTER))
+    story.append(Spacer(1, 6 * pt))
+    story.append(enb("Sick Leave Report", 19.5, C_TITLE_EN, TA_CENTER))
+    story.append(Spacer(1, 16 * pt))
 
     # ── DATA TABLE ──────────────────────────────────────────────────────────────
     CL_EN = BODY_W * 0.18
@@ -393,13 +400,17 @@ def generate_pdf(data: dict, output_path) -> Path:
     def val_a(t, sz=VSZ):
         return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
 
-    ROW_H = 36 * pt
+    ROW_H = 41.5 * pt
+
+    LSZ = 11.5   # label font size
+    VSZ = 11.0   # value font size
+    NSZ = 10.0   # smaller for long names
 
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
         (enb("Leave Duration", LSZ, WHITE, TA_CENTER),
-                                       en(dur_en, 8.5, WHITE, TA_CENTER),
-                                                              arabic(dur_ar, 8.5, WHITE, TA_CENTER),
+                                       en(dur_en, 9.5, WHITE, TA_CENTER),
+                                                              arabic(dur_ar, 10.0, WHITE, TA_CENTER),
                                                                                       arb("مدة الإجازة", LSZ, WHITE, TA_CENTER),
                                                                                                       False, True),
         (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
@@ -416,7 +427,7 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     tdata  = []
     extras = []
-    alt_rows = {2, 4, 6, 8, 10}
+    alt_rows = {3, 5, 7, 9}
 
     for i, (le, ve, va, la, span, dark) in enumerate(rows):
         tdata.append([le, ve, va, la])
@@ -428,23 +439,23 @@ def generate_pdf(data: dict, output_path) -> Path:
         if dark:
             extras += [
                 ("BACKGROUND",    (0, i), (-1, i), C_DARK),
-                ("TOPPADDING",    (0, i), (-1, i), 9),
-                ("BOTTOMPADDING", (0, i), (-1, i), 9),
+                ("TOPPADDING",    (0, i), (-1, i), 10),
+                ("BOTTOMPADDING", (0, i), (-1, i), 10),
             ]
         elif i in alt_rows:
-            extras.append(("BACKGROUND", (1, i), (2, i), C_ALTBG))
+            extras.append(("BACKGROUND", (0, i), (-1, i), C_ALTBG))
+        else:
+            extras.append(("BACKGROUND", (0, i), (-1, i), WHITE))
 
     tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
     tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING",    (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
         ("LEFTPADDING",   (0, 0), (-1, -1), 8),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        # ALL white background — labels same bg as values (only text color differs)
-        ("BACKGROUND",    (0, 0), (-1, -1), WHITE),
         ("GRID",          (0, 0), (-1, -1), 0.6, C_BORDER),
-        ("BOX",           (0, 0), (-1, -1), 1.2, C_BORDER),
+        ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
     ] + extras))
 
     story.append(tbl)
@@ -474,7 +485,8 @@ def generate_pdf(data: dict, output_path) -> Path:
     if with_qr:
         try:
             import qrcode as qr_lib
-            target = f"https://seha-8xj.pages.dev/?q={leave_id}" if leave_id else "https://seha-8xj.pages.dev/"
+            # QR code opens the exact inquiry portal link shown underneath
+            target = "https://seha-8xj.pages.dev/"
             qr_obj = qr_lib.QRCode(version=3,
                                    error_correction=qr_lib.constants.ERROR_CORRECT_M,
                                    box_size=8, border=2)
@@ -484,7 +496,7 @@ def generate_pdf(data: dict, output_path) -> Path:
             buf = BytesIO()
             qr_img.save(buf, "PNG")
             buf.seek(0)
-            qr_size = 118 * pt  # Exact reference size
+            qr_size = 120 * pt  # Exact reference size
             qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
             qr_flowable.hAlign = "CENTER"
         except ImportError:
@@ -494,45 +506,45 @@ def generate_pdf(data: dict, output_path) -> Path:
     r1_left = []
     if qr_flowable:
         r1_left.append(qr_flowable)
-        r1_left.append(Spacer(1, 10 * pt))
+        r1_left.append(Spacer(1, 8 * pt))
     r1_left += [
         arb(verify_ar,  11, BLACK, TA_CENTER),
-        Spacer(1, 5 * pt),
+        Spacer(1, 4 * pt),
         enb(verify_en,  10, BLACK, TA_CENTER),
-        Spacer(1, 5 * pt),
+        Spacer(1, 4 * pt),
         url_para,
     ]
 
     # Row 1 RIGHT: hospital logo + name (centered)
     logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
-    logo_fit = _fit(logo_src, 135 * pt, 125 * pt)
+    logo_fit = _fit(logo_src, 135 * pt, 115 * pt)
     r1_right = []
     if logo_fit:
         logo_fit.hAlign = "CENTER"
         r1_right.append(logo_fit)
         r1_right.append(Spacer(1, 8 * pt))
     if h_ar:
-        r1_right.append(arb(h_ar, 13, BLACK, TA_CENTER))
+        r1_right.append(arb(h_ar, 13.5, BLACK, TA_CENTER))
     if h_en:
-        r1_right.append(Spacer(1, 4 * pt))
-        r1_right.append(enb(h_en, 11, BLACK, TA_CENTER))
+        r1_right.append(Spacer(1, 3 * pt))
+        r1_right.append(enb(h_en, 11.5, BLACK, TA_CENTER))
     if not r1_right:
         r1_right = [en("", 9)]
 
     # Row 2 LEFT: time + date (left-aligned)
     r2_left = [
-        Spacer(1, 20 * pt),
+        Spacer(1, 15 * pt),
         enb(str(iss_t or ""),    13, BLACK, TA_LEFT),
-        Spacer(1, 6 * pt),
-        enb(str(iss_long or ""), 12, BLACK, TA_LEFT),
+        Spacer(1, 4 * pt),
+        enb(str(iss_long or ""), 11.5, BLACK, TA_LEFT),
     ]
 
     # Row 2 RIGHT: NHIC logo (single image that already contains the text)
-    nhic_fit = _fit(_NHIC_LOGO, 190 * pt, 95 * pt)
+    nhic_fit = _fit(_NHIC_LOGO, 195 * pt, 90 * pt)
 
     r2_right = []
     if nhic_fit:
-        r2_right.append(Spacer(1, 16 * pt))
+        r2_right.append(Spacer(1, 10 * pt))
         nhic_fit.hAlign = "RIGHT"
         r2_right.append(nhic_fit)
 
