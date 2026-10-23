@@ -383,13 +383,20 @@
 const tg = window.Telegram?.WebApp;
 if(tg){ tg.ready(); tg.expand(); }
 
-// ── Service Code ────────────────────────────────────────────────────────────
+// ── Service Code Generator ───────────────────────────────────────────────────
+// Format: {PREFIX}{YY}{MM}{DD}{5 random digits}
+// GSL = Government Sick Leave  /  PSL = Private Sick Leave
+function generateServiceCode(prefix) {
+  const now = new Date();
+  const yy  = String(now.getFullYear()).slice(2);
+  const mm  = String(now.getMonth() + 1).padStart(2, '0');
+  const dd  = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(Math.random() * 1e5).toString().padStart(5, '0');
+  return `${prefix}${yy}${mm}${dd}${rand}`;
+}
+// Initial generation (GSL = government, default)
 (function(){
-  const now=new Date();
-  const yy=String(now.getFullYear()).slice(2);
-  const mm=String(now.getMonth()+1).padStart(2,'0');
-  const rand=Math.floor(Math.random()*1e8).toString().padStart(8,'0');
-  document.getElementById('service_code').value=`GSL${yy}${mm}${rand}`;
+  document.getElementById('service_code').value = generateServiceCode('GSL');
 })();
 
 // ── Edit mode: pre-fill form if ?edit=SERVICE_CODE in URL ───────────────────
@@ -409,9 +416,20 @@ if(tg){ tg.ready(); tg.expand(); }
     // Page 1
     if (d.admission_date)      { document.getElementById('admission_date').value = d.admission_date; markDateFilled('admission_date'); }
     if (d.discharge_date)      { document.getElementById('discharge_date').value = d.discharge_date; markDateFilled('discharge_date'); }
-    if (d.report_type)         pickReportType(d.report_type);
+    // Set report type WITHOUT regenerating code (edit mode keeps original code)
+    if (d.report_type) {
+      const rt = d.report_type;
+      document.getElementById('report_type').value = rt;
+      document.getElementById('trt_gsl').classList.toggle('sel', rt === 'GSL');
+      document.getElementById('trt_psl').classList.toggle('sel', rt === 'PSL');
+      // Sync hospital type silently
+      const ht = (rt === 'GSL') ? 'government' : 'private';
+      document.getElementById('hospital_type').value = ht;
+      document.getElementById('tg').classList.toggle('sel', ht === 'government');
+      document.getElementById('tp').classList.toggle('sel', ht === 'private');
+    }
 
-    // Page 2 — keep same service_code
+    // Page 2 — always restore original service_code in edit mode
     if (d.service_code)         document.getElementById('service_code').value = d.service_code;
     if (d.national_id)          document.getElementById('national_id').value = d.national_id;
     if (d.patient_name_ar)      document.getElementById('patient_name_ar').value = d.patient_name_ar;
@@ -428,7 +446,7 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.job_title_en)         document.getElementById('job_title_en').value = d.job_title_en;
     if (d.hospital_name_ar)     document.getElementById('hospital_name_ar').value = d.hospital_name_ar;
     if (d.hospital_name_en)     document.getElementById('hospital_name_en').value = d.hospital_name_en;
-    if (d.hospital_type)        pickType(d.hospital_type);
+    if (d.hospital_type)        pickType(d.hospital_type, false);
 
     // Recalculate duration after pre-fill
     onDateChange();
@@ -479,17 +497,43 @@ function setAmPm(val, updateTime=true) {
 }
 
 // ── Report type toggle ───────────────────────────────────────────────────────
+// GSL → Government hospital,  PSL → Private hospital
 function pickReportType(t) {
   document.getElementById('report_type').value = t;
   document.getElementById('trt_gsl').classList.toggle('sel', t === 'GSL');
   document.getElementById('trt_psl').classList.toggle('sel', t === 'PSL');
+
+  // Sync hospital type to match
+  const hospType = (t === 'GSL') ? 'government' : 'private';
+  pickType(hospType, false);   // pass false to avoid regenerating twice
+
+  // Regenerate service code with new prefix
+  const existing = document.getElementById('service_code').value;
+  // Only regenerate if not in edit mode (edit mode keeps original code)
+  if (!new URLSearchParams(window.location.search).get('edit')) {
+    document.getElementById('service_code').value = generateServiceCode(t);
+  }
 }
 
 // ── Hospital type toggle ──────────────────────────────────────────────────────
-function pickType(t) {
+// government → GSL,  private → PSL
+function pickType(t, syncReportType = true) {
   document.getElementById('hospital_type').value = t;
   document.getElementById('tg').classList.toggle('sel', t === 'government');
   document.getElementById('tp').classList.toggle('sel', t === 'private');
+
+  if (syncReportType) {
+    // Sync report type to match hospital type
+    const rType = (t === 'government') ? 'GSL' : 'PSL';
+    document.getElementById('report_type').value = rType;
+    document.getElementById('trt_gsl').classList.toggle('sel', rType === 'GSL');
+    document.getElementById('trt_psl').classList.toggle('sel', rType === 'PSL');
+
+    // Regenerate service code with new prefix
+    if (!new URLSearchParams(window.location.search).get('edit')) {
+      document.getElementById('service_code').value = generateServiceCode(rType);
+    }
+  }
 }
 
 // ── Barcode toggle ────────────────────────────────────────────────────────────
