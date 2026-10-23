@@ -46,7 +46,9 @@ class SickLeaveReport(Base):
     patient_name_ar     = Column(String(200), nullable=False)
     patient_name_en     = Column(String(200), nullable=True)
     nationality         = Column(String(100), nullable=True)
+    nationality_en      = Column(String(100), nullable=True)
     employer            = Column(String(200), nullable=True)
+    employer_en         = Column(String(200), nullable=True)
 
     # ── بيانات الممارس ─────────────────────────────────────────────────────
     practitioner_name_ar = Column(String(200), nullable=True)

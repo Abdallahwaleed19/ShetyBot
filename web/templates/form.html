@@ -197,13 +197,23 @@
   </div>
 
   <div class="field">
-    <label>🌍 الجنسية</label>
+    <label>🌍 الجنسية — عربي</label>
     <input type="text" id="nationality" placeholder="مثال: سعودي">
   </div>
 
   <div class="field">
-    <label>🏢 جهة العمل</label>
+    <label>Nationality — English</label>
+    <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr">
+  </div>
+
+  <div class="field">
+    <label>🏢 اسم المؤسسة — عربي</label>
     <input type="text" id="employer" placeholder="اسم الجهة">
+  </div>
+
+  <div class="field">
+    <label>Institution Name — English</label>
+    <input type="text" id="employer_en" placeholder="Institution name in English" dir="ltr">
   </div>
 
   <div class="err" id="e2"></div>
@@ -322,7 +332,9 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.patient_name_ar)   document.getElementById('patient_name_ar').value = d.patient_name_ar;
     if (d.patient_name_en)   document.getElementById('patient_name_en').value = d.patient_name_en;
     if (d.nationality)       document.getElementById('nationality').value = d.nationality;
+    if (d.nationality_en)    document.getElementById('nationality_en').value = d.nationality_en;
     if (d.employer)          document.getElementById('employer').value = d.employer;
+    if (d.employer_en)       document.getElementById('employer_en').value = d.employer_en;
 
     // Page 3
     if (d.practitioner_name_ar) document.getElementById('practitioner_name_ar').value = d.practitioner_name_ar;
@@ -453,7 +465,8 @@ async function submitForm(){
     leave_duration_days:'leave_duration', issue_date:'issue_date',
     report_time:'report_time', national_id:'national_id',
     patient_name_ar:'patient_name_ar', patient_name_en:'patient_name_en',
-    nationality:'nationality', employer:'employer',
+    nationality:'nationality', nationality_en:'nationality_en',
+    employer:'employer', employer_en:'employer_en',
     practitioner_name_ar:'practitioner_name_ar', practitioner_name_en:'practitioner_name_en',
     job_title_ar:'job_title_ar', job_title_en:'job_title_en',
     hospital_name_ar:'hospital_name_ar', hospital_name_en:'hospital_name_en',

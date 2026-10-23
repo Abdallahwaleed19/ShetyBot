@@ -218,11 +218,11 @@
           </tr>
           <tr>
             <td class="label">الجنسية / Nationality</td>
-            <td>{{ record.nationality }}</td>
+            <td>{{ record.nationality }}{% if record.nationality_en %} / {{ record.nationality_en }}{% endif %}</td>
           </tr>
           <tr>
             <td class="label">جهة العمل / Employer</td>
-            <td>{{ record.employer }}</td>
+            <td>{{ record.employer }}{% if record.employer_en %} / {{ record.employer_en }}{% endif %}</td>
           </tr>
         </table>
       </div>

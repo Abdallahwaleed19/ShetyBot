@@ -90,11 +90,20 @@ _ENB = _try_register(
     r"C:\Windows\Fonts\arial.ttf",
     _FONTS_DIR / "Latin.ttf",
 )
+_ARB = _try_register(
+    "ARB",
+    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
+    "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\tahoma.ttf",
+    _FONTS_DIR / "Arabic.ttf",
+)
 
 # ── Colors (from official template) ────────────────────────────────────────────
 C_DARK_BLUE  = colors.HexColor("#1B3A6B")
 C_TITLE      = colors.HexColor("#2A6A9A")
 C_LABEL_TEXT = colors.HexColor("#1A5276")
+C_VALUE      = colors.HexColor("#1B6A9A")
 C_LINK       = colors.HexColor("#1155CC")
 C_GREY_TEXT  = colors.HexColor("#4A4A4A")
 C_GREY_LINE  = colors.HexColor("#BFBFBF")
@@ -141,11 +150,21 @@ def en(text, sz=9, color=BLACK, align=TA_LEFT):
     return _p(text, _EN, sz, color, align)
 
 
+def en_bold(text, sz=9, color=BLACK, align=TA_LEFT):
+    return _p(text, _ENB if _ENB else _EN, sz, color, align)
+
+
 def arabic(text, sz=9, color=BLACK, align=TA_RIGHT):
     return _p(ar(text), _AR, sz, color, align)
 
 
-def smart(text, sz=9, color=BLACK, align=TA_CENTER):
+def arabic_bold(text, sz=9, color=BLACK, align=TA_RIGHT):
+    return _p(ar(text), _ARB if _ARB else _AR, sz, color, align)
+
+
+def smart(text, sz=9, color=None, align=TA_CENTER):
+    if color is None:
+        color = C_VALUE
     s = str(text or "")
     if has_ar(s):
         return _p(ar(s), _AR, sz, color, TA_CENTER)
@@ -249,8 +268,10 @@ def generate_pdf(data: dict, output_path) -> Path:
     p_ar_s    = data.get("practitioner_name_ar", "")
     pos_en    = data.get("practitioner_position_en", "")
     pos_ar    = data.get("practitioner_position_ar", "")
-    nat       = data.get("nationality", "")
-    emp       = data.get("employer", "")
+    nat_ar    = data.get("nationality", "")
+    nat_en    = data.get("nationality_en", "")
+    emp_ar    = data.get("employer", "")
+    emp_en    = data.get("employer_en", "")
     nid       = data.get("national_id", "")
     name_en   = data.get("patient_name_en", "")
     name_ar   = data.get("patient_name_ar", "")
@@ -364,8 +385,8 @@ def generate_pdf(data: dict, output_path) -> Path:
         ([lbl_en("Issue Date"), smart(iss_g, 9), "", lbl_ar("تاريخ إصدار التقرير")], True, False),
         ([lbl_en("Name"), smart(name_en, 9), smart(name_ar, 9), lbl_ar("الاسم")], False, False),
         ([lbl_en("National ID / Iqama"), smart(nid, 9), "", lbl_ar("رقم الهوية / الإقامة")], True, False),
-        ([lbl_en("Nationality"), smart(nat, 9), smart(nat, 9), lbl_ar("الجنسية")], False, False),
-        ([lbl_en("Employer"), smart(emp, 9), smart(emp, 9), lbl_ar("جهة العمل")], False, False),
+        ([lbl_en("Nationality"), smart(nat_en, 9), smart(nat_ar, 9), lbl_ar("الجنسية")], False, False),
+        ([lbl_en("Employer"), smart(emp_en, 9), smart(emp_ar, 9), lbl_ar("جهة العمل")], False, False),
         (
             [lbl_en("Practitioner Name"), smart(p_en_s, 9), smart(p_ar_s, 9), lbl_ar("اسم الممارس")],
             False,
@@ -415,7 +436,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     verify_url = '<link href="https://www.seha.sa/#/inquiries/slenquiry"><u>www.seha.sa/#/inquiries/slenquiry</u></link>'
 
     footer_left = [
-        arabic(verify_ar, 8.5, C_GREY_TEXT, TA_CENTER),
+        arabic_bold(verify_ar, 9, BLACK, TA_CENTER),
         Spacer(1, 2.2 * mm),
         en(verify_en, 8, C_GREY_TEXT, TA_CENTER),
         Spacer(1, 4 * mm),
@@ -435,10 +456,10 @@ def generate_pdf(data: dict, output_path) -> Path:
     logo_flow = _fit_flowable(logo_src, 3.15 * cm, 3.15 * cm) or en("", 8)
     name_block = [logo_flow, Spacer(1, 2.2 * mm)]
     if h_ar_s.strip():
-        name_block.append(arabic(h_ar_s.strip(), 11, C_DARK_BLUE, TA_CENTER))
+        name_block.append(arabic_bold(h_ar_s.strip(), 11, BLACK, TA_CENTER))
     if h_en_s.strip():
         name_block.append(Spacer(1, 0.8 * mm))
-        name_block.append(en(h_en_s.strip(), 10, C_DARK_BLUE, TA_CENTER))
+        name_block.append(en_bold(h_en_s.strip(), 10, BLACK, TA_CENTER))
     if not h_ar_s.strip() and not h_en_s.strip():
         name_block.append(en("", 8))
 
@@ -466,9 +487,9 @@ def generate_pdf(data: dict, output_path) -> Path:
     story.append(footer_tbl)
     story.append(Spacer(1, 14 * mm))
 
-    # ── BOTTOM : time + long date | NHIC ──────────────────────────────────────
-    time_para = _p(iss_t, _ENB if _ENB else _EN, 12, BLACK, TA_LEFT, lh=1.15)
-    date_para = en(iss_long, 9.5, BLACK, TA_LEFT)
+    # ── BOTTOM : time + long date (official: compact black, stacked left) ────
+    time_para = en(iss_t, 10, BLACK, TA_LEFT)
+    date_para = en(iss_long, 9, BLACK, TA_LEFT)
     nhic_flow = _fit_flowable(_NHIC_LOGO, 4.4 * cm, 1.55 * cm) or en("", 8)
 
     bottom = Table(
