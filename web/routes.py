@@ -233,6 +233,20 @@ async def api_verify(q: str = Query(...)):
     return record
 
 
+@router.get("/api/my-reports")
+async def my_reports(telegram_user_id: str = Query(...)):
+    """Get reports by telegram_user_id."""
+    from db.worker_client import get_client
+    client = await get_client()
+    try:
+        resp = await client.get("/api/reports", params={"telegram_user_id": telegram_user_id})
+        if resp.status_code == 200:
+            return resp.json()
+        return {"data": []}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @router.get("/api/download/{service_code}")
 async def download_pdf(service_code: str):
     pdf = REPORTS_DIR / f"{service_code}.pdf"

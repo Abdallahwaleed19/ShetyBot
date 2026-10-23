@@ -178,21 +178,25 @@ def generate_pdf(data: dict, output_path) -> Path:
     # ══════════════════════════════════════════════════════════════════════════
     # HEADER — 3 columns, edge-to-edge logos
     # LEFT : Seha logo — LARGE
-    # CENTER: KSA calligraphy — LARGE + "Kingdom of Saudi Arabia"
+    # CENTER: KSA calligraphy — LARGE + titles
     # RIGHT : Geometric mesh — fills the right corner
     # ══════════════════════════════════════════════════════════════════════════
     COL_L = W * 0.28
     COL_C = W * 0.44
     COL_R = W * 0.28
 
-    seha_cell = _img(_SEHA_LOGO,       COL_L,      3.2*cm)
-    ksa_img   = _img(_KSA_CALLIGRAPHY, COL_C,      2.0*cm)
-    mesh_cell = _img(_GEOMETRIC_MESH,  COL_R + M,  3.5*cm)   # extends to page edge
+    seha_cell = _img(_SEHA_LOGO,       COL_L,      3.0*cm)
+    ksa_img   = _img(_KSA_CALLIGRAPHY, COL_C * 0.85, 2.5*cm)  # bigger KSA emblem
+    mesh_cell = _img(_GEOMETRIC_MESH,  COL_R + M,  3.8*cm)   # extends to page edge
 
     ksa_block = [
         ksa_img,
-        Spacer(1, 1.5*mm),
-        en("Kingdom of Saudi Arabia", 8.5, C_DARK_BLUE, TA_CENTER),
+        Spacer(1, 1*mm),
+        arabic("المملكة العربية السعودية", 9,  C_DARK_BLUE, TA_CENTER),
+        Spacer(1, 1*mm),
+        arabic("تقرير إجازة مرضية",        10, C_TEAL,      TA_CENTER),
+        Spacer(1, 0.5*mm),
+        en("Sick Leave Report",            8,  C_DARK_BLUE, TA_CENTER),
     ]
 
     hdr = Table(
@@ -210,15 +214,12 @@ def generate_pdf(data: dict, output_path) -> Path:
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
     story.append(hdr)
-    story.append(Spacer(1, 6*mm))
+    story.append(Spacer(1, 4*mm))
 
     # ══════════════════════════════════════════════════════════════════════════
-    # TITLE
+    # TITLE — now inside header KSA block, remove standalone title
     # ══════════════════════════════════════════════════════════════════════════
-    story.append(arabic("تقرير إجازة مرضية", 18, C_TEAL,      TA_CENTER))
-    story.append(Spacer(1, 1.5*mm))
-    story.append(en    ("Sick Leave Report",  13, C_DARK_BLUE, TA_CENTER))
-    story.append(Spacer(1, 7*mm))
+    story.append(Spacer(1, 2*mm))
 
     # ══════════════════════════════════════════════════════════════════════════
     # DATA TABLE
@@ -309,36 +310,36 @@ def generate_pdf(data: dict, output_path) -> Path:
     # FOOTER — vertical divider line between LEFT and RIGHT columns
     #
     # LEFT  : Arabic verify text (large, RTL) + URL link
-    # RIGHT : Hospital uploaded logo (LARGE) + hospital name AR + EN
+    # RIGHT : Hospital uploaded logo (centered, proportional) + hospital name
     #         Falls back to MOH logo if no hospital logo uploaded
     # ══════════════════════════════════════════════════════════════════════════
     verify_ar  = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
-    verify_en  = "To check the report please visit Seha's offical website"
+    verify_en  = "To check the report please visit Seha's official website"
     verify_url = "www.seha.sa/#/inquiries/slenquiry"
 
     footer_left = [
         arabic(verify_ar,  9, C_GREY_TEXT, TA_RIGHT),
         Spacer(1, 2*mm),
         en(verify_en,      8, C_GREY_TEXT, TA_LEFT),
-        Spacer(1, 4*mm),
+        Spacer(1, 3*mm),
         en(verify_url,     9, C_LINK,      TA_LEFT),
     ]
 
     # Hospital logo (user-uploaded) OR MOH logo as fallback
     if hosp_logo and Path(hosp_logo).exists():
-        logo_img = _img(hosp_logo,  3.5*cm, 3.5*cm)
+        logo_img = _img(hosp_logo,  2.5*cm, 2.5*cm)   # smaller, proportional
     else:
-        logo_img = _img(_MOH_LOGO,  3.0*cm, 3.0*cm)
+        logo_img = _img(_MOH_LOGO,  2.5*cm, 2.5*cm)
 
     footer_right = [
         logo_img,
         Spacer(1, 2*mm),
-        arabic(h_ar_s, 12, C_DARK_BLUE, TA_RIGHT),
-        en(h_en_s,      9, C_DARK_BLUE, TA_RIGHT),
+        arabic(h_ar_s, 10, C_DARK_BLUE, TA_CENTER),
+        en(h_en_s,      8, C_DARK_BLUE, TA_CENTER),
     ]
 
-    FOOTER_W_L = W * 0.52
-    FOOTER_W_R = W * 0.48
+    FOOTER_W_L = W * 0.55
+    FOOTER_W_R = W * 0.45
 
     footer_tbl = Table(
         [[footer_left, footer_right]],
@@ -346,39 +347,42 @@ def generate_pdf(data: dict, output_path) -> Path:
     )
     footer_tbl.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "TOP"),
-        ("ALIGN",         (1,0), (1,0),   "RIGHT"),
+        ("ALIGN",         (1,0), (1,0),   "CENTER"),
         ("TOPPADDING",    (0,0), (-1,-1), 4),
         ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-        ("LEFTPADDING",   (0,0), (-1,-1), 6),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 6),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
         # ← vertical divider line between columns
         ("LINEAFTER",     (0,0), (0,-1),  1.5, C_GREY_LINE),
     ]))
     story.append(footer_tbl)
-    story.append(Spacer(1, 6*mm))
+    story.append(Spacer(1, 5*mm))
 
     # ══════════════════════════════════════════════════════════════════════════
     # BOTTOM ROW
-    # LEFT : time (large bold) + date below
-    # RIGHT: NHIC logo (large)
+    # LEFT : time (large bold) + date below — aligned next to divider
+    # RIGHT: NHIC logo (large, right-aligned)
     # ══════════════════════════════════════════════════════════════════════════
-    nhic_img = _img(_NHIC_LOGO, 4.5*cm, 1.8*cm)
+    nhic_img = _img(_NHIC_LOGO, 4.0*cm, 1.6*cm)
 
+    # Format issue_time nicely: e.g. "06:32 PM"
+    # Format issue_gregorian: e.g. "Tuesday, 20 October 2026"
     bottom = Table(
         [[
-            [en(iss_t, 11, BLACK,      TA_LEFT),
+            [en(iss_t, 12, BLACK,       TA_LEFT),
              Spacer(1, 1*mm),
              en(iss_g, 9,  C_GREY_TEXT, TA_LEFT)],
             nhic_img,
         ]],
-        colWidths=[W * 0.52, W * 0.48],
+        colWidths=[W * 0.55, W * 0.45],
     )
     bottom.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "BOTTOM"),
         ("ALIGN",         (1,0), (1,0),   "RIGHT"),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
         ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("LEFTPADDING",   (0,0), (0,0),   8),
+        ("LEFTPADDING",   (1,0), (1,0),   0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
     story.append(bottom)

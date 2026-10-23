@@ -6,12 +6,18 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, filters,
+)
 from telegram.request import HTTPXRequest
 
 from config import BOT_TOKEN, PROXY_URL
 
-from bot.handlers import start, handle_webapp_data, verify
+from bot.handlers import (
+    start, handle_webapp_data, verify,
+    edit_report, my_report, handle_callback,
+)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
@@ -53,8 +59,11 @@ def main() -> None:
         .build()
     )
 
-    app.add_handler(CommandHandler("start",  start))
-    app.add_handler(CommandHandler("verify", verify))
+    app.add_handler(CommandHandler("start",    start))
+    app.add_handler(CommandHandler("verify",   verify))
+    app.add_handler(CommandHandler("edit",     edit_report))
+    app.add_handler(CommandHandler("myreport", my_report))
+    app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
 
     logger.info("Bot starting (polling)…")

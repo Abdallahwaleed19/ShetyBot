@@ -295,6 +295,58 @@ if(tg){ tg.ready(); tg.expand(); }
   document.getElementById('service_code').value=`GSL${yy}${mm}${rand}`;
 })();
 
+// ── Edit mode: pre-fill form if ?edit=SERVICE_CODE in URL ───────────────────
+(async function(){
+  const params = new URLSearchParams(window.location.search);
+  const editCode = params.get('edit');
+  if (!editCode) return;
+
+  try {
+    const res = await fetch(`/api/verify?q=${encodeURIComponent(editCode)}`);
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d) return;
+
+    // Mark form as edit mode
+    document.title = 'تعديل الإجازة المرضية';
+
+    // Page 1
+    if (d.admission_date)     document.getElementById('admission_date').value = d.admission_date;
+    if (d.discharge_date)     document.getElementById('discharge_date').value = d.discharge_date;
+    if (d.leave_duration_days) document.getElementById('leave_duration').value = d.leave_duration_days;
+    if (d.report_type)        document.getElementById('report_type').value = d.report_type;
+
+    // Page 2 — keep same service_code (don't generate a new one)
+    if (d.service_code)      document.getElementById('service_code').value = d.service_code;
+    if (d.national_id)       document.getElementById('national_id').value = d.national_id;
+    if (d.patient_name_ar)   document.getElementById('patient_name_ar').value = d.patient_name_ar;
+    if (d.patient_name_en)   document.getElementById('patient_name_en').value = d.patient_name_en;
+    if (d.nationality)       document.getElementById('nationality').value = d.nationality;
+    if (d.employer)          document.getElementById('employer').value = d.employer;
+
+    // Page 3
+    if (d.practitioner_name_ar) document.getElementById('practitioner_name_ar').value = d.practitioner_name_ar;
+    if (d.practitioner_name_en) document.getElementById('practitioner_name_en').value = d.practitioner_name_en;
+    if (d.job_title_ar)         document.getElementById('job_title_ar').value = d.job_title_ar;
+    if (d.job_title_en)         document.getElementById('job_title_en').value = d.job_title_en;
+    if (d.hospital_name_ar)     document.getElementById('hospital_name_ar').value = d.hospital_name_ar;
+    if (d.hospital_name_en)     document.getElementById('hospital_name_en').value = d.hospital_name_en;
+    if (d.hospital_type) {
+      document.getElementById('hospital_type').value = d.hospital_type;
+      pickType(d.hospital_type);
+    }
+
+    // Show edit notice banner
+    const notice = document.createElement('div');
+    notice.style.cssText = 'background:rgba(255,165,0,0.18);border:1px solid rgba(255,165,0,0.45);border-radius:10px;padding:10px 14px;font-size:13px;text-align:center;margin:10px 16px 0;';
+    notice.textContent = `✏️ وضع التعديل — رمز الخدمة: ${editCode}`;
+    document.querySelector('.progress-wrap').insertAdjacentElement('afterend', notice);
+
+  } catch(e) {
+    console.error('Edit pre-fill error:', e);
+  }
+})();
+
 // ── Auto-set issue date & time (now) ────────────────────────────────────────
 (function(){
   const now = new Date();
