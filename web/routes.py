@@ -37,7 +37,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
 # ── WebApp Form ────────────────────────────────────────────────────────────────
 @router.get("/form", response_class=HTMLResponse, summary="Telegram WebApp 3-page form")
 async def form_page(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request})
+    return templates.TemplateResponse(request, "form.html", {})
 
 
 # ── Submit Report API ──────────────────────────────────────────────────────────
@@ -196,8 +196,9 @@ async def submit_report(
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse(
+        request,
         "verify.html",
-        {"request": request, "record": None, "error": None, "query": ""},
+        {"record": None, "error": None, "query": ""},
     )
 
 
@@ -215,8 +216,9 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
         if not record:
             error = f"لم يتم العثور على سجل لـ: {q}"
     return templates.TemplateResponse(
+        request,
         "verify.html",
-        {"request": request, "record": record, "error": error, "query": q or ""},
+        {"record": record, "error": error, "query": q or ""},
     )
 
 
