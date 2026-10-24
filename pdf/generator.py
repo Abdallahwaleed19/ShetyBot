@@ -310,10 +310,21 @@ def generate_pdf(data: dict, output_path) -> Path:
     hosp_logo = data.get("hospital_logo_path", "")
     with_qr   = data.get("include_barcode", False)
 
+    def _to_ymd(d_str):
+        if not d_str:
+            return ""
+        parts = [p.strip() for p in str(d_str).replace("/", "-").split("-") if p.strip()]
+        if len(parts) == 3:
+            if len(parts[0]) == 4:
+                return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+            elif len(parts[2]) == 4:
+                return f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+        return str(d_str)
+
     # Duration display strings — match reference: "1 day (03-07-2026 to 03-07-2026)"
     day_word = "day" if dur == "1" else "days"
     dur_en   = f"{dur} {day_word} ({ad_g} to {dd_g})"
-    dur_ar   = f"{ar(dur)} يوم ({ar(ad_h)} الى {ar(dd_h)})"
+    dur_ar   = f"{dur} يوم ({_to_ymd(dd_h)} الى {_to_ymd(ad_h)})"
 
     # ── Load images ─────────────────────────────────────────────────────────────
     seha_r = _reader(_SEHA_LOGO)
@@ -409,8 +420,8 @@ def generate_pdf(data: dict, output_path) -> Path:
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
         (enb("Leave Duration", LSZ_EN, WHITE, TA_CENTER),
-                                       en(dur_en, 10.5, WHITE, TA_CENTER),
-                                                              arabic(dur_ar, 11.0, WHITE, TA_CENTER),
+                                       enb(dur_en, 11.5, WHITE, TA_CENTER),
+                                                              arabic(dur_ar, 11.5, WHITE, TA_CENTER),
                                                                                       arb("مدة الإجازة", LSZ_AR, WHITE, TA_CENTER),
                                                                                                       False, True),
         (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
