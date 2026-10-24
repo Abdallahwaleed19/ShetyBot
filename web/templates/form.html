@@ -194,6 +194,17 @@
 <div class="page active" id="p1">
   <p class="page-title">📋 تفاصيل الإجازة</p>
 
+  <!-- Subscription Duration Banner -->
+  <div id="sub-banner" style="background:rgba(59,158,255,0.14);border:1.5px solid rgba(59,158,255,0.35);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="sub-dot" style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;box-shadow:0 0 8px #10b981"></span>
+      <span id="sub-text" style="font-size:14px;font-weight:700;color:#fff">متبقي على انتهاء الاشتراك 30 يوم</span>
+    </div>
+    <div id="sub-user-pill" style="font-size:12px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-weight:600">
+      👤 <span id="sub-username">مستخدم</span>
+    </div>
+  </div>
+
   <!-- نوع التقرير: GSL / PSL only -->
   <div class="field">
     <label>نوع التقرير</label>
@@ -720,6 +731,10 @@ function go(from, to) {
 async function submitForm() {
   const err = validate(3); if (err) { showErr('e3', '⚠️ ' + err); return; }
 
+  // Check subscription before sending
+  const token = localStorage.getItem('sehty_token') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+
   document.getElementById('loading').classList.add('show');
 
   const fd = new FormData();
@@ -752,23 +767,50 @@ async function submitForm() {
   fd.append('hospital_name_en',     document.getElementById('hospital_name_en').value);
   fd.append('hospital_type',        document.getElementById('hospital_type').value);
 
-  // Telegram user ID
+  // User identifiers
   const uid = tg?.initDataUnsafe?.user?.id || 0;
   fd.append('telegram_user_id', uid);
+  fd.append('username', username);
 
   // Logo file
   const logo = document.getElementById('logo_file').files[0];
   if (logo) fd.append('logo', logo);
 
   try {
-    const res  = await fetch('/api/submit-report', { method: 'POST', body: fd });
+    const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-auth-token': token,
+        'x-username': username
+      },
+      body: fd
+    });
     const json = await res.json();
+    document.getElementById('loading').classList.remove('show');
+
     if (json.success) {
-      if (tg) tg.sendData(JSON.stringify({ service_code: json.service_code, status: 'success' }));
-      else    alert('تم الإرسال! رمز الخدمة: ' + json.service_code);
-      if (tg) tg.close();
+      const sCode = json.service_code;
+
+      // Set up Success Modal
+      document.getElementById('res-service-code').textContent = sCode;
+      document.getElementById('btn-download-pdf').href = `/api/download/${sCode}`;
+      document.getElementById('btn-verify-portal').href = `https://seha-8xj.pages.dev/inquiries?q=${encodeURIComponent(sCode)}`;
+      document.getElementById('success-modal').style.display = 'flex';
+
+      // Automatically trigger direct file download for the user
+      const a = document.createElement('a');
+      a.href = `/api/download/${sCode}`;
+      a.download = `SickLeave_${sCode}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // If user is inside Telegram WebApp, notify WebApp
+      if (tg && tg.initData) {
+        tg.sendData(JSON.stringify({ service_code: sCode, status: 'success' }));
+      }
     } else {
-      document.getElementById('loading').classList.remove('show');
       showErr('e3', '❌ ' + (json.error || 'حدث خطأ، حاول مجدداً'));
     }
   } catch (ex) {
@@ -778,5 +820,241 @@ async function submitForm() {
   }
 }
 </script>
+
+
+<!-- ── Success Modal ────────────────────────────────────────────────── -->
+<div id="success-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.92);backdrop-filter:blur(10px);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#0e3683;border:2px solid #38bdf8;border-radius:24px;padding:32px 24px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+    <div style="font-size:52px;margin-bottom:10px;">🎉</div>
+    <h2 style="font-size:22px;margin-bottom:8px;color:#fff;font-weight:800">تم إصدار التقرير الطبي بنجاح!</h2>
+    <p style="font-size:14px;color:#cbd5e1;margin-bottom:18px;">تم إنشاء ملف الـ PDF وحفظ بيانات الإجازة بالكامل</p>
+
+    <div style="background:rgba(0,0,0,0.3);border:1px dashed #38bdf8;border-radius:14px;padding:12px;margin-bottom:22px;">
+      <div style="font-size:12px;color:#93c5fd;margin-bottom:4px;">رمز الخدمة المعتمد:</div>
+      <div id="res-service-code" style="font-size:20px;font-weight:800;color:#38bdf8;letter-spacing:1px;font-family:monospace;"></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <a id="btn-download-pdf" href="#" class="btn btn-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;font-size:16px;text-decoration:none;border-radius:12px;">
+        📥 تحميل ملف التقرير (PDF)
+      </a>
+      <a id="btn-verify-portal" href="#" target="_blank" class="btn btn-prev" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;text-decoration:none;border-radius:12px;">
+        🌐 فتح الاستعلام في منصة صحة
+      </a>
+      <button type="button" class="btn" onclick="resetFormForNewReport()" style="padding:12px;font-size:14px;background:rgba(255,255,255,0.12);color:#fff;border-radius:12px;border:none;cursor:pointer;">
+        ➕ إنشاء تقرير إجازة جديدة
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Auth & 10s OTP Modal ──────────────────────────────────────── -->
+<div id="auth-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(12px);z-index:99998;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#0e3683;border:1.5px solid rgba(255,255,255,0.22);border-radius:24px;padding:32px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+    <div style="font-size:48px;margin-bottom:8px;">🔐</div>
+    <h2 style="font-size:20px;margin-bottom:6px;color:#fff;font-weight:800">تسجيل الدخول للنظام</h2>
+    <p style="font-size:13px;opacity:0.85;margin-bottom:20px;color:#cbd5e1;">أدخل اسم المستخدم لتلقي رمز التحقق المؤقت (10 ثوانٍ)</p>
+
+    <!-- Step 1: Username -->
+    <div id="auth-step-1">
+      <div style="text-align:right;margin-bottom:8px;font-size:13px;color:#93c5fd;font-weight:600">اسم المستخدم (Username):</div>
+      <input type="text" id="auth-username" placeholder="مثلاً: ahmed" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:16px;text-align:center;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
+      <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;">📩 طلب رمز الدخول المؤقت</button>
+    </div>
+
+    <!-- Step 2: 5-digit OTP with 10s countdown -->
+    <div id="auth-step-2" style="display:none;">
+      <div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);border-radius:12px;padding:12px;margin-bottom:16px;font-size:13px;color:#fbbf24;">
+        ⏱️ أرسل الرمز للأدمن! أدخل الرمز المكون من 5 أرقام:<br>
+        <div id="otp-timer" style="font-size:22px;font-weight:800;color:#10b981;margin-top:6px">10 ثوانٍ متبقية</div>
+      </div>
+      <input type="text" id="auth-code" maxlength="5" inputmode="numeric" placeholder="•••••" style="width:100%;padding:14px;border-radius:12px;border:2px solid #38bdf8;background:rgba(0,0,0,0.4);color:#fff;font-size:28px;text-align:center;letter-spacing:14px;font-weight:bold;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') verifyOtpCode()">
+      <button type="button" class="btn btn-submit" id="btn-verify-otp" onclick="verifyOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">✅ تأكيد ودخول</button>
+      <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد</button>
+    </div>
+
+    <div id="auth-err" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;border-radius:10px;color:#fca5a5;font-size:13px;line-height:1.5;"></div>
+  </div>
+</div>
+
+
+<script>
+// ── Auth & OTP Logic ─────────────────────────────────────────────────────────
+let otpInterval = null;
+
+function showAuthErr(msg) {
+  const el = document.getElementById('auth-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function clearAuthErr() {
+  const el = document.getElementById('auth-err');
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+function renderSubscriptionBanner(data) {
+  const banner = document.getElementById('sub-banner');
+  const dot = document.getElementById('sub-dot');
+  const text = document.getElementById('sub-text');
+  const userPill = document.getElementById('sub-username');
+  if (data.username) userPill.textContent = data.username;
+  
+  if (data.days_remaining > 0) {
+    banner.style.background = 'rgba(16,185,129,0.15)';
+    banner.style.borderColor = 'rgba(16,185,129,0.4)';
+    dot.style.background = '#10b981';
+    dot.style.boxShadow = '0 0 10px #10b981';
+    text.textContent = `متبقي على انتهاء الاشتراك ${data.days_remaining} يوم`;
+    document.querySelectorAll('.btn-next, .btn-submit').forEach(b => {
+      b.disabled = false;
+      b.style.opacity = '1';
+      b.style.cursor = 'pointer';
+    });
+  } else {
+    banner.style.background = 'rgba(239,68,68,0.2)';
+    banner.style.borderColor = '#ef4444';
+    dot.style.background = '#ef4444';
+    dot.style.boxShadow = '0 0 10px #ef4444';
+    text.textContent = 'عذراً، انتهت فترة اشتراكك (30 يوماً). تم توقيف لوحة الإضافة، يرجى التواصل مع الإدارة للتجديد.';
+    document.querySelectorAll('.btn-next, .btn-submit').forEach(b => {
+      b.disabled = true;
+      b.style.opacity = '0.4';
+      b.style.cursor = 'not-allowed';
+    });
+  }
+}
+
+async function requestOtpCode() {
+  clearAuthErr();
+  const username = document.getElementById('auth-username').value.trim();
+  if (!username) {
+    showAuthErr('⚠️ يرجى إدخال اسم المستخدم أولاً');
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('username', username);
+
+  try {
+    const res = await fetch('/api/auth/request-code', { method: 'POST', body: fd });
+    const json = await res.json();
+
+    if (json.success) {
+      document.getElementById('auth-step-1').style.display = 'none';
+      document.getElementById('auth-step-2').style.display = 'block';
+      const codeInput = document.getElementById('auth-code');
+      codeInput.value = '';
+      codeInput.disabled = false;
+      document.getElementById('btn-verify-otp').disabled = false;
+      document.getElementById('btn-verify-otp').style.opacity = '1';
+      codeInput.focus();
+
+      let left = 10;
+      const timerEl = document.getElementById('otp-timer');
+      timerEl.textContent = `${left} ثوانٍ متبقية`;
+      timerEl.style.color = '#10b981';
+
+      if (otpInterval) clearInterval(otpInterval);
+      otpInterval = setInterval(() => {
+        left--;
+        if (left > 0) {
+          timerEl.textContent = `${left} ثوانٍ متبقية`;
+          if (left <= 3) timerEl.style.color = '#ef4444';
+        } else {
+          clearInterval(otpInterval);
+          timerEl.textContent = '❌ انتهت مهلة الـ 10 ثوانٍ! اطلب رمزاً جديداً';
+          timerEl.style.color = '#ef4444';
+          codeInput.disabled = true;
+          document.getElementById('btn-verify-otp').disabled = true;
+          document.getElementById('btn-verify-otp').style.opacity = '0.5';
+          showAuthErr('انتهت مهلة الـ 10 ثوانٍ الخاصة بالرمز. اضغط على زر "طلب رمز جديد" لإرسال رمز جديد للأدمن.');
+        }
+      }, 1000);
+    } else {
+      showAuthErr('❌ ' + (json.error || 'فشل إرسال الرمز'));
+    }
+  } catch (e) {
+    showAuthErr('❌ تعذر الاتصال بالخادم');
+  }
+}
+
+async function verifyOtpCode() {
+  clearAuthErr();
+  const username = document.getElementById('auth-username').value.trim();
+  const code = document.getElementById('auth-code').value.trim();
+
+  if (!code || code.length !== 5) {
+    showAuthErr('⚠️ الرمز يجب أن يتكون من 5 أرقام');
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('username', username);
+  fd.append('code', code);
+
+  try {
+    const res = await fetch('/api/auth/verify-code', { method: 'POST', body: fd });
+    const json = await res.json();
+
+    if (json.success) {
+      if (otpInterval) clearInterval(otpInterval);
+      localStorage.setItem('sehty_token', json.token);
+      localStorage.setItem('sehty_username', json.username);
+      document.getElementById('auth-modal').style.display = 'none';
+      renderSubscriptionBanner(json);
+    } else {
+      showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته'));
+    }
+  } catch (e) {
+    showAuthErr('❌ تعذر الاتصال بالخادم');
+  }
+}
+
+function resetFormForNewReport() {
+  document.getElementById('success-modal').style.display = 'none';
+  go(3, 1);
+  const rType = document.getElementById('report_type').value || 'GSL';
+  document.getElementById('service_code').value = generateServiceCode(rType);
+}
+
+// Check session on load
+window.addEventListener('DOMContentLoaded', async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const uParam = urlParams.get('u');
+  if (uParam) {
+    document.getElementById('auth-username').value = uParam;
+  }
+
+  const token = localStorage.getItem('sehty_token');
+  const storedUser = localStorage.getItem('sehty_username');
+
+  // If URL specified a different ?u=..., force auth for that new username
+  if (uParam && storedUser && uParam.toLowerCase() !== storedUser.toLowerCase()) {
+    document.getElementById('auth-modal').style.display = 'flex';
+    return;
+  }
+
+  if (token) {
+    try {
+      const res = await fetch(`/api/auth/check-session?token=${encodeURIComponent(token)}`);
+      const json = await res.json();
+      if (json.success) {
+        document.getElementById('auth-modal').style.display = 'none';
+        renderSubscriptionBanner({
+          days_remaining: json.days_remaining,
+          username: storedUser || 'مستخدم'
+        });
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Not authenticated
+  document.getElementById('auth-modal').style.display = 'flex';
+});
+</script>
+
 </body>
 </html>

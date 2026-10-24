@@ -84,6 +84,7 @@ def init_db_sync() -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         code_hash TEXT NOT NULL,
+        code TEXT,
         expires_at TEXT NOT NULL,
         used INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -106,6 +107,10 @@ def init_db_sync() -> None:
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    try:
+        cur.execute("ALTER TABLE verification_codes ADD COLUMN code TEXT")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     logger.info("Database schema initialized successfully at %s", DB_PATH)
@@ -168,6 +173,76 @@ async def get_all_users(session=None) -> List[UserRecord]:
     return get_all_users_sync()
 
 
+
+def get_user_by_identifier_sync(identifier: str) -> Optional[UserRecord]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    val = str(identifier).strip()
+    cur.execute(
+        "SELECT * FROM users WHERE telegram_user_id = ? OR username = ? COLLATE NOCASE",
+        (val, val)
+    )
+    row = cur.fetchone()
+    conn.close()
+    return UserRecord(row) if row else None
+
+
+async def get_user_by_identifier(session=None, identifier: str = "") -> Optional[UserRecord]:
+    return get_user_by_identifier_sync(identifier)
+
+
+def create_new_user_sync(username: str, days: int = 30) -> UserRecord:
+    conn = _get_conn()
+    cur = conn.cursor()
+    clean_u = str(username).strip()
+    tg_id = f"user_{clean_u}"
+    now = datetime.now(timezone.utc)
+    sub_end = now + timedelta(days=days)
+    cur.execute(
+        """INSERT INTO users (telegram_user_id, username, role, subscription_start, subscription_end, is_active)
+           VALUES (?, ?, 'user', ?, ?, 1)""",
+        (tg_id, clean_u, now.isoformat(), sub_end.isoformat())
+    )
+    conn.commit()
+    user_id = cur.lastrowid
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    log_audit(user_id, "USER_CREATED", f"User {clean_u} created with {days}d subscription")
+    return UserRecord(row)
+
+
+async def create_new_user(session=None, username: str = "", days: int = 30) -> UserRecord:
+    return create_new_user_sync(username, days)
+
+
+def get_latest_code_for_user_sync(user_id: int) -> Optional[Dict[str, Any]]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, code, expires_at, used, created_at 
+           FROM verification_codes 
+           WHERE user_id = ? 
+           ORDER BY id DESC LIMIT 1""",
+        (user_id,)
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    exp = datetime.fromisoformat(d["expires_at"])
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    d["is_valid"] = (not d["used"]) and (now < exp)
+    d["seconds_left"] = max(0, int((exp - now).total_seconds()))
+    return d
+
+
+async def get_latest_code_for_user(session=None, user_id: int = 0) -> Optional[Dict[str, Any]]:
+    return get_latest_code_for_user_sync(user_id)
+
 # ── Subscription Management ───────────────────────────────────────────────────
 def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
     conn = _get_conn()
@@ -192,16 +267,15 @@ def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
         sub_end = sub_end.replace(tzinfo=timezone.utc)
 
     diff = sub_end - now
-    days_remaining = diff.days
+    total_sec = diff.total_seconds()
 
-    if diff.total_seconds() <= 0 or days_remaining < 0:
+    if total_sec <= 0:
         return {"active": False, "days_remaining": 0, "message": "انتهى الاشتراك"}
 
-    if days_remaining == 0 and diff.total_seconds() > 0:
-        message = "متبقي على انتهاء الاشتراك 1 يوم"
-        return {"active": True, "days_remaining": 1, "message": message}
+    import math
+    days_remaining = max(1, int(math.ceil(total_sec / 86400)))
 
-    message = f"متبقي على انتهاء الاشتراك {days_remaining} يوم" if days_remaining > 1 else "متبقي على انتهاء الاشتراك 1 يوم"
+    message = f"متبقي على انتهاء الاشتراك {days_remaining} يوم"
     return {"active": True, "days_remaining": days_remaining, "message": message}
 
 
@@ -261,9 +335,9 @@ def create_verification_code_sync(user_id: int = 0) -> str:
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO verification_codes (user_id, code_hash, expires_at, used)
-           VALUES (?, ?, ?, 0)""",
-        (user_id, code_hash, expires_at.isoformat())
+        """INSERT INTO verification_codes (user_id, code_hash, code, expires_at, used)
+           VALUES (?, ?, ?, ?, 0)""",
+        (user_id, code_hash, code, expires_at.isoformat())
     )
     conn.commit()
     conn.close()

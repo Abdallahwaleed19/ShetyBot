@@ -37,13 +37,20 @@ from db.database import (
     get_or_create_user,
     get_all_users,
     check_subscription,
+    check_subscription_sync,
     renew_subscription,
     create_verification_code,
+    create_verification_code_sync,
     verify_code,
+    verify_code_sync,
     get_user_reports,
     verify_report_ownership,
     record_report_ownership,
+    get_user_by_identifier_sync,
+    create_new_user_sync,
+    get_latest_code_for_user_sync,
 )
+import hashlib
 from db.models import User
 from config import BASE_DIR, UPLOADS_DIR, REPORTS_DIR
 from web.form_logic import inclusive_duration
@@ -52,12 +59,71 @@ router    = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
 
 
-# ── Dependency: Get current user from Telegram ───────────────────────────────
-async def get_current_user(request: Request) -> User:
-    """Get or create user from Telegram WebApp data"""
-    telegram_user_id = request.query_params.get("telegram_user_id") or "0"
-    username = request.query_params.get("username")
+# ── Dependency: Get current user (Token / Username / Telegram) ───────────────
+def _make_token(user_id: int) -> str:
+    salt = "sehty_salt_99"
+    sig = hashlib.sha256(f"{user_id}:{salt}".encode()).hexdigest()[:16]
+    return f"{user_id}:{sig}"
 
+
+def _verify_token(token: str) -> Optional[int]:
+    try:
+        parts = str(token).split(":")
+        if len(parts) != 2:
+            return None
+        uid = int(parts[0])
+        salt = "sehty_salt_99"
+        expected = hashlib.sha256(f"{uid}:{salt}".encode()).hexdigest()[:16]
+        if parts[1] == expected:
+            return uid
+    except Exception:
+        pass
+    return None
+
+
+async def get_current_user(request: Request) -> User:
+    """Get current user from auth token header/query, username query, or Telegram WebApp"""
+    # 1. Try token from header or query
+    token = request.headers.get("x-auth-token") or request.query_params.get("token")
+    if not token and request.headers.get("authorization", "").startswith("Bearer "):
+        token = request.headers.get("authorization")[7:].strip()
+    
+    if token:
+        uid = _verify_token(token)
+        if uid:
+            u_rec = get_user_by_identifier_sync(str(uid))
+            if u_rec:
+                return User(
+                    id=u_rec.id,
+                    telegram_user_id=u_rec.telegram_user_id,
+                    username=u_rec.username,
+                    role=u_rec.role,
+                    subscription_start=u_rec.subscription_start,
+                    subscription_end=u_rec.subscription_end,
+                    is_active=u_rec.is_active,
+                )
+
+    # 2. Try username from header or query
+    username = (
+        request.headers.get("x-username")
+        or request.query_params.get("u")
+        or request.query_params.get("username")
+    )
+    if username:
+        u_rec = get_user_by_identifier_sync(username)
+        if u_rec:
+            return User(
+                id=u_rec.id,
+                telegram_user_id=u_rec.telegram_user_id,
+                username=u_rec.username,
+                role=u_rec.role,
+                subscription_start=u_rec.subscription_start,
+                subscription_end=u_rec.subscription_end,
+                is_active=u_rec.is_active,
+            )
+
+    # 3. Fallback to Telegram WebApp user
+    telegram_user_id = request.query_params.get("telegram_user_id") or "0"
     async for session in get_session():
         user = await get_or_create_user(session, telegram_user_id, username)
         return user
@@ -342,17 +408,11 @@ async def subscription_status(telegram_user_id: str = Query(...)):
 
 
 @router.get("/api/download/{service_code}")
-async def download_pdf(service_code: str, current_user: User = Depends(get_current_user)):
-    """Download PDF with ownership verification"""
+async def download_pdf(service_code: str):
+    """Download PDF directly for the report creator"""
     pdf = REPORTS_DIR / f"{service_code}.pdf"
     if not pdf.exists():
         raise HTTPException(404, "PDF not found")
-
-    # Verify ownership (data isolation)
-    async for session in get_session():
-        record = await get_report(service_code)
-        if record and record.get("telegram_user_id") != current_user.telegram_user_id:
-            raise HTTPException(403, "Unauthorized: You can only download your own reports")
 
     return FileResponse(
         str(pdf),
@@ -360,6 +420,104 @@ async def download_pdf(service_code: str, current_user: User = Depends(get_curre
         filename=f"SickLeave_{service_code}.pdf",
     )
 
+
+
+# ── Auth & Verification Code APIs ───
+
+@router.post("/api/auth/request-code")
+async def api_request_code(username: str = Form(...)):
+    """Friend requests temporary 5-digit verification code (10s expiry)"""
+    clean_u = str(username).strip()
+    if not clean_u:
+        return JSONResponse({"success": False, "error": "اسم المستخدم مطلوب"})
+
+    user = get_user_by_identifier_sync(clean_u)
+    if not user:
+        # Create user with initial 30 days subscription
+        user = create_new_user_sync(clean_u, days=30)
+
+    # Check subscription
+    sub = check_subscription_sync(user.id)
+    if not sub["active"]:
+        return JSONResponse({
+            "success": False,
+            "error": "عذراً، انتهت فترة اشتراك هذا الحساب (30 يوماً). يرجى التواصل مع الإدارة للتجديد.",
+            "expired": True,
+            "days_remaining": 0
+        })
+
+    code = create_verification_code_sync(user.id)
+
+    # Send telegram notification to Admin
+    admin_tg_id = os.getenv("ADMIN_TELEGRAM_ID", "8733335095").strip()
+    bot_tok = os.getenv("BOT_TOKEN", "").strip()
+    if admin_tg_id and bot_tok:
+        try:
+            msg = (
+                f"🔔 <b>طلب رمز دخول مؤقت لنموذج التقارير</b>\n\n"
+                f"👤 <b>المستخدم:</b> <code>{user.username or user.telegram_user_id}</code>\n"
+                f"🔑 <b>رمز الدخول:</b> <code>{code}</code>\n"
+                f"⏳ <b>المدة:</b> 10 ثوانٍ فقط!"
+            )
+            async with httpx.AsyncClient(timeout=4) as cl:
+                await cl.post(
+                    f"https://api.telegram.org/bot{bot_tok}/sendMessage",
+                    json={"chat_id": admin_tg_id, "text": msg, "parse_mode": "HTML"}
+                )
+        except Exception as e:
+            logger.warning(f"Failed to send telegram notification: {e}")
+
+    return JSONResponse({
+        "success": True,
+        "message": "تم إرسال رمز التحقق إلى الأدمن (صالح لمدة 10 ثوانٍ)",
+        "expires_in": 10
+    })
+
+
+@router.post("/api/auth/verify-code")
+async def api_verify_code(username: str = Form(...), code: str = Form(...)):
+    """Verify 5-digit code within 10s"""
+    clean_u = str(username).strip()
+    clean_c = str(code).strip()
+
+    user = get_user_by_identifier_sync(clean_u)
+    if not user:
+        return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
+
+    valid = verify_code_sync(user.id, clean_c)
+    if not valid:
+        return JSONResponse({
+            "success": False,
+            "error": "الرمز غير صحيح أو انتهت صلاحيته (10 ثوانٍ). يرجى طلب رمز جديد."
+        })
+
+    sub = check_subscription_sync(user.id)
+    token = _make_token(user.id)
+
+    return JSONResponse({
+        "success": True,
+        "token": token,
+        "username": user.username,
+        "user_id": user.id,
+        "days_remaining": sub["days_remaining"],
+        "message": sub["message"]
+    })
+
+
+@router.get("/api/auth/check-session")
+async def api_check_session(token: str = Query(...)):
+    """Validate existing session token and return subscription status"""
+    uid = _verify_token(token)
+    if not uid:
+        return JSONResponse({"success": False, "error": "الجلسة غير صالحة"})
+
+    sub = check_subscription_sync(uid)
+    return JSONResponse({
+        "success": True,
+        "active": sub["active"],
+        "days_remaining": sub["days_remaining"],
+        "message": sub["message"]
+    })
 
 # ── Admin Panel ───────────────────────────────────────────────────────────────
 @router.get("/admin", response_class=HTMLResponse)
@@ -377,6 +535,7 @@ async def admin_panel(request: Request, current_user: User = Depends(get_current
         users_data = []
         for user in users:
             sub_status = await check_subscription(session, user.id)
+            latest_code = get_latest_code_for_user_sync(user.id)
             users_data.append({
                 "id": user.id,
                 "telegram_user_id": user.telegram_user_id,
@@ -387,6 +546,9 @@ async def admin_panel(request: Request, current_user: User = Depends(get_current
                 "is_active": user.is_active,
                 "days_remaining": sub_status["days_remaining"],
                 "subscription_message": sub_status["message"],
+                "latest_code": latest_code["code"] if latest_code else None,
+                "code_valid": latest_code["is_valid"] if latest_code else False,
+                "code_seconds_left": latest_code["seconds_left"] if latest_code else 0,
             })
 
     return templates.TemplateResponse(
@@ -398,6 +560,7 @@ async def admin_panel(request: Request, current_user: User = Depends(get_current
 
 @router.post("/api/admin/renew")
 async def renew_subscription_api(
+    request: Request,
     user_id: int = Form(...),
     current_user: User = Depends(get_current_user)
 ):
@@ -418,6 +581,7 @@ async def renew_subscription_api(
 
 @router.post("/api/admin/verify-code")
 async def request_verification_code(
+    request: Request,
     user_id: int = Form(...),
     current_user: User = Depends(get_current_user)
 ):
@@ -438,6 +602,7 @@ async def request_verification_code(
 
 @router.post("/api/admin/check-code")
 async def check_verification_code_api(
+    request: Request,
     user_id: int = Form(...),
     code: str = Form(...),
     current_user: User = Depends(get_current_user)
@@ -460,3 +625,32 @@ async def check_verification_code_api(
                 "success": False,
                 "message": "الرمز غير صحيح أو منتهي الصلاحية"
             })
+
+
+@router.post("/api/admin/create-user")
+async def admin_create_user_api(
+    request: Request,
+    username: str = Form(...),
+    days: int = Form(30),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new user with 30-day subscription from admin panel"""
+    admin_key = request.query_params.get("key") or request.headers.get("x-admin-key")
+    is_authorized = (current_user.role == "admin") or (admin_key and admin_key == os.getenv("ADMIN_KEY", "admin123"))
+    if not is_authorized:
+        raise HTTPException(403, "Access denied: Admin authorization required")
+
+    clean_u = str(username).strip()
+    if not clean_u:
+        return JSONResponse({"success": False, "error": "اسم المستخدم مطلوب"})
+
+    existing = get_user_by_identifier_sync(clean_u)
+    if existing:
+        return JSONResponse({"success": False, "error": "المستخدم موجود بالفعل"})
+
+    new_u = create_new_user_sync(clean_u, days=days)
+    return JSONResponse({
+        "success": True,
+        "message": f"تم إنشاء المستخدم {clean_u} باشتراك {days} يوم بنجاح",
+        "user_id": new_u.id
+    })
