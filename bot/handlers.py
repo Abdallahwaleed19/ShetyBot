@@ -30,6 +30,16 @@ from db.database import (
 logger = logging.getLogger(__name__)
 
 
+async def reply_safe(message, text: str, reply_markup=None, parse_mode: str = "HTML"):
+    """Sends message with HTML; falls back to plain text if Telegram parse error occurs."""
+    try:
+        return await message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except Exception as e:
+        logger.warning(f"Failed to send with {parse_mode}: {e}. Retrying with plain text.")
+        clean_text = text.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", "")
+        return await message.reply_text(clean_text, reply_markup=reply_markup)
+
+
 # ── /start ─────────────────────────────────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.from_user:
@@ -76,19 +86,15 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("📂 استعراض كافة السجلات", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}"))]
         ])
 
-        await update.message.reply_text(
-            f"👑 *مرحباً بك يا مدير النظام* (@{ADMIN_USERNAME})\n\n"
+        admin_msg = (
+            f"👑 <b>مرحباً بك يا مدير النظام (@{ADMIN_USERNAME})</b>\n\n"
             f"لديك صلاحيات إدارية كاملة لإدارة البوت والموافقة على المستخدمين واستعراض كافة السجلات.\n\n"
-            f"• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
-            f"• اضغط *➕ البيانات السابقة* لإدارة جميع السجلات وسلة المحذوفات.\n"
-            f"• اضغط الزر أدناه لفتح لوحة الإدارة:",
-            parse_mode="Markdown",
-            reply_markup=keyboard,
+            f"• اضغط <b>📋 فتح نموذج الإجازة المرضية</b> لإصدار تقرير جديد.\n"
+            f"• اضغط <b>➕ البيانات السابقة</b> لإدارة جميع السجلات وسلة المحذوفات.\n"
+            f"• أو اضغط الزر أدناه لفتح لوحة الإدارة:"
         )
-        await update.message.reply_text(
-            "⚙️ لوحة التحكم والإدارة:",
-            reply_markup=inline_admin
-        )
+        await reply_safe(update.message, admin_msg, reply_markup=keyboard)
+        await reply_safe(update.message, "⚙️ <b>لوحة التحكم والإدارة:</b>", reply_markup=inline_admin)
         return
 
     # 2. Unregistered User
@@ -97,35 +103,32 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         inline_reg = InlineKeyboardMarkup([
             [InlineKeyboardButton("📝 تقديم طلب تسجيل جديد", web_app=WebAppInfo(url=reg_url))]
         ])
-        await update.message.reply_text(
-            "🏥 *مرحباً بك في نظام الإجازات المرضية صحتي* (@SehtyBot)\n\n"
-            "⚠️ *تنبيه:* يتطلب استخدام البوت تسجيلاً مسبقاً وموافقة من الإدارة (@As1_oi).\n\n"
-            "يرجى الضغط على الزر أدناه لإرسال طلب تسجيلك (الاسم والبريد الإلكتروني)، وفور مراجعة الطلب والموافقة عليه ستصلك رسالة تحتوي على رمز التفعيل المؤقت.",
-            parse_mode="Markdown",
-            reply_markup=inline_reg,
+        unreg_msg = (
+            "🏥 <b>مرحباً بك في نظام الإجازات المرضية صحتي (@SehtyBot)</b>\n\n"
+            f"⚠️ <b>تنبيه:</b> يتطلب استخدام البوت تسجيلاً مسبقاً وموافقة من الإدارة (@{ADMIN_USERNAME}).\n\n"
+            "يرجى الضغط على الزر أدناه لإرسال طلب تسجيلك (الاسم والبريد الإلكتروني)، وفور مراجعة الطلب والموافقة عليه ستصلك رسالة تحتوي على رمز التفعيل المؤقت."
         )
+        await reply_safe(update.message, unreg_msg, reply_markup=inline_reg)
         return
 
     # 3. User with PENDING_APPROVAL status
     if user_rec.registration_status == "PENDING_APPROVAL":
-        await update.message.reply_text(
-            "⏳ *طلب تسجيلك قيد المراجعة لدى الإدارة (@As1_oi)*\n\n"
-            "تم استلام بياناتك وهي قيد التدقيق حالياً. بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني وهاتفك لتفعيل الاشتراك لمدة 30 يوماً.",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
+        pending_msg = (
+            f"⏳ <b>طلب تسجيلك قيد المراجعة لدى الإدارة (@{ADMIN_USERNAME})</b>\n\n"
+            "تم استلام بياناتك وهي قيد التدقيق حالياً. بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني وهاتفك لتفعيل الاشتراك لمدة 30 يوماً."
         )
+        await reply_safe(update.message, pending_msg, reply_markup=ReplyKeyboardRemove())
         return
 
     # 4. User with REJECTED status
     if user_rec.registration_status == "REJECTED":
         reason = getattr(user_rec, "rejection_reason", None) or "البيانات المقدمة غير كافية"
-        await update.message.reply_text(
-            f"❌ *تم رفض طلب التسجيل الخاص بك*\n\n"
-            f"📝 *السبب:* {reason}\n\n"
-            f"يمكنك التواصل مع الإدارة للاستفسار: @{ADMIN_USERNAME}",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
+        rejected_msg = (
+            "❌ <b>تم رفض طلب التسجيل الخاص بك</b>\n\n"
+            f"📝 <b>السبب:</b> {reason}\n\n"
+            f"يمكنك التواصل مع الإدارة للاستفسار: @{ADMIN_USERNAME}"
         )
+        await reply_safe(update.message, rejected_msg, reply_markup=ReplyKeyboardRemove())
         return
 
     # 5. User with APPROVED status (waiting for 30s OTP)
@@ -134,34 +137,31 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         inline_otp = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔑 إدخال رمز التحقق (30 ثانية)", web_app=WebAppInfo(url=otp_url))]
         ])
-        await update.message.reply_text(
-            "🎉 *تمت الموافقة على طلب تسجيلك!*\n\n"
-            f"تم إرسال رمز التحقق المؤقت (صالح لمدة 30 ثانية) إلى بريدك الإلكتروني (`{user_rec.email}`).\n\n"
-            "اضغط على الزر أدناه لإدخال الرمز المكون من 5 أرقام فوراً وتفعيل اشتراكك لمدة 30 يوماً:",
-            parse_mode="Markdown",
-            reply_markup=inline_otp,
+        approved_msg = (
+            "🎉 <b>تمت الموافقة على طلب تسجيلك!</b>\n\n"
+            f"تم إرسال رمز التحقق المؤقت (صالح لمدة 30 ثانية) إلى بريدك الإلكتروني (<code>{user_rec.email}</code>).\n\n"
+            "اضغط على الزر أدناه لإدخال الرمز المكون من 5 أرقام فوراً وتفعيل اشتراكك لمدة 30 يوماً:"
         )
+        await reply_safe(update.message, approved_msg, reply_markup=inline_otp)
         return
 
     # 6. User with SUSPENDED status
     if user_rec.registration_status == "SUSPENDED" or not user_rec.is_active:
-        await update.message.reply_text(
-            f"⏸️ *حسابك معلق حالياً*\n\n"
-            f"تم تعليق حسابك من قبل إدارة النظام. يرجى التواصل مع الإدارة لإعادة التفعيل: @{ADMIN_USERNAME}",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
+        suspended_msg = (
+            "⏸️ <b>حسابك معلق حالياً</b>\n\n"
+            f"تم تعليق حسابك من قبل إدارة النظام. يرجى التواصل مع الإدارة لإعادة التفعيل: @{ADMIN_USERNAME}"
         )
+        await reply_safe(update.message, suspended_msg, reply_markup=ReplyKeyboardRemove())
         return
 
     # 7. User with ACTIVE status: Check Subscription
     sub = check_subscription_sync(user_rec.id)
     if not sub["active"]:
-        await update.message.reply_text(
-            f"⚠️ *انتهت فترة اشتراكك (30 يوماً)*\n\n"
-            f"عذراً، لقد انتهت صلاحية استخدامك لنظام الإجازات المرضية. يرجى التواصل مع الإدارة (@{ADMIN_USERNAME}) لتجديد صلاحية حسابك لمدة 30 يوماً أخرى.",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
+        expired_msg = (
+            "⚠️ <b>انتهت فترة اشتراكك (30 يوماً)</b>\n\n"
+            f"عذراً، لقد انتهت صلاحية استخدامك لنظام الإجازات المرضية. يرجى التواصل مع الإدارة (@{ADMIN_USERNAME}) لتجديد صلاحية حسابك لمدة 30 يوماً أخرى."
         )
+        await reply_safe(update.message, expired_msg, reply_markup=ReplyKeyboardRemove())
         return
 
     # Active and verified! Display both main buttons
@@ -176,14 +176,13 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         one_time_keyboard=False,
     )
 
-    await update.message.reply_text(
-        f"🏥 *مرحباً بك مجدداً في نظام الإجازات المرضية* (@SehtyBot)\n\n"
-        f"🟢 *حالة الاشتراك:* نشط (متبقي {sub['days_remaining']} يوم)\n\n"
-        f"• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
-        f"• اضغط *➕ البيانات السابقة* لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات.",
-        parse_mode="Markdown",
-        reply_markup=keyboard,
+    active_msg = (
+        "🏥 <b>مرحباً بك مجدداً في نظام الإجازات المرضية (@SehtyBot)</b>\n\n"
+        f"🟢 <b>حالة الاشتراك:</b> نشط (متبقي {sub['days_remaining']} يوم)\n\n"
+        "• اضغط <b>📋 فتح نموذج الإجازة المرضية</b> لإصدار تقرير جديد.\n"
+        "• اضغط <b>➕ البيانات السابقة</b> لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات."
     )
+    await reply_safe(update.message, active_msg, reply_markup=keyboard)
 
 
 # ── /edit ──────────────────────────────────────────────────────────────────────
@@ -225,13 +224,12 @@ async def edit_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         resize_keyboard=True,
         one_time_keyboard=True,
     )
-    await update.message.reply_text(
-        f"✏️ *تعديل التقرير*\n\n"
-        f"🔑 رمز الخدمة: `{last_code}`\n\n"
-        f"اضغط الزر لفتح النموذج معبأً بالبيانات السابقة وعدّل ما تريد ثم أعد الإرسال.",
-        parse_mode="Markdown",
-        reply_markup=keyboard,
+    msg = (
+        f"✏️ <b>تعديل التقرير</b>\n\n"
+        f"🔑 رمز الخدمة: <code>{last_code}</code>\n\n"
+        "اضغط الزر لفتح النموذج معبأً بالبيانات السابقة وعدّل ما تريد ثم أعد الإرسال."
     )
+    await reply_safe(update.message, msg, reply_markup=keyboard)
 
 
 # ── /myreport ─────────────────────────────────────────────────────────────────
@@ -262,17 +260,14 @@ async def my_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     r = await get_report(last_code)
     if not r:
-        await update.message.reply_text(
-            f"❌ لم يتم العثور على بيانات للرمز: `{last_code}`",
-            parse_mode="Markdown",
-        )
+        await update.message.reply_text(f"❌ لم يتم العثور على بيانات للرمز: {last_code}")
         return
 
     text = (
-        f"📄 *آخر تقرير محفوظ*\n\n"
-        f"🔑 رمز الخدمة: `{r.get('service_code', '')}`\n"
+        f"📄 <b>آخر تقرير محفوظ</b>\n\n"
+        f"🔑 رمز الخدمة: <code>{r.get('service_code', '')}</code>\n"
         f"👤 المريض: {r.get('patient_name_ar', '')}\n"
-        f"🪪 رقم الهوية: `{r.get('national_id', '')}`\n"
+        f"🪪 رقم الهوية: <code>{r.get('national_id', '')}</code>\n"
         f"📅 الدخول: {r.get('admission_date', '')}\n"
         f"📅 الخروج: {r.get('discharge_date', '')}\n"
         f"⏱️ المدة: {r.get('leave_duration_days', '')} يوم\n"
@@ -291,7 +286,7 @@ async def my_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         buttons.append([InlineKeyboardButton("📄 إعادة إرسال PDF", callback_data=f"resend_pdf:{last_code}")])
 
     markup = InlineKeyboardMarkup(buttons) if buttons else None
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
+    await reply_safe(update.message, text, reply_markup=markup)
 
 
 # ── web_app_data (بعد إرسال النموذج) ──────────────────────────────────────────
@@ -319,23 +314,31 @@ async def handle_webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     if not pdf_path.exists():
         await update.message.reply_text(
             f"⏳ جاري إنشاء التقرير...\n"
-            f"رمز الخدمة: `{service_code}`",
-            parse_mode="Markdown",
+            f"رمز الخدمة: {service_code}"
         )
         return
 
     with open(pdf_path, "rb") as f:
-        await update.message.reply_document(
-            document=f,
-            filename=f"SickLeave_{service_code}.pdf",
-            caption=(
-                f"✅ *تم إنشاء الإجازة المرضية بنجاح!*\n"
-                f"🔑 رمز الخدمة: `{service_code}`\n\n"
-                f"للتحقق: `/verify {service_code}`\n"
-                f"للتعديل: /edit"
-            ),
-            parse_mode="Markdown",
+        caption = (
+            f"✅ <b>تم إنشاء الإجازة المرضية بنجاح!</b>\n"
+            f"🔑 رمز الخدمة: <code>{service_code}</code>\n\n"
+            f"للتحقق: /verify {service_code}\n"
+            f"للتعديل: /edit"
         )
+        try:
+            await update.message.reply_document(
+                document=f,
+                filename=f"SickLeave_{service_code}.pdf",
+                caption=caption,
+                parse_mode="HTML",
+            )
+        except Exception:
+            f.seek(0)
+            await update.message.reply_document(
+                document=f,
+                filename=f"SickLeave_{service_code}.pdf",
+                caption=f"تم إنشاء الإجازة المرضية بنجاح! رمز الخدمة: {service_code}",
+            )
 
 
 # ── callback_query (resend PDF) ────────────────────────────────────────────────
@@ -350,8 +353,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
                 await query.message.reply_document(
                     document=f,
                     filename=f"SickLeave_{service_code}.pdf",
-                    caption=f"📄 إعادة إرسال — رمز الخدمة: `{service_code}`",
-                    parse_mode="Markdown",
+                    caption=f"📄 إعادة إرسال — رمز الخدمة: {service_code}",
                 )
         else:
             await query.message.reply_text("❌ ملف PDF غير موجود.")
@@ -361,10 +363,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
 async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     args = ctx.args
     if not args:
-        await update.message.reply_text(
-            "الاستخدام: `/verify <رمز_الخدمة_أو_رقم_الهوية>`",
-            parse_mode="Markdown",
-        )
+        await update.message.reply_text("الاستخدام: /verify <رمز_الخدمة_أو_رقم_الهوية>")
         return
 
     q = args[0].strip()
@@ -374,21 +373,21 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         r = results[0] if results else None
 
     if not r:
-        await update.message.reply_text(f"❌ لا يوجد سجل لـ `{q}`", parse_mode="Markdown")
+        await update.message.reply_text(f"❌ لا يوجد سجل لـ: {q}")
         return
 
     text = (
-        f"✅ *نتيجة التحقق*\n\n"
-        f"🔑 رمز الخدمة: `{r.get('service_code', '')}`\n"
+        f"✅ <b>نتيجة التحقق</b>\n\n"
+        f"🔑 رمز الخدمة: <code>{r.get('service_code', '')}</code>\n"
         f"👤 المريض: {r.get('patient_name_ar', '')}\n"
-        f"🪪 رقم الهوية: `{r.get('national_id', '')}`\n"
+        f"🪪 رقم الهوية: <code>{r.get('national_id', '')}</code>\n"
         f"📅 الدخول: {r.get('admission_date', '')}\n"
         f"📅 الخروج: {r.get('discharge_date', '')}\n"
         f"⏱️ المدة: {r.get('leave_duration_days', '')} يوم\n"
         f"🏥 المستشفى: {r.get('hospital_name_ar', '')}\n"
         f"👨‍⚕️ الممارس: {r.get('practitioner_name_ar', '')}\n"
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await reply_safe(update.message, text)
 
 
 # ── Text Handler for "+" & Records Menu ─────────────────────────────────────────
@@ -408,24 +407,23 @@ async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     # If user wants previous records
     if any(k in txt for k in ["+", "➕", "بيانات", "سابق", "سجل", "سجلات", "تعديل"]):
         if not is_admin and (not user_rec or user_rec.registration_status != "ACTIVE"):
-            await update.message.reply_text(
-                "⚠️ *عذراً، لا يمكنك الوصول للبيانات السابقة*\n\n"
+            msg = (
+                "⚠️ <b>عذراً، لا يمكنك الوصول للبيانات السابقة</b>\n\n"
                 "يتطلب فتح السجلات أن يكون حسابك مسجلاً ومفعلاً بموافقة الإدارة.\n"
-                "استخدم الأمر /start للتحقق من حالة حسابك أو تقديم طلب تسجيل.",
-                parse_mode="Markdown",
+                "استخدم الأمر /start للتحقق من حالة حسابك أو تقديم طلب تسجيل."
             )
+            await reply_safe(update.message, msg)
             return
 
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📂 عرض البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}"))]
         ])
-        await update.message.reply_text(
-            "📋 *سجلات وبيانات الأشخاص السابقة*\n\n"
+        msg = (
+            "📋 <b>سجلات وبيانات الأشخاص السابقة</b>\n\n"
             "اضغط على الزر بالأسفل لفتح صفحة السجلات، حيث يمكنك:\n"
             "• عرض بيانات المرضى في خانات منظمة.\n"
             "• نسخ بيانات أي مريض بضغطة زر.\n"
             "• تعديل بيانات أي شخص بالضغط على علامة القلم ✏️.\n"
-            "• نقل السجلات إلى سلة المحذوفات أو استرجاعها.",
-            parse_mode="Markdown",
-            reply_markup=keyboard,
+            "• نقل السجلات إلى سلة المحذوفات أو استرجاعها."
         )
+        await reply_safe(update.message, msg, reply_markup=keyboard)
