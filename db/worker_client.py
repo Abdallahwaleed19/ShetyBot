@@ -18,7 +18,10 @@ _client: httpx.AsyncClient | None = None
 
 
 def _headers() -> dict:
-    h = {"Content-Type": "application/json"}
+    h = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     if WORKER_SECRET:
         h["Authorization"] = f"Bearer {WORKER_SECRET}"
     else:

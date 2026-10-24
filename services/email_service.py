@@ -22,13 +22,37 @@ logger = logging.getLogger(__name__)
 
 
 def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
-    """Send an HTML email via SMTP synchronously."""
+    """Send an HTML email via HTTPS API or SMTP synchronously."""
     to_clean = str(to_email).strip().lower()
     if not to_clean or "@" not in to_clean:
         logger.warning(f"Invalid recipient email: {to_email}")
         return False
 
-    # If SMTP credentials are not configured, log email contents for debugging/development
+    # 1. Try HTTPS email API if configured (bypasses Fly.io SMTP port blocks completely)
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    if resend_key:
+        try:
+            import httpx
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                    json={
+                        "from": os.getenv("RESEND_FROM", "SehtyBot <onboarding@resend.dev>"),
+                        "to": [to_clean],
+                        "subject": subject,
+                        "html": html_body
+                    }
+                )
+                if resp.status_code in (200, 201):
+                    logger.info(f"Email successfully sent to {to_clean} via Resend HTTPS API")
+                    return True
+                else:
+                    logger.warning(f"Resend API error: {resp.status_code} - {resp.text}")
+        except Exception as e:
+            logger.error(f"Resend API exception: {e}")
+
+    # 2. If SMTP credentials are not configured, log email contents for debugging
     if not SMTP_USER or not SMTP_PASS:
         logger.info(
             f"[EMAIL NOTICE] SMTP not configured. Simulated email to: {to_clean}\n"
@@ -37,6 +61,7 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
         )
         return True
 
+    # 3. Send via SMTP
     try:
         msg = MIMEMultipart("alternative")
         msg["From"] = f"SehtyBot صحتي <{SMTP_FROM}>"
