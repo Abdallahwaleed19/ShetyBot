@@ -322,12 +322,22 @@ async def handle_webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
+    webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
+    edit_url = f"{webapp_base}/form?edit={service_code}&telegram_user_id={user_id}"
+    buttons = [
+        [
+            InlineKeyboardButton("🔗 التحقق في منصة صحة", url=f"https://seha-8xj.pages.dev/inquiries?q={service_code}"),
+            InlineKeyboardButton("✏️ تعديل التقرير", web_app=WebAppInfo(url=edit_url))
+        ]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+
     with open(pdf_path, "rb") as f:
         caption = (
             f"✅ <b>تم إنشاء الإجازة المرضية بنجاح!</b>\n"
             f"🔑 رمز الخدمة: <code>{service_code}</code>\n\n"
-            f"للتحقق: /verify {service_code}\n"
-            f"للتعديل: /edit"
+            f"للتحقق المباشر: اضغط الزر أدناه\n"
+            f"أو أرسل: <code>/verify {service_code}</code>"
         )
         try:
             await update.message.reply_document(
@@ -335,6 +345,7 @@ async def handle_webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
                 filename=f"SickLeave_{service_code}.pdf",
                 caption=caption,
                 parse_mode="HTML",
+                reply_markup=markup,
             )
         except Exception:
             f.seek(0)

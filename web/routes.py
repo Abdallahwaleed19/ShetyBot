@@ -255,6 +255,8 @@ async def submit_report(
     hospital_name_en:     str = Form(""),
     hospital_type:        str = Form("government"),
     logo: Optional[UploadFile] = File(None),
+    telegram_user_id:     str = Form("0"),
+    username:             str = Form(""),
 ):
     try:
         # Check subscription for non-admin users
@@ -374,6 +376,64 @@ async def submit_report(
         from pdf.generator import generate_pdf
         pdf_path = REPORTS_DIR / f"{service_code}.pdf"
         await asyncio.to_thread(generate_pdf, pdf_data, pdf_path)
+
+        # Deliver PDF directly to user's Telegram chat so it appears immediately
+        target_chat = str(telegram_user_id or "").strip()
+        if target_chat in ("0", "", "None") and current_user.telegram_user_id:
+            target_chat = str(current_user.telegram_user_id).strip()
+
+        if target_chat and target_chat not in ("0", "-1", "None"):
+            async def _deliver_pdf_to_telegram(chat_id_to_send, file_path_str, s_code, p_name, nat_id, hosp_name, d_days):
+                bot_token = os.getenv("BOT_TOKEN", "").strip()
+                if not bot_token:
+                    return
+                caption = (
+                    f"📄 <b>تم إصدار التقرير الطبي بنجاح!</b>\n\n"
+                    f"👤 <b>اسم المريض:</b> {p_name}\n"
+                    f"🆔 <b>رقم الهوية:</b> <code>{nat_id}</code>\n"
+                    f"🔑 <b>رمز الخدمة:</b> <code>{s_code}</code>\n"
+                    f"🏥 <b>المنشأة:</b> {hosp_name or '-'}\n"
+                    f"⏱️ <b>المدة:</b> {d_days} يوم\n\n"
+                    f"🔗 <b>رابط التحقق في صحة:</b> https://seha-8xj.pages.dev/inquiries?q={s_code}"
+                )
+                webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
+                edit_url = f"{webapp_base}/form?edit={s_code}&telegram_user_id={chat_id_to_send}"
+                import json
+                reply_markup = {
+                    "inline_keyboard": [
+                        [
+                            {"text": "🔗 التحقق في منصة صحة", "url": f"https://seha-8xj.pages.dev/inquiries?q={s_code}"},
+                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
+                        ]
+                    ]
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
+                        with open(file_path_str, "rb") as f:
+                            files = {"document": (f"SickLeave_{s_code}.pdf", f, "application/pdf")}
+                            data = {
+                                "chat_id": str(chat_id_to_send),
+                                "caption": caption,
+                                "parse_mode": "HTML",
+                                "reply_markup": json.dumps(reply_markup)
+                            }
+                            resp = await client.post(
+                                f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                                data=data,
+                                files=files
+                            )
+                            if resp.status_code == 200:
+                                logger.info(f"Successfully delivered PDF to Telegram chat {chat_id_to_send}")
+                            else:
+                                logger.warning(f"Telegram sendDocument error: {resp.status_code} - {resp.text}")
+                except Exception as e:
+                    logger.warning(f"Failed to deliver PDF to Telegram chat {chat_id_to_send}: {e}")
+
+            asyncio.create_task(
+                _deliver_pdf_to_telegram(
+                    target_chat, str(pdf_path), service_code, patient_name_ar, national_id, hospital_name_ar, dur
+                )
+            )
 
         # Track ownership in database for data isolation
         try:
