@@ -96,18 +96,21 @@ def _try_register(name: str, *candidates) -> str:
 
 _AR = _try_register(
     "AR",
+    _FONTS_DIR / "NotoNaskhArabic-Regular.ttf",
+    _FONTS_DIR / "Amiri-Regular.ttf",
     _FONTS_DIR / "Arabic.ttf",
+    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
     r"C:\Windows\Fonts\tahoma.ttf",
     r"C:\Windows\Fonts\arial.ttf",
-    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
 )
 _ARB = _try_register(
     "ARB",
+    _FONTS_DIR / "NotoNaskhArabic-Bold.ttf",
+    _FONTS_DIR / "Amiri-Bold.ttf",
     _FONTS_DIR / "Tahoma-Bold.ttf",
     r"C:\Windows\Fonts\tahomabd.ttf",
     _FONTS_DIR / "Arial-Bold.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
-    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
 )
 _EN = _try_register(
     "EN",
