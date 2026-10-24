@@ -96,41 +96,41 @@ def _try_register(name: str, *candidates) -> str:
 
 _AR = _try_register(
     "AR",
-    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Regular.ttf",
-    "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
-    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
-    r"C:\Windows\Fonts\arial.ttf",
-    r"C:\Windows\Fonts\tahoma.ttf",
     _FONTS_DIR / "Arabic.ttf",
+    r"C:\Windows\Fonts\tahoma.ttf",
+    r"C:\Windows\Fonts\arial.ttf",
+    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
 )
 _ARB = _try_register(
     "ARB",
-    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
-    "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf",
+    _FONTS_DIR / "Tahoma-Bold.ttf",
+    r"C:\Windows\Fonts\tahomabd.ttf",
+    _FONTS_DIR / "Arial-Bold.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
-    r"C:\Windows\Fonts\tahoma.ttf",
-    _FONTS_DIR / "Arabic.ttf",
+    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
 )
 _EN = _try_register(
     "EN",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    _FONTS_DIR / "Times.ttf",
+    r"C:\Windows\Fonts\times.ttf",
     r"C:\Windows\Fonts\calibri.ttf",
     r"C:\Windows\Fonts\arial.ttf",
-    _FONTS_DIR / "Latin.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
 )
 _ENB = _try_register(
     "ENB",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    _FONTS_DIR / "Times-Bold.ttf",
+    r"C:\Windows\Fonts\timesbd.ttf",
+    _FONTS_DIR / "Arial-Bold.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
-    r"C:\Windows\Fonts\calibrib.ttf",
-    _FONTS_DIR / "Latin.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
 _SERIF_B = _try_register(
     "SERIF_B",
+    _FONTS_DIR / "Times-Bold.ttf",
     r"C:\Windows\Fonts\timesbd.ttf",
-    "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Bold.ttf",
-    "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
 )
@@ -354,8 +354,10 @@ def generate_pdf(data: dict, output_path) -> Path:
         c.setFont(_SERIF_B, 11)
         c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 10, "Kingdom of Saudi Arabia")
 
-        # ── TIME & DATE — bottom left (footer in story, not canvas) ─────────────
-        # Moved to story for better positioning control
+        # ── PAGE NUMBER (1/1) — bottom left corner ──────────────────────────────
+        c.setFont(_ENB if _ENB else "Helvetica-Bold", 9.0)
+        c.setFillColor(colors.HexColor("#555555"))
+        c.drawString(MAR_L, 18 * pt, "1/1")
 
         c.restoreState()
 
@@ -385,15 +387,16 @@ def generate_pdf(data: dict, output_path) -> Path:
     CV2   = BODY_W * 0.29
     CL_AR = BODY_W * 0.24
 
-    LSZ = 11.0   # label font size
-    VSZ = 11.0   # value font size
-    NSZ = 10.0   # smaller for long names
+    LSZ_EN = 13.5   # English label font size (Serif Bold)
+    LSZ_AR = 14.0   # Arabic label font size (Tahoma Bold)
+    VSZ    = 12.0   # Value font size
+    NSZ    = 10.5   # Smaller for long names
 
-    def lbl_e(t):
-        return enb(t, LSZ, C_LABEL, TA_CENTER)
+    def lbl_e(t, sz=LSZ_EN):
+        return enb(t, sz, C_LABEL, TA_CENTER)
 
-    def lbl_a(t):
-        return arb(t, LSZ, C_LABEL, TA_CENTER)
+    def lbl_a(t, sz=LSZ_AR):
+        return arb(t, sz, C_LABEL, TA_CENTER)
 
     def val_e(t, sz=VSZ):
         return en(str(t or ""), sz, C_VALUE, TA_CENTER)
@@ -403,26 +406,22 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     ROW_H = 41.5 * pt
 
-    LSZ = 11.5   # label font size
-    VSZ = 11.0   # value font size
-    NSZ = 10.0   # smaller for long names
-
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
-        (enb("Leave Duration", LSZ, WHITE, TA_CENTER),
-                                       en(dur_en, 9.5, WHITE, TA_CENTER),
-                                                              arabic(dur_ar, 10.0, WHITE, TA_CENTER),
-                                                                                      arb("مدة الإجازة", LSZ, WHITE, TA_CENTER),
+        (enb("Leave Duration", LSZ_EN, WHITE, TA_CENTER),
+                                       en(dur_en, 10.5, WHITE, TA_CENTER),
+                                                              arabic(dur_ar, 11.0, WHITE, TA_CENTER),
+                                                                                      arb("مدة الإجازة", LSZ_AR, WHITE, TA_CENTER),
                                                                                                       False, True),
         (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
         (lbl_e("Discharge Date"),      val_e(dd_g),            val_a(dd_h),            lbl_a("تاريخ الخروج"),          False, False),
-        (lbl_e("Issue Date"),          val_e(iss_g),           "",                     lbl_a("تاريخ إصدار التقرير"),   True,  False),
+        (lbl_e("Issue Date"),          val_e(iss_g),           "",                     lbl_a("تاريخ إصدار التقرير", 13.0), True,  False),
         (lbl_e("Name"),                val_e(name_en, NSZ),    val_a(name_ar, NSZ),    lbl_a("الاسم"),                 False, False),
-        (lbl_e("National ID / Iqama"), val_e(nid),             "",                     arb("رقم الهوية / الإقامة", LSZ, C_LABEL, TA_CENTER),
+        (lbl_e("National ID / Iqama", 12.0), val_e(nid),       "",                     lbl_a("رقم الهوية / الإقامة", 13.0),
                                                                                                       True,  False),
         (lbl_e("Nationality"),         val_e(nat_en),          val_a(nat_ar),          lbl_a("الجنسية"),               False, False),
         (lbl_e("Employer"),            val_e(emp_en),          val_a(emp_ar),          lbl_a("جهة العمل"),             False, False),
-        (lbl_e("Practitioner Name"),   val_e(p_en, NSZ),       val_a(p_ar, NSZ),       lbl_a("اسم الممارس"),           False, False),
+        (lbl_e("Practitioner Name", 12.0), val_e(p_en, NSZ),   val_a(p_ar, NSZ),       lbl_a("اسم الممارس"),           False, False),
         (lbl_e("Position"),            val_e(pos_en),          val_a(pos_ar),          lbl_a("المسمى الوظيفى"),        False, False),
     ]
 
@@ -503,15 +502,17 @@ def generate_pdf(data: dict, output_path) -> Path:
         except ImportError:
             pass
 
-    # Row 1 LEFT: QR + verify text (centered under QR)
+    # Row 1 LEFT: QR + verify text (centered under QR, 2 lines bold Arabic)
     r1_left = []
     if qr_flowable:
         r1_left.append(qr_flowable)
         r1_left.append(Spacer(1, 8 * pt))
     r1_left += [
-        arb(verify_ar,  11, BLACK, TA_CENTER),
-        Spacer(1, 4 * pt),
-        enb(verify_en,  10, BLACK, TA_CENTER),
+        arb("للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة", 12.0, BLACK, TA_CENTER),
+        Spacer(1, 2 * pt),
+        arb("الرسمي", 12.0, BLACK, TA_CENTER),
+        Spacer(1, 5 * pt),
+        enb(verify_en, 10.5, BLACK, TA_CENTER),
         Spacer(1, 4 * pt),
         url_para,
     ]
@@ -532,15 +533,15 @@ def generate_pdf(data: dict, output_path) -> Path:
     if not r1_right:
         r1_right = [en("", 9)]
 
-    # Row 2 LEFT: time + date (very bold serif, matching crop)
-    def _time_para(text, sz=13.5):
+    # Row 2 LEFT: time + date (heavy bold serif, matching crop exactly)
+    def _time_para(text, sz=14.0):
         return Paragraph(
             f"<b>{text}</b>",
             ParagraphStyle("time_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
                            alignment=TA_LEFT, leading=sz + 4)
         )
 
-    def _date_para(text, sz=12.0):
+    def _date_para(text, sz=13.0):
         return Paragraph(
             f"<b>{text}</b>",
             ParagraphStyle("date_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
@@ -549,9 +550,9 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     r2_left = [
         Spacer(1, 15 * pt),
-        _time_para(str(iss_t or ""), 13.5),
+        _time_para(str(iss_t or ""), 14.0),
         Spacer(1, 4 * pt),
-        _date_para(str(iss_long or ""), 12.0),
+        _date_para(str(iss_long or ""), 13.0),
     ]
 
     # Row 2 RIGHT: NHIC logo (single image that already contains the text)
