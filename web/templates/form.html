@@ -387,6 +387,23 @@
     <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr" oninput="onUserEditNationalityEn()">
   </div>
 
+  <div class="field">
+    <label>🏢 جهة العمل — عربي</label>
+    <input type="text" id="employer" placeholder="اسم جهة العمل بالعربية">
+  </div>
+
+  <div class="field ltr-field">
+    <label>Employer — English</label>
+    <input type="text" id="employer_en" placeholder="Employer Name in English" dir="ltr">
+  </div>
+
+  <div class="err" id="e2"></div>
+  <div class="btn-row">
+    <button class="btn btn-prev" type="button" onclick="go(2,1)">→ السابق</button>
+    <button class="btn btn-next" type="button" onclick="go(2,3)">التالي ←</button>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════
      PAGE 3 — بيانات الممارس والمستشفى
 ═══════════════════════════════════════════════ -->
@@ -459,8 +476,8 @@
 
   <div class="err" id="e3"></div>
   <div class="btn-row">
-    <button class="btn btn-submit" onclick="submitForm()">✅ إرسال التقرير</button>
-    <button class="btn btn-prev"   onclick="go(3,2)">→ السابق</button>
+    <button class="btn btn-prev" type="button" onclick="go(3,2)">→ السابق</button>
+    <button class="btn btn-submit" type="button" onclick="submitForm()">✅ إرسال التقرير</button>
   </div>
 </div>
 
@@ -1016,29 +1033,71 @@ async function submitForm() {
   </div>
 </div>
 
-<!-- ── Auth & 10s OTP Modal ──────────────────────────────────────── -->
+<!-- ── Auth & Registration Modal ────────────────────────────────────── -->
 <div id="auth-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(12px);z-index:99998;display:none;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#0e3683;border:1.5px solid rgba(255,255,255,0.22);border-radius:24px;padding:32px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
-    <div style="font-size:48px;margin-bottom:8px;">🔐</div>
-    <h2 style="font-size:20px;margin-bottom:6px;color:#fff;font-weight:800">تسجيل الدخول للنظام</h2>
-    <p style="font-size:13px;opacity:0.85;margin-bottom:20px;color:#cbd5e1;">أدخل اسم المستخدم لتلقي رمز التحقق المؤقت (10 ثوانٍ)</p>
+  <div style="background:#0e3683;border:1.5px solid rgba(255,255,255,0.22);border-radius:24px;padding:30px 22px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+    <div style="font-size:42px;margin-bottom:8px;">🔐</div>
+    <h2 id="auth-modal-title" style="font-size:20px;margin-bottom:6px;color:#fff;font-weight:800">بوابة الدخول والتسجيل</h2>
+    <p id="auth-modal-sub" style="font-size:13px;opacity:0.85;margin-bottom:18px;color:#cbd5e1;">التحقق من الاشتراك وصلاحية الاستخدام</p>
 
-    <!-- Step 1: Username -->
-    <div id="auth-step-1">
-      <div style="text-align:right;margin-bottom:8px;font-size:13px;color:#93c5fd;font-weight:600">اسم المستخدم (Username):</div>
-      <input type="text" id="auth-username" placeholder="مثلاً: ahmed" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:16px;text-align:center;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
-      <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;">📩 طلب رمز الدخول المؤقت</button>
+    <!-- Tab 1: Direct Login / OTP Request -->
+    <div id="auth-step-login">
+      <div style="text-align:right;margin-bottom:6px;font-size:13px;color:#93c5fd;font-weight:600">اسم المستخدم أو البريد المسجل:</div>
+      <input type="text" id="auth-username" placeholder="مثلاً: ahmed أو البريد الإلكتروني" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:15px;text-align:center;margin-bottom:14px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
+      <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">📩 طلب رمز التحقق المؤقت (30 ثانية)</button>
+      <div style="margin-top:12px;font-size:13px">
+        <span style="opacity:0.8">ليس لديك حساب؟</span>
+        <a href="javascript:void(0)" onclick="switchAuthMode('register')" style="color:#38bdf8;font-weight:700;text-decoration:none;margin-right:6px">تقديم طلب تسجيل جديد 📝</a>
+      </div>
     </div>
 
-    <!-- Step 2: 5-digit OTP with 10s countdown -->
-    <div id="auth-step-2" style="display:none;">
-      <div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);border-radius:12px;padding:12px;margin-bottom:16px;font-size:13px;color:#fbbf24;">
-        ⏱️ أرسل الرمز للأدمن! أدخل الرمز المكون من 5 أرقام:<br>
-        <div id="otp-timer" style="font-size:22px;font-weight:800;color:#10b981;margin-top:6px">10 ثوانٍ متبقية</div>
+    <!-- Tab 2: User Registration Form -->
+    <div id="auth-step-register" style="display:none;text-align:right">
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">الاسم الكامل (عربي) *</label>
+        <input type="text" id="reg-name-ar" placeholder="الاسم الثلاثي أو الرباعي" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">Full Name (English)</label>
+        <input type="text" id="reg-name-en" placeholder="Full English Name" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">البريد الإلكتروني (لتلقي الرمز) *</label>
+        <input type="email" id="reg-email" placeholder="example@gmail.com" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">اسم مستخدم تلغرام (اختياري)</label>
+        <input type="text" id="reg-username" placeholder="@username" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      </div>
+      <button type="button" class="btn btn-submit" onclick="submitRegistration()" style="width:100%;padding:12px;font-size:14.5px;margin-bottom:10px;">📤 إرسال طلب التسجيل للأدمن</button>
+      <div style="text-align:center;font-size:13px">
+        <a href="javascript:void(0)" onclick="switchAuthMode('login')" style="color:#93c5fd;text-decoration:none">← العودة لتسجيل الدخول</a>
+      </div>
+    </div>
+
+    <!-- Tab 3: Pending Approval Notice -->
+    <div id="auth-step-pending" style="display:none;">
+      <div style="background:rgba(245,158,11,0.15);border:1.5px solid rgba(245,158,11,0.4);border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">⏳</div>
+        <div style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:6px">طلبك قيد المراجعة لدى الأدمن</div>
+        <div style="font-size:13px;color:#cbd5e1;line-height:1.6">
+          تم إشعار إدارة البوت (@As1_oi) بطلب التسجيل الخاص بك.<br>
+          بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني.
+        </div>
+      </div>
+      <button type="button" class="btn btn-next" onclick="checkUserStatusOnDemand()" style="width:100%;padding:12px;font-size:14px;margin-bottom:8px;">🔄 التحقق من حالة الموافقة الآن</button>
+      <button type="button" class="btn btn-prev" onclick="switchAuthMode('login')" style="width:100%;padding:9px;font-size:12.5px;">تغيير الحساب</button>
+    </div>
+
+    <!-- Tab 4: 5-digit OTP with 30s countdown -->
+    <div id="auth-step-otp" style="display:none;">
+      <div style="background:rgba(16,185,129,0.15);border:1.5px solid rgba(16,185,129,0.4);border-radius:14px;padding:14px;margin-bottom:16px;font-size:13px;color:#a7f3d0;">
+        🔑 أدخل رمز التحقق المكون من 5 أرقام المرسل لبريدك الإلكتروني:<br>
+        <div id="otp-timer" style="font-size:24px;font-weight:800;color:#10b981;margin-top:6px;letter-spacing:1px">30 ثانية متبقية</div>
       </div>
       <input type="text" id="auth-code" maxlength="5" inputmode="numeric" placeholder="•••••" style="width:100%;padding:14px;border-radius:12px;border:2px solid #38bdf8;background:rgba(0,0,0,0.4);color:#fff;font-size:28px;text-align:center;letter-spacing:14px;font-weight:bold;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') verifyOtpCode()">
-      <button type="button" class="btn btn-submit" id="btn-verify-otp" onclick="verifyOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">✅ تأكيد ودخول</button>
-      <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد</button>
+      <button type="button" class="btn btn-submit" id="btn-verify-otp" onclick="verifyOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">✅ تأكيد ودخول (30 يوم)</button>
+      <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد (30 ثانية)</button>
     </div>
 
     <div id="auth-err" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;border-radius:10px;color:#fca5a5;font-size:13px;line-height:1.5;"></div>
@@ -1062,19 +1121,27 @@ function clearAuthErr() {
   el.style.display = 'none';
 }
 
+function switchAuthMode(mode) {
+  clearAuthErr();
+  document.getElementById('auth-step-login').style.display = (mode === 'login') ? 'block' : 'none';
+  document.getElementById('auth-step-register').style.display = (mode === 'register') ? 'block' : 'none';
+  document.getElementById('auth-step-pending').style.display = (mode === 'pending') ? 'block' : 'none';
+  document.getElementById('auth-step-otp').style.display = (mode === 'otp') ? 'block' : 'none';
+}
+
 function renderSubscriptionBanner(data) {
   const banner = document.getElementById('sub-banner');
   const dot = document.getElementById('sub-dot');
   const text = document.getElementById('sub-text');
   const userPill = document.getElementById('sub-username');
   if (data.username) userPill.textContent = data.username;
-  
-  if (data.days_remaining > 0) {
+
+  if (data.days_remaining > 0 || data.active) {
     banner.style.background = 'rgba(16,185,129,0.15)';
     banner.style.borderColor = 'rgba(16,185,129,0.4)';
     dot.style.background = '#10b981';
     dot.style.boxShadow = '0 0 10px #10b981';
-    text.textContent = `متبقي على انتهاء الاشتراك ${data.days_remaining} يوم`;
+    text.textContent = `متبقي على انتهاء الاشتراك ${data.days_remaining || 30} يوم`;
     document.querySelectorAll('.btn-next, .btn-submit').forEach(b => {
       b.disabled = false;
       b.style.opacity = '1';
@@ -1094,11 +1161,46 @@ function renderSubscriptionBanner(data) {
   }
 }
 
+async function submitRegistration() {
+  clearAuthErr();
+  const nameAr = document.getElementById('reg-name-ar').value.trim();
+  const nameEn = document.getElementById('reg-name-en').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  let username = document.getElementById('reg-username').value.trim();
+  const tgUser = tg?.initDataUnsafe?.user;
+  const tgId = tgUser?.id || '0';
+  if (!username && tgUser?.username) username = tgUser.username;
+
+  if (!nameAr) return showAuthErr('⚠️ يرجى إدخال الاسم الكامل بالعربية');
+  if (!email || !email.includes('@')) return showAuthErr('⚠️ يرجى إدخال بريد إلكتروني صحيح');
+
+  const fd = new FormData();
+  fd.append('full_name_ar', nameAr);
+  fd.append('full_name_en', nameEn);
+  fd.append('email', email);
+  fd.append('telegram_user_id', String(tgId));
+  fd.append('username', username);
+
+  try {
+    const res = await fetch('/api/auth/register', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.success) {
+      localStorage.setItem('sehty_registered_email', email);
+      if (username) localStorage.setItem('sehty_username', username);
+      switchAuthMode('pending');
+    } else {
+      showAuthErr('❌ ' + (json.error || 'فشل إرسال طلب التسجيل'));
+    }
+  } catch (e) {
+    showAuthErr('❌ تعذر الاتصال بالخادم');
+  }
+}
+
 async function requestOtpCode() {
   clearAuthErr();
   const username = document.getElementById('auth-username').value.trim();
   if (!username) {
-    showAuthErr('⚠️ يرجى إدخال اسم المستخدم أولاً');
+    showAuthErr('⚠️ يرجى إدخال اسم المستخدم أو البريد المسجل');
     return;
   }
 
@@ -1110,8 +1212,7 @@ async function requestOtpCode() {
     const json = await res.json();
 
     if (json.success) {
-      document.getElementById('auth-step-1').style.display = 'none';
-      document.getElementById('auth-step-2').style.display = 'block';
+      switchAuthMode('otp');
       const codeInput = document.getElementById('auth-code');
       codeInput.value = '';
       codeInput.disabled = false;
@@ -1119,25 +1220,25 @@ async function requestOtpCode() {
       document.getElementById('btn-verify-otp').style.opacity = '1';
       codeInput.focus();
 
-      let left = 10;
+      let left = json.expires_in || 30;
       const timerEl = document.getElementById('otp-timer');
-      timerEl.textContent = `${left} ثوانٍ متبقية`;
+      timerEl.textContent = `${left} ثانية متبقية`;
       timerEl.style.color = '#10b981';
 
       if (otpInterval) clearInterval(otpInterval);
       otpInterval = setInterval(() => {
         left--;
         if (left > 0) {
-          timerEl.textContent = `${left} ثوانٍ متبقية`;
-          if (left <= 3) timerEl.style.color = '#ef4444';
+          timerEl.textContent = `${left} ثانية متبقية`;
+          if (left <= 5) timerEl.style.color = '#ef4444';
         } else {
           clearInterval(otpInterval);
-          timerEl.textContent = '❌ انتهت مهلة الـ 10 ثوانٍ! اطلب رمزاً جديداً';
+          timerEl.textContent = '❌ انتهت مهلة الـ 30 ثانية! اطلب رمزاً جديداً';
           timerEl.style.color = '#ef4444';
           codeInput.disabled = true;
           document.getElementById('btn-verify-otp').disabled = true;
           document.getElementById('btn-verify-otp').style.opacity = '0.5';
-          showAuthErr('انتهت مهلة الـ 10 ثوانٍ الخاصة بالرمز. اضغط على زر "طلب رمز جديد" لإرسال رمز جديد للأدمن.');
+          showAuthErr('انتهت مهلة الـ 30 ثانية الخاصة بالرمز. اضغط على زر "طلب رمز جديد" لإرسال رمز جديد إلى بريدك.');
         }
       }, 1000);
     } else {
@@ -1150,7 +1251,7 @@ async function requestOtpCode() {
 
 async function verifyOtpCode() {
   clearAuthErr();
-  const username = document.getElementById('auth-username').value.trim();
+  const username = document.getElementById('auth-username').value.trim() || localStorage.getItem('sehty_username') || '';
   const code = document.getElementById('auth-code').value.trim();
 
   if (!code || code.length !== 5) {
@@ -1173,10 +1274,42 @@ async function verifyOtpCode() {
       document.getElementById('auth-modal').style.display = 'none';
       renderSubscriptionBanner(json);
     } else {
-      showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته'));
+      showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته (30 ثانية)'));
     }
   } catch (e) {
     showAuthErr('❌ تعذر الاتصال بالخادم');
+  }
+}
+
+async function checkUserStatusOnDemand() {
+  clearAuthErr();
+  const tgUser = tg?.initDataUnsafe?.user;
+  const tgId = tgUser?.id || '0';
+  const email = localStorage.getItem('sehty_registered_email') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+
+  try {
+    const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}&username=${encodeURIComponent(username || email)}`);
+    const json = await res.json();
+    if (json.success) {
+      if (json.is_admin || json.status === 'ACTIVE') {
+        document.getElementById('auth-modal').style.display = 'none';
+        renderSubscriptionBanner({ days_remaining: json.days_remaining, username: json.username || 'مستخدم' });
+        return;
+      }
+      if (json.status === 'APPROVED') {
+        document.getElementById('auth-username').value = json.username || json.email;
+        requestOtpCode();
+        return;
+      }
+      if (json.status === 'PENDING_APPROVAL') {
+        switchAuthMode('pending');
+        return;
+      }
+    }
+    showAuthErr('لا يزال الطلب قيد المراجعة لدى الأدمن');
+  } catch (e) {
+    showAuthErr('تعذر فحص الحالة');
   }
 }
 
@@ -1195,20 +1328,46 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('auth-username').value = uParam;
   }
 
+  const tgUser = tg?.initDataUnsafe?.user;
+  const tgId = tgUser?.id ? String(tgUser.id) : '';
+
+  // 1. Check if Telegram user is admin or active
+  if (tgId) {
+    try {
+      const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}`);
+      const json = await res.json();
+      if (json.success && (json.is_admin || (json.registered && json.status === 'ACTIVE' && json.active))) {
+        document.getElementById('auth-modal').style.display = 'none';
+        renderSubscriptionBanner({
+          days_remaining: json.days_remaining,
+          username: json.username || tgUser?.first_name || 'مستخدم'
+        });
+        return;
+      } else if (json.success && json.registered) {
+        if (json.status === 'PENDING_APPROVAL') {
+          switchAuthMode('pending');
+          document.getElementById('auth-modal').style.display = 'flex';
+          return;
+        } else if (json.status === 'APPROVED') {
+          document.getElementById('auth-username').value = json.username || json.email || '';
+          switchAuthMode('otp');
+          document.getElementById('auth-modal').style.display = 'flex';
+          requestOtpCode();
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 2. Check existing token
   const token = localStorage.getItem('sehty_token');
   const storedUser = localStorage.getItem('sehty_username');
-
-  // If URL specified a different ?u=..., force auth for that new username
-  if (uParam && storedUser && uParam.toLowerCase() !== storedUser.toLowerCase()) {
-    document.getElementById('auth-modal').style.display = 'flex';
-    return;
-  }
 
   if (token) {
     try {
       const res = await fetch(`/api/auth/check-session?token=${encodeURIComponent(token)}`);
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.active) {
         document.getElementById('auth-modal').style.display = 'none';
         renderSubscriptionBanner({
           days_remaining: json.days_remaining,
@@ -1220,6 +1379,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Not authenticated
+  switchAuthMode('login');
   document.getElementById('auth-modal').style.display = 'flex';
 });
 </script>

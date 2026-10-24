@@ -12,6 +12,8 @@
       --border: rgba(255, 255, 255, 0.15);
       --accent: #3b9eff;
       --green: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
       --text: #ffffff;
       --muted: #cbd5e1;
     }
@@ -21,10 +23,10 @@
       color: var(--text);
       font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       min-height: 100vh;
-      padding: 18px 14px 40px;
+      padding: 16px 14px 40px;
     }
     .container {
-      max-width: 720px;
+      max-width: 740px;
       margin: 0 auto;
     }
 
@@ -33,9 +35,9 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 14px;
+      padding-bottom: 12px;
     }
     .back-btn {
       background: rgba(255, 255, 255, 0.12);
@@ -60,19 +62,62 @@
       flex: 1;
     }
 
+    /* Tabs */
+    .tabs-wrap {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 5px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: #cbd5e1;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all .2s;
+      font-family: inherit;
+    }
+    .tab-btn.active {
+      background: #3b9eff;
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(59, 158, 255, 0.4);
+    }
+    .tab-btn.trash.active {
+      background: #e11d48;
+      box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4);
+    }
+    .badge-count {
+      background: rgba(255, 255, 255, 0.22);
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
     /* Search bar */
     .search-box {
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       position: relative;
     }
     .search-input {
       width: 100%;
-      padding: 14px 18px;
+      padding: 13px 18px;
       border-radius: 14px;
       border: 1.5px solid var(--border);
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
-      font-size: 15px;
+      font-size: 14.5px;
       outline: none;
       transition: border-color .2s, box-shadow .2s;
     }
@@ -102,6 +147,10 @@
       border-color: rgba(59, 158, 255, 0.5);
       transform: translateY(-2px);
     }
+    .record-card.trashed {
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.05);
+    }
 
     .card-head {
       display: flex;
@@ -120,7 +169,6 @@
     .patient-name-en {
       font-size: 12.5px;
       color: #93c5fd;
-      font-family: 'Segoe UI', Tahoma, sans-serif;
       direction: ltr;
       text-align: right;
       margin-top: 2px;
@@ -183,13 +231,15 @@
       gap: 8px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       padding-top: 14px;
+      flex-wrap: wrap;
     }
     .action-btn {
       flex: 1;
+      min-width: 100px;
       padding: 10px 12px;
       border-radius: 10px;
       border: none;
-      font-size: 13.5px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
@@ -217,6 +267,28 @@
       color: #fff;
     }
     .btn-edit:hover { background: #059669; }
+
+    .btn-trash {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+    .btn-trash:hover {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .btn-restore {
+      background: #10b981;
+      color: #fff;
+    }
+    .btn-restore:hover { background: #059669; }
+
+    .btn-perm-delete {
+      background: #e11d48;
+      color: #fff;
+    }
+    .btn-perm-delete:hover { background: #be123c; }
 
     .btn-pdf {
       background: rgba(255, 255, 255, 0.12);
@@ -276,6 +348,18 @@
     <span style="font-size:12px;opacity:0.75" id="rec-count">0 سجل</span>
   </div>
 
+  <!-- Tabs: Active vs Trash -->
+  <div class="tabs-wrap">
+    <button class="tab-btn active" id="tab-active" onclick="switchTab('active')">
+      <span>📋 السجلات الحالية</span>
+      <span class="badge-count" id="count-active">0</span>
+    </button>
+    <button class="tab-btn trash" id="tab-trash" onclick="switchTab('trash')">
+      <span>🗑️ سلة المحذوفات</span>
+      <span class="badge-count" id="count-trash">0</span>
+    </button>
+  </div>
+
   <!-- Search Input -->
   <div class="search-box">
     <input type="text" id="searchInput" class="search-input" placeholder="🔍 ابحث بالاسم، أو رقم الهوية، أو رمز الخدمة..." oninput="filterRecords()">
@@ -291,13 +375,16 @@
 </div>
 
 <!-- Toast notification -->
-<div id="toast">✅ تم نسخ البيانات بنجاح!</div>
+<div id="toast">✅ تم تنفيذ العملية بنجاح!</div>
 
 <script>
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-let allRecords = [];
+let currentTab = 'active';
+let activeRecords = [];
+let trashRecords = [];
+let isAdmin = false;
 
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -308,7 +395,8 @@ function showToast(msg) {
 
 // Copy person data to clipboard
 function copyPersonData(code) {
-  const r = allRecords.find(item => item.service_code === code);
+  const pool = currentTab === 'active' ? activeRecords : trashRecords;
+  const r = pool.find(item => item.service_code === code);
   if (!r) return;
 
   const text = 
@@ -316,6 +404,7 @@ function copyPersonData(code) {
 👤 اسم المريض: ${r.patient_name_ar || '-'}${r.patient_name_en ? ' (' + r.patient_name_en + ')' : ''}
 🪪 رقم الهوية: ${r.national_id || '-'}
 🌍 الجنسية: ${r.nationality || '-'}${r.nationality_en ? ' (' + r.nationality_en + ')' : ''}
+🏢 جهة العمل: ${r.employer || '-'}${r.employer_en ? ' (' + r.employer_en + ')' : ''}
 ⏱️ مدة الإجازة: ${r.leave_duration_days || '1'} يوم (من ${r.admission_date || '-'} إلى ${r.discharge_date || '-'})
 🗓️ تاريخ الإصدار: ${r.issue_date || '-'} ${r.report_time || ''}
 🏥 المستشفى: ${r.hospital_name_ar || '-'}
@@ -334,27 +423,127 @@ function editPersonData(code) {
   window.location.href = `/form?edit=${encodeURIComponent(code)}`;
 }
 
+// Soft delete record (moves to trash)
+async function trashPersonData(code) {
+  if (!confirm(`هل أنت متأكد من نقل السجل (${code}) إلى سلة المحذوفات؟ يمكنك استرجاعه لاحقاً.`)) {
+    return;
+  }
+  const token = localStorage.getItem('sehty_token') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+  const fd = new FormData();
+  fd.append('service_code', code);
+
+  try {
+    const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+      method: 'POST',
+      body: fd,
+      headers: { 'x-auth-token': token, 'x-username': username }
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('🗑️ تم نقل السجل إلى سلة المحذوفات');
+      await loadAllData();
+    } else {
+      alert('خطأ: ' + (json.error || 'تعذر حذف السجل'));
+    }
+  } catch (e) {
+    alert('فشل الاتصال بالخادم');
+  }
+}
+
+// Restore record from trash
+async function restorePersonData(code) {
+  const token = localStorage.getItem('sehty_token') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+  const fd = new FormData();
+  fd.append('service_code', code);
+
+  try {
+    const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+      method: 'POST',
+      body: fd,
+      headers: { 'x-auth-token': token, 'x-username': username }
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('♻️ تم استرجاع السجل إلى السجلات الحالية');
+      await loadAllData();
+    } else {
+      alert('خطأ: ' + (json.error || 'تعذر استرجاع السجل'));
+    }
+  } catch (e) {
+    alert('فشل الاتصال بالخادم');
+  }
+}
+
+// Permanent delete (admin only)
+async function permanentDeletePersonData(code) {
+  if (!confirm(`⚠️ تحذير: هل أنت متأكد تماماً من حذف السجل (${code}) نهائياً؟ هذا الإجراء لا يمكن التراجع عنه!`)) {
+    return;
+  }
+  const token = localStorage.getItem('sehty_token') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+  const fd = new FormData();
+  fd.append('service_code', code);
+
+  try {
+    const res = await fetch(`/api/records/permanent-delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+      method: 'POST',
+      body: fd,
+      headers: { 'x-auth-token': token, 'x-username': username }
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('❌ تم حذف السجل نهائياً من قاعدة البيانات');
+      await loadAllData();
+    } else {
+      alert('خطأ: ' + (json.error || 'تعذر الحذف النهائي'));
+    }
+  } catch (e) {
+    alert('فشل الاتصال بالخادم');
+  }
+}
+
+// Switch between Active and Trash tabs
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-active').classList.toggle('active', tab === 'active');
+  document.getElementById('tab-trash').classList.toggle('active', tab === 'trash');
+  document.getElementById('searchInput').value = '';
+  filterRecords();
+}
+
 // Render cards
 function renderRecords(records) {
   const container = document.getElementById('recordsContainer');
   document.getElementById('rec-count').textContent = `${records.length} سجل`;
 
   if (!records || records.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📂</div>
-        <div class="empty-title">لا توجد سجلات سابقة</div>
-        <div class="empty-desc">لم يتم إصدار أي تقارير بعد أو لا توجد نتائج مطابقة لبحثك</div>
-        <a href="/form" class="back-btn" style="background:#3b9eff;border-color:#3b9eff;padding:12px 20px;font-size:15px">
-          ➕ إنشاء أول تقرير طبي
-        </a>
-      </div>
-    `;
+    if (currentTab === 'active') {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📂</div>
+          <div class="empty-title">لا توجد سجلات نشطة حالياً</div>
+          <div class="empty-desc">لم يتم إصدار أي تقارير بعد أو لا توجد نتائج مطابقة لبحثك</div>
+          <a href="/form" class="back-btn" style="background:#3b9eff;border-color:#3b9eff;padding:12px 20px;font-size:15px">
+            ➕ إنشاء أول تقرير طبي
+          </a>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🗑️</div>
+          <div class="empty-title">سلة المحذوفات فارغة</div>
+          <div class="empty-desc">لا توجد أي سجلات محذوفة في الوقت الحالي</div>
+        </div>
+      `;
+    }
     return;
   }
 
   container.innerHTML = records.map(r => `
-    <div class="record-card">
+    <div class="record-card ${currentTab === 'trash' ? 'trashed' : ''}">
       <div class="card-head">
         <div>
           <div class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</div>
@@ -379,7 +568,7 @@ function renderRecords(records) {
         </div>
         <div class="grid-item">
           <span class="grid-label">🗓️ تاريخ الإصدار</span>
-          <span class="grid-value">${r.issue_date || '-'}</span>
+          <span class="grid-value">${r.issue_date || '-'} ${r.report_time || ''}</span>
         </div>
         <div class="grid-item">
           <span class="grid-label">🌍 الجنسية</span>
@@ -393,19 +582,41 @@ function renderRecords(records) {
           <span class="grid-label">👨‍⚕️ الممارس</span>
           <span class="grid-value">${r.practitioner_name_ar || '-'}</span>
         </div>
+        ${r.employer ? `
+        <div class="grid-item" style="grid-column: span 2">
+          <span class="grid-label">🏢 جهة العمل</span>
+          <span class="grid-value">${r.employer}${r.employer_en ? ' (' + r.employer_en + ')' : ''}</span>
+        </div>` : ''}
       </div>
 
-      <!-- Actions: Copy button & Pencil Edit button -->
+      <!-- Actions -->
       <div class="card-actions">
-        <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
-          📋 نسخ البيانات
-        </button>
-        <button class="action-btn btn-edit" onclick="editPersonData('${r.service_code}')" title="تعديل بيانات الشخص">
-          ✏️ تعديل
-        </button>
-        <a class="action-btn btn-pdf" href="/api/download/${r.service_code}" download="SickLeave_${r.service_code}.pdf" title="تحميل PDF">
-          📥 PDF
-        </a>
+        ${currentTab === 'active' ? `
+          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
+            📋 نسخ
+          </button>
+          <button class="action-btn btn-edit" onclick="editPersonData('${r.service_code}')" title="تعديل بيانات الشخص">
+            ✏️ تعديل
+          </button>
+          <button class="action-btn btn-trash" onclick="trashPersonData('${r.service_code}')" title="نقل إلى سلة المحذوفات">
+            🗑️ سلة المحذوفات
+          </button>
+          <a class="action-btn btn-pdf" href="/api/download/${r.service_code}" download="SickLeave_${r.service_code}.pdf" title="تحميل PDF">
+            📥 PDF
+          </a>
+        ` : `
+          <button class="action-btn btn-restore" onclick="restorePersonData('${r.service_code}')" title="استرجاع من المحذوفات">
+            ♻️ استرجاع
+          </button>
+          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
+            📋 نسخ
+          </button>
+          ${isAdmin ? `
+          <button class="action-btn btn-perm-delete" onclick="permanentDeletePersonData('${r.service_code}')" title="حذف نهائي">
+            ❌ حذف نهائي
+          </button>
+          ` : ''}
+        `}
       </div>
     </div>
   `).join('');
@@ -414,48 +625,62 @@ function renderRecords(records) {
 // Search / Filter
 function filterRecords() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const pool = currentTab === 'active' ? activeRecords : trashRecords;
+
   if (!q) {
-    renderRecords(allRecords);
+    renderRecords(pool);
     return;
   }
-  const filtered = allRecords.filter(r => {
+  const filtered = pool.filter(r => {
     return (r.patient_name_ar && r.patient_name_ar.toLowerCase().includes(q)) ||
            (r.patient_name_en && r.patient_name_en.toLowerCase().includes(q)) ||
            (r.national_id && r.national_id.includes(q)) ||
            (r.service_code && r.service_code.toLowerCase().includes(q)) ||
-           (r.hospital_name_ar && r.hospital_name_ar.toLowerCase().includes(q));
+           (r.hospital_name_ar && r.hospital_name_ar.toLowerCase().includes(q)) ||
+           (r.employer && r.employer.toLowerCase().includes(q));
   });
   renderRecords(filtered);
 }
 
-// Load records on start
-async function loadRecords() {
+// Load records from server
+async function loadAllData() {
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
   const uid = tg?.initDataUnsafe?.user?.id || 0;
 
+  const authParams = `token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${uid}`;
+  const headers = { 'x-auth-token': token, 'x-username': username };
+
   try {
-    const url = `/api/all-records?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${uid}`;
-    const res = await fetch(url, {
-      headers: {
-        'x-auth-token': token,
-        'x-username': username
-      }
-    });
-    const json = await res.json();
-    if (json.success && Array.isArray(json.data)) {
-      allRecords = json.data;
+    // 1. Fetch active
+    const resActive = await fetch(`/api/all-records?${authParams}`, { headers });
+    const jsonActive = await resActive.json();
+    if (jsonActive.success && Array.isArray(jsonActive.data)) {
+      activeRecords = jsonActive.data;
+      isAdmin = !!jsonActive.is_admin;
     } else {
-      allRecords = [];
+      activeRecords = [];
     }
+
+    // 2. Fetch trash
+    const resTrash = await fetch(`/api/trash-records?${authParams}`, { headers });
+    const jsonTrash = await resTrash.json();
+    if (jsonTrash.success && Array.isArray(jsonTrash.data)) {
+      trashRecords = jsonTrash.data;
+    } else {
+      trashRecords = [];
+    }
+
+    document.getElementById('count-active').textContent = activeRecords.length;
+    document.getElementById('count-trash').textContent = trashRecords.length;
+
+    filterRecords();
   } catch (e) {
-    console.error('Failed to load records:', e);
-    allRecords = [];
+    console.error('Failed to load data:', e);
   }
-  renderRecords(allRecords);
 }
 
-document.addEventListener('DOMContentLoaded', loadRecords);
+document.addEventListener('DOMContentLoaded', loadAllData);
 </script>
 </body>
 </html>

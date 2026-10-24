@@ -53,3 +53,5 @@ reference_doc.pdf
 
 # Template PPTX files (large, not needed)
 *.pptx
+scratch/
+

@@ -1,6 +1,6 @@
 """
 bot/handlers.py — Simplified bot using Telegram WebApp.
-/start       → sends WebApp button
+/start       → checks authorization, registration status, approval, sends WebApp buttons
 /edit        → opens WebApp pre-filled with user's last report
 /myreport    → shows last report summary + edit button
 web_app_data → receives service_code and sends PDF
@@ -14,18 +14,27 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from telegram import (
     Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup,
-    InlineKeyboardButton, InlineKeyboardMarkup,
+    InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove,
 )
 from telegram.ext import ContextTypes
 
 from config import REPORTS_DIR
 from db.worker_client import get_report, search_by_national_id
+from db.database import (
+    get_user_by_identifier_sync,
+    check_subscription_sync,
+    ADMIN_TELEGRAM_ID,
+    ADMIN_USERNAME,
+)
 
 logger = logging.getLogger(__name__)
 
 
 # ── /start ─────────────────────────────────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.from_user:
+        return
+
     webapp_url = ctx.bot_data.get("webapp_url", "")
     if not webapp_url:
         await update.message.reply_text(
@@ -37,11 +46,130 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     base_url = webapp_url.replace("/form", "")
     records_url = f"{base_url}/records"
 
+    user = update.message.from_user
+    user_tg_id = str(user.id).strip()
+    user_name = (user.username or "").lstrip("@").strip()
+
+    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() == ADMIN_USERNAME.lower())
+
+    # Look up user in database
+    user_rec = get_user_by_identifier_sync(user_tg_id)
+    if not user_rec and user_name:
+        user_rec = get_user_by_identifier_sync(user_name)
+
+    # 1. Admin Access
+    if is_admin:
+        admin_url = f"{base_url}/admin?key=admin123"
+        keyboard = ReplyKeyboardMarkup(
+            [
+                [
+                    KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}")),
+                    KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
+                ]
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=False,
+        )
+
+        inline_admin = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚙️ لوحة الإدارة الشاملة", url=admin_url)],
+            [InlineKeyboardButton("📂 استعراض كافة السجلات", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}"))]
+        ])
+
+        await update.message.reply_text(
+            f"👑 *مرحباً بك يا مدير النظام* (@{ADMIN_USERNAME})\n\n"
+            f"لديك صلاحيات إدارية كاملة لإدارة البوت والموافقة على المستخدمين واستعراض كافة السجلات.\n\n"
+            f"• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
+            f"• اضغط *➕ البيانات السابقة* لإدارة جميع السجلات وسلة المحذوفات.\n"
+            f"• اضغط الزر أدناه لفتح لوحة الإدارة:",
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+        await update.message.reply_text(
+            "⚙️ لوحة التحكم والإدارة:",
+            reply_markup=inline_admin
+        )
+        return
+
+    # 2. Unregistered User
+    if not user_rec:
+        reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}"
+        inline_reg = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 تقديم طلب تسجيل جديد", web_app=WebAppInfo(url=reg_url))]
+        ])
+        await update.message.reply_text(
+            "🏥 *مرحباً بك في نظام الإجازات المرضية صحتي* (@SehtyBot)\n\n"
+            "⚠️ *تنبيه:* يتطلب استخدام البوت تسجيلاً مسبقاً وموافقة من الإدارة (@As1_oi).\n\n"
+            "يرجى الضغط على الزر أدناه لإرسال طلب تسجيلك (الاسم والبريد الإلكتروني)، وفور مراجعة الطلب والموافقة عليه ستصلك رسالة تحتوي على رمز التفعيل المؤقت.",
+            parse_mode="Markdown",
+            reply_markup=inline_reg,
+        )
+        return
+
+    # 3. User with PENDING_APPROVAL status
+    if user_rec.registration_status == "PENDING_APPROVAL":
+        await update.message.reply_text(
+            "⏳ *طلب تسجيلك قيد المراجعة لدى الإدارة (@As1_oi)*\n\n"
+            "تم استلام بياناتك وهي قيد التدقيق حالياً. بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني وهاتفك لتفعيل الاشتراك لمدة 30 يوماً.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # 4. User with REJECTED status
+    if user_rec.registration_status == "REJECTED":
+        reason = getattr(user_rec, "rejection_reason", None) or "البيانات المقدمة غير كافية"
+        await update.message.reply_text(
+            f"❌ *تم رفض طلب التسجيل الخاص بك*\n\n"
+            f"📝 *السبب:* {reason}\n\n"
+            f"يمكنك التواصل مع الإدارة للاستفسار: @{ADMIN_USERNAME}",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # 5. User with APPROVED status (waiting for 30s OTP)
+    if user_rec.registration_status == "APPROVED":
+        otp_url = f"{webapp_url}?telegram_user_id={user_tg_id}&u={user_rec.username or user_tg_id}"
+        inline_otp = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔑 إدخال رمز التحقق (30 ثانية)", web_app=WebAppInfo(url=otp_url))]
+        ])
+        await update.message.reply_text(
+            "🎉 *تمت الموافقة على طلب تسجيلك!*\n\n"
+            f"تم إرسال رمز التحقق المؤقت (صالح لمدة 30 ثانية) إلى بريدك الإلكتروني (`{user_rec.email}`).\n\n"
+            "اضغط على الزر أدناه لإدخال الرمز المكون من 5 أرقام فوراً وتفعيل اشتراكك لمدة 30 يوماً:",
+            parse_mode="Markdown",
+            reply_markup=inline_otp,
+        )
+        return
+
+    # 6. User with SUSPENDED status
+    if user_rec.registration_status == "SUSPENDED" or not user_rec.is_active:
+        await update.message.reply_text(
+            f"⏸️ *حسابك معلق حالياً*\n\n"
+            f"تم تعليق حسابك من قبل إدارة النظام. يرجى التواصل مع الإدارة لإعادة التفعيل: @{ADMIN_USERNAME}",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # 7. User with ACTIVE status: Check Subscription
+    sub = check_subscription_sync(user_rec.id)
+    if not sub["active"]:
+        await update.message.reply_text(
+            f"⚠️ *انتهت فترة اشتراكك (30 يوماً)*\n\n"
+            f"عذراً، لقد انتهت صلاحية استخدامك لنظام الإجازات المرضية. يرجى التواصل مع الإدارة (@{ADMIN_USERNAME}) لتجديد صلاحية حسابك لمدة 30 يوماً أخرى.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # Active and verified! Display both main buttons
     keyboard = ReplyKeyboardMarkup(
         [
             [
-                KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=webapp_url)),
-                KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=records_url)),
+                KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}")),
+                KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
             ]
         ],
         resize_keyboard=True,
@@ -49,9 +177,10 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     await update.message.reply_text(
-        "🏥 *مرحباً بك في نظام الإجازات المرضية* (@SehtyBot)\n\n"
-        "• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
-        "• اضغط *➕ البيانات السابقة* لعرض سجلات الأشخاص ونسخها وتعديلها.",
+        f"🏥 *مرحباً بك مجدداً في نظام الإجازات المرضية* (@SehtyBot)\n\n"
+        f"🟢 *حالة الاشتراك:* نشط (متبقي {sub['days_remaining']} يوم)\n\n"
+        f"• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
+        f"• اضغط *➕ البيانات السابقة* لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات.",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
@@ -66,11 +195,8 @@ async def edit_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     user_id = update.message.from_user.id
-
-    # Try to get last service_code from memory first
     last_code = ctx.bot_data.get(f"last_code_{user_id}")
 
-    # If not in memory, try fetching from D1 by telegram_user_id via Worker
     if not last_code:
         from db.worker_client import get_client
         client = await get_client()
@@ -90,8 +216,7 @@ async def edit_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    # Open WebApp with ?edit=SERVICE_CODE so the form pre-fills
-    edit_url = f"{webapp_url}?edit={last_code}"
+    edit_url = f"{webapp_url}?edit={last_code}&telegram_user_id={user_id}"
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton(
             "✏️ تعديل التقرير السابق",
@@ -114,11 +239,8 @@ async def my_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """Show a summary of the user's last report with an edit option."""
     user_id = update.message.from_user.id
     webapp_url = ctx.bot_data.get("webapp_url", "")
-
-    # Try memory first
     last_code = ctx.bot_data.get(f"last_code_{user_id}")
 
-    # Try D1 lookup by telegram_user_id
     if not last_code:
         from db.worker_client import get_client
         client = await get_client()
@@ -159,10 +281,9 @@ async def my_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         f"للتعديل: /edit"
     )
 
-    # Build inline keyboard
     buttons = []
     if webapp_url:
-        edit_url = f"{webapp_url}?edit={last_code}"
+        edit_url = f"{webapp_url}?edit={last_code}&telegram_user_id={user_id}"
         buttons.append([InlineKeyboardButton("✏️ تعديل", web_app=WebAppInfo(url=edit_url))])
 
     pdf_path = REPORTS_DIR / f"{last_code}.pdf"
@@ -190,12 +311,10 @@ async def handle_webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("❌ حدث خطأ في الإرسال. حاول مرة أخرى.")
         return
 
-    # ── Save last service_code for this user in bot_data ──────────────────────
     user_id = update.message.from_user.id
     ctx.bot_data[f"last_code_{user_id}"] = service_code
     logger.info(f"Saved last_code_{user_id} = {service_code}")
 
-    # ── Send PDF ───────────────────────────────────────────────────────────────
     pdf_path = REPORTS_DIR / f"{service_code}.pdf"
     if not pdf_path.exists():
         await update.message.reply_text(
@@ -249,8 +368,6 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     q = args[0].strip()
-
-    # Try service code first, then national ID
     r = await get_report(q)
     if not r:
         results = await search_by_national_id(q)
@@ -281,16 +398,34 @@ async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     base_url = webapp_url.replace("/form", "")
     records_url = f"{base_url}/records"
 
+    user = update.message.from_user
+    user_tg_id = str(user.id).strip()
+    user_name = (user.username or "").lstrip("@").strip()
+
+    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() == ADMIN_USERNAME.lower())
+    user_rec = get_user_by_identifier_sync(user_tg_id)
+
+    # If user wants previous records
     if any(k in txt for k in ["+", "➕", "بيانات", "سابق", "سجل", "سجلات", "تعديل"]):
+        if not is_admin and (not user_rec or user_rec.registration_status != "ACTIVE"):
+            await update.message.reply_text(
+                "⚠️ *عذراً، لا يمكنك الوصول للبيانات السابقة*\n\n"
+                "يتطلب فتح السجلات أن يكون حسابك مسجلاً ومفعلاً بموافقة الإدارة.\n"
+                "استخدم الأمر /start للتحقق من حالة حسابك أو تقديم طلب تسجيل.",
+                parse_mode="Markdown",
+            )
+            return
+
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📂 عرض البيانات السابقة", web_app=WebAppInfo(url=records_url))]
+            [InlineKeyboardButton("📂 عرض البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}"))]
         ])
         await update.message.reply_text(
             "📋 *سجلات وبيانات الأشخاص السابقة*\n\n"
             "اضغط على الزر بالأسفل لفتح صفحة السجلات، حيث يمكنك:\n"
             "• عرض بيانات المرضى في خانات منظمة.\n"
             "• نسخ بيانات أي مريض بضغطة زر.\n"
-            "• تعديل بيانات أي شخص بالضغط على علامة القلم ✏️.",
+            "• تعديل بيانات أي شخص بالضغط على علامة القلم ✏️.\n"
+            "• نقل السجلات إلى سلة المحذوفات أو استرجاعها.",
             parse_mode="Markdown",
             reply_markup=keyboard,
         )

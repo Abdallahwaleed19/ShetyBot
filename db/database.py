@@ -1,21 +1,23 @@
 """
-db/database.py — Unified Auth, Subscription, Verification, and Audit Database.
-Provides synchronous core functions and async wrappers for FastAPI.
-Fast, reliable, zero-deadlock SQLite storage.
+db/database.py — SQLite storage for users, verification codes, audit logs, and reports.
 """
-from __future__ import annotations
 import os
 import sys
+import logging
 import sqlite3
 import hashlib
 import random
-import logging
+import math
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
-from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import BASE_DIR
+from config import (
+    BASE_DIR,
+    ADMIN_USERNAME,
+    ADMIN_EMAIL,
+    ADMIN_TELEGRAM_ID,
+    OTP_TTL_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +34,23 @@ class UserRecord:
     def __init__(self, row: sqlite3.Row | dict):
         d = dict(row)
         self.id = d["id"]
-        self.telegram_user_id = str(d["telegram_user_id"])
+        self.telegram_user_id = str(d.get("telegram_user_id", "0"))
         self.username = d.get("username")
         self.role = d.get("role", "user")
         self.is_active = bool(d.get("is_active", 1))
 
-        # Parse datetimes
+        # Registration & Identity fields
+        self.email = d.get("email")
+        self.full_name_ar = d.get("full_name_ar")
+        self.full_name_en = d.get("full_name_en")
+        self.registration_status = d.get("registration_status", "ACTIVE")
+        self.rejection_reason = d.get("rejection_reason")
+
+        # Parse approval dates
+        self.approved_at = d.get("approved_at")
+        self.approved_by = d.get("approved_by")
+
+        # Parse subscription datetimes
         s_start = d.get("subscription_start")
         if isinstance(s_start, str):
             try:
@@ -57,21 +70,30 @@ class UserRecord:
             self.subscription_end = s_end
 
         self.created_at = d.get("created_at")
+        self.updated_at = d.get("updated_at")
 
     def __repr__(self):
-        return f"<User id={self.id} tg={self.telegram_user_id} role={self.role}>"
+        return f"<User id={self.id} tg={self.telegram_user_id} u={self.username} status={self.registration_status} role={self.role}>"
 
 
 def init_db_sync() -> None:
-    """Initializes tables for users, verifications, subscriptions, and audits."""
+    """Initializes tables for users, verifications, subscriptions, audits, and saved reports."""
     conn = _get_conn()
     cur = conn.cursor()
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         telegram_user_id TEXT UNIQUE NOT NULL,
         username TEXT,
+        full_name_ar TEXT,
+        full_name_en TEXT,
+        email TEXT,
         role TEXT DEFAULT 'user',
+        registration_status TEXT DEFAULT 'PENDING_APPROVAL',
+        rejection_reason TEXT,
+        approved_at TEXT,
+        approved_by TEXT,
         subscription_start TEXT,
         subscription_end TEXT,
         is_active INTEGER DEFAULT 1,
@@ -79,6 +101,7 @@ def init_db_sync() -> None:
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS verification_codes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,9 +110,12 @@ def init_db_sync() -> None:
         code TEXT,
         expires_at TEXT NOT NULL,
         used INTEGER DEFAULT 0,
+        attempts INTEGER DEFAULT 0,
+        purpose TEXT DEFAULT 'auth',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,8 +125,8 @@ def init_db_sync() -> None:
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
     cur.execute("""
-        cur.execute('''
     CREATE TABLE IF NOT EXISTS saved_reports (
         service_code TEXT PRIMARY KEY,
         user_id INTEGER,
@@ -126,10 +152,15 @@ def init_db_sync() -> None:
         issue_date TEXT,
         report_time TEXT,
         data_json TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        deleted_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
-    ''')
+    """)
 
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS report_ownership (
         service_code TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -137,13 +168,83 @@ def init_db_sync() -> None:
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Safe Schema Migrations (Add missing columns if table already existed)
+    alter_queries = [
+        ("users", "email", "TEXT"),
+        ("users", "full_name_ar", "TEXT"),
+        ("users", "full_name_en", "TEXT"),
+        ("users", "registration_status", "TEXT DEFAULT 'ACTIVE'"),
+        ("users", "rejection_reason", "TEXT"),
+        ("users", "approved_at", "TEXT"),
+        ("users", "approved_by", "TEXT"),
+        ("verification_codes", "code", "TEXT"),
+        ("verification_codes", "attempts", "INTEGER DEFAULT 0"),
+        ("verification_codes", "purpose", "TEXT DEFAULT 'auth'"),
+        ("saved_reports", "is_deleted", "INTEGER DEFAULT 0"),
+        ("saved_reports", "deleted_at", "TEXT"),
+        ("saved_reports", "deleted_by", "TEXT"),
+        ("saved_reports", "updated_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+    ]
+    for tbl, col, col_type in alter_queries:
+        try:
+            cur.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass
+
+    # Ensure Admin account (@As1_oi) has admin privileges in DB
     try:
-        cur.execute("ALTER TABLE verification_codes ADD COLUMN code TEXT")
-    except Exception:
-        pass
+        cur.execute(
+            "SELECT id FROM users WHERE username = ? COLLATE NOCASE OR telegram_user_id = ?",
+            (ADMIN_USERNAME, ADMIN_TELEGRAM_ID)
+        )
+        admin_row = cur.fetchone()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
+        if admin_row:
+            cur.execute(
+                """UPDATE users 
+                   SET role = 'admin', registration_status = 'ACTIVE', is_active = 1,
+                       email = ?, subscription_end = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (ADMIN_EMAIL, future_iso, admin_row["id"])
+            )
+        else:
+            cur.execute(
+                """INSERT INTO users (telegram_user_id, username, email, role, registration_status, subscription_start, subscription_end, is_active)
+                   VALUES (?, ?, ?, 'admin', 'ACTIVE', ?, ?, 1)""",
+                (ADMIN_TELEGRAM_ID, ADMIN_USERNAME, ADMIN_EMAIL, now_iso, future_iso)
+            )
+    except Exception as e:
+        logger.warning(f"Admin seeding error: {e}")
+
+    # Seed past report GSL26102444927 if not present so previous data is visible immediately
+    try:
+        cur.execute("SELECT service_code FROM saved_reports WHERE service_code = 'GSL26102444927'")
+        if not cur.fetchone():
+            cur.execute(
+                """INSERT OR IGNORE INTO saved_reports (
+                    service_code, user_id, telegram_user_id, national_id,
+                    patient_name_ar, patient_name_en, nationality, employer,
+                    practitioner_name_ar, practitioner_name_en, job_title_ar,
+                    hospital_name_ar, hospital_type, report_type,
+                    admission_date, discharge_date, leave_duration_days,
+                    issue_date, report_time, is_deleted, created_at
+                ) VALUES (
+                    'GSL26102444927', 1, 'user_admen', '9575523473',
+                    'MOHAMMEDFADLALIAQLAN7122', 'متوفر سك ليف الدفع بعد', 'يمني', 'طالب',
+                    'محمد بن عبدالرحمن السعدان', 'سك ليف يجي في صحتي', 'طبيب عام',
+                    'مستشفى الملك فيصل التخصصي', 'government', 'GSL',
+                    '2026-10-24', '2026-10-24', '1',
+                    '2026-10-24', '03:57', 0, CURRENT_TIMESTAMP
+                )"""
+            )
+    except Exception as e:
+        logger.warning(f"Past report seeding error: {e}")
+
     conn.commit()
     conn.close()
-    logger.info("Database schema initialized successfully at %s", DB_PATH)
+    logger.info("Database schema initialized and verified successfully at %s", DB_PATH)
 
 
 async def init_db() -> None:
@@ -161,26 +262,28 @@ async def get_session():
 def get_or_create_user_sync(telegram_user_id: str = "0", username: str = None) -> UserRecord:
     conn = _get_conn()
     cur = conn.cursor()
-    tg_id = str(telegram_user_id)
+    tg_id = str(telegram_user_id).strip()
+    clean_u = (username or "").lstrip("@").strip()
     cur.execute("SELECT * FROM users WHERE telegram_user_id = ?", (tg_id,))
     row = cur.fetchone()
 
     if not row:
-        admin_id = os.getenv("ADMIN_TELEGRAM_ID", "").strip()
-        role = "admin" if (admin_id and tg_id == admin_id) else "user"
+        is_adm = (tg_id == ADMIN_TELEGRAM_ID) or (clean_u and clean_u.lower() == ADMIN_USERNAME.lower())
+        role = "admin" if is_adm else "user"
+        reg_status = "ACTIVE" if is_adm else "PENDING_APPROVAL"
 
         now = datetime.now(timezone.utc)
-        sub_end = now + timedelta(days=30)
+        sub_end = now + timedelta(days=3650 if is_adm else 30)
         cur.execute(
-            """INSERT INTO users (telegram_user_id, username, role, subscription_start, subscription_end, is_active)
-               VALUES (?, ?, ?, ?, ?, 1)""",
-            (tg_id, username, role, now.isoformat(), sub_end.isoformat())
+            """INSERT INTO users (telegram_user_id, username, role, registration_status, subscription_start, subscription_end, is_active)
+               VALUES (?, ?, ?, ?, ?, ?, 1)""",
+            (tg_id, clean_u, role, reg_status, now.isoformat(), sub_end.isoformat())
         )
         conn.commit()
         user_id = cur.lastrowid
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         row = cur.fetchone()
-        log_audit(user_id, "USER_CREATED", f"User {username or tg_id} created with initial 30d subscription")
+        log_audit(user_id, "USER_CREATED", f"User {clean_u or tg_id} created (role: {role}, status: {reg_status})")
 
     conn.close()
     return UserRecord(row)
@@ -193,7 +296,7 @@ async def get_or_create_user(session=None, telegram_user_id: str = "0", username
 def get_all_users_sync() -> List[UserRecord]:
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users ORDER BY id ASC")
+    cur.execute("SELECT * FROM users ORDER BY id DESC")
     rows = cur.fetchall()
     conn.close()
     return [UserRecord(r) for r in rows]
@@ -203,14 +306,14 @@ async def get_all_users(session=None) -> List[UserRecord]:
     return get_all_users_sync()
 
 
-
 def get_user_by_identifier_sync(identifier: str) -> Optional[UserRecord]:
     conn = _get_conn()
     cur = conn.cursor()
-    val = str(identifier).strip()
+    val = str(identifier).strip().lstrip("@")
     cur.execute(
-        "SELECT * FROM users WHERE telegram_user_id = ? OR username = ? COLLATE NOCASE",
-        (val, val)
+        """SELECT * FROM users 
+           WHERE telegram_user_id = ? OR username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE OR id = ?""",
+        (val, val, val, int(val) if val.isdigit() else -1)
     )
     row = cur.fetchone()
     conn.close()
@@ -221,57 +324,170 @@ async def get_user_by_identifier(session=None, identifier: str = "") -> Optional
     return get_user_by_identifier_sync(identifier)
 
 
-def create_new_user_sync(username: str, days: int = 30) -> UserRecord:
+def create_new_user_sync(username: str, days: int = 30, role: str = "user") -> UserRecord:
+    """Directly creates a user with ACTIVE status (for admin usage)."""
     conn = _get_conn()
     cur = conn.cursor()
-    clean_u = str(username).strip()
-    tg_id = f"user_{clean_u}"
+    clean_u = (username or "").lstrip("@").strip()
     now = datetime.now(timezone.utc)
     sub_end = now + timedelta(days=days)
+
     cur.execute(
-        """INSERT INTO users (telegram_user_id, username, role, subscription_start, subscription_end, is_active)
-           VALUES (?, ?, 'user', ?, ?, 1)""",
-        (tg_id, clean_u, now.isoformat(), sub_end.isoformat())
+        """INSERT INTO users (telegram_user_id, username, role, registration_status, subscription_start, subscription_end, is_active)
+           VALUES (?, ?, ?, 'ACTIVE', ?, ?, 1)""",
+        ("0", clean_u, role, now.isoformat(), sub_end.isoformat())
     )
     conn.commit()
     user_id = cur.lastrowid
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     row = cur.fetchone()
     conn.close()
-    log_audit(user_id, "USER_CREATED", f"User {clean_u} created with {days}d subscription")
+    log_audit(user_id, "ADMIN_CREATE_USER", f"Admin created user {clean_u} with {days} days")
     return UserRecord(row)
 
 
-async def create_new_user(session=None, username: str = "", days: int = 30) -> UserRecord:
-    return create_new_user_sync(username, days)
+def register_user_request_sync(
+    full_name_ar: str,
+    full_name_en: str,
+    email: str,
+    telegram_user_id: str,
+    username: str = None,
+) -> UserRecord:
+    """Registers a new user request in PENDING_APPROVAL status."""
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    clean_email = str(email).strip().lower()
+    clean_tg_id = str(telegram_user_id).strip()
+    clean_u = (username or "").lstrip("@").strip()
+    clean_ar = str(full_name_ar).strip()
+    clean_en = str(full_name_en).strip()
+
+    # Check if already exists
+    cur.execute(
+        "SELECT * FROM users WHERE telegram_user_id = ? OR email = ? COLLATE NOCASE",
+        (clean_tg_id, clean_email)
+    )
+    existing = cur.fetchone()
+
+    now = datetime.now(timezone.utc)
+    sub_end = now + timedelta(days=30)
+
+    if existing:
+        user_id = existing["id"]
+        cur.execute(
+            """UPDATE users 
+               SET full_name_ar = ?, full_name_en = ?, email = ?, username = ?, 
+                   registration_status = 'PENDING_APPROVAL', rejection_reason = NULL,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (clean_ar, clean_en, clean_email, clean_u, user_id)
+        )
+        conn.commit()
+        log_audit(user_id, "REGISTRATION_RESUBMITTED", f"Registration resubmitted by {clean_ar}")
+    else:
+        cur.execute(
+            """INSERT INTO users (
+                telegram_user_id, username, full_name_ar, full_name_en, email,
+                role, registration_status, subscription_start, subscription_end, is_active
+            ) VALUES (?, ?, ?, ?, ?, 'user', 'PENDING_APPROVAL', ?, ?, 1)""",
+            (clean_tg_id, clean_u, clean_ar, clean_en, clean_email, now.isoformat(), sub_end.isoformat())
+        )
+        conn.commit()
+        user_id = cur.lastrowid
+        log_audit(user_id, "REGISTRATION_SUBMITTED", f"New registration request by {clean_ar} ({clean_email})")
+
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return UserRecord(row)
 
 
-def get_latest_code_for_user_sync(user_id: int) -> Optional[Dict[str, Any]]:
+def approve_user_registration_sync(user_id: int, admin_id: str = "admin") -> tuple[UserRecord, str]:
+    """Admin approves registration: status becomes APPROVED, generates 30s OTP code."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    cur.execute(
+        """UPDATE users 
+           SET registration_status = 'APPROVED', approved_at = ?, approved_by = ?,
+               is_active = 1, rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (now_iso, str(admin_id), user_id)
+    )
+    conn.commit()
+    conn.close()
+
+    # Generate 30-second verification code for the user
+    otp_code = create_verification_code_sync(user_id, purpose="registration")
+    log_audit(user_id, "REGISTRATION_APPROVED", f"Approved by {admin_id}. 30s OTP generated.")
+
+    user = get_user_by_identifier_sync(str(user_id))
+    return user, otp_code
+
+
+def reject_user_registration_sync(user_id: int, reason: str = "", admin_id: str = "admin") -> UserRecord:
+    """Admin rejects registration."""
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, code, expires_at, used, created_at 
-           FROM verification_codes 
-           WHERE user_id = ? 
-           ORDER BY id DESC LIMIT 1""",
+        """UPDATE users 
+           SET registration_status = 'REJECTED', rejection_reason = ?, approved_by = ?,
+               is_active = 0, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (str(reason).strip() or "لم يتم استيفاء شروط التسجيل", str(admin_id), user_id)
+    )
+    conn.commit()
+    conn.close()
+
+    log_audit(user_id, "REGISTRATION_REJECTED", f"Rejected by {admin_id}. Reason: {reason}")
+    return get_user_by_identifier_sync(str(user_id))
+
+
+def suspend_user_sync(user_id: int, admin_id: str = "admin") -> UserRecord:
+    """Suspends a user account."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE users 
+           SET registration_status = 'SUSPENDED', is_active = 0, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
         (user_id,)
     )
-    row = cur.fetchone()
+    conn.commit()
     conn.close()
-    if not row:
-        return None
-    d = dict(row)
-    exp = datetime.fromisoformat(d["expires_at"])
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
-    d["is_valid"] = (not d["used"]) and (now < exp)
-    d["seconds_left"] = max(0, int((exp - now).total_seconds()))
-    return d
+    log_audit(user_id, "USER_SUSPENDED", f"User suspended by {admin_id}")
+    return get_user_by_identifier_sync(str(user_id))
 
 
-async def get_latest_code_for_user(session=None, user_id: int = 0) -> Optional[Dict[str, Any]]:
-    return get_latest_code_for_user_sync(user_id)
+def activate_user_sync(user_id: int, admin_id: str = "admin") -> UserRecord:
+    """Reactivates a user account."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE users 
+           SET registration_status = 'ACTIVE', is_active = 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+    log_audit(user_id, "USER_ACTIVATED", f"User activated by {admin_id}")
+    return get_user_by_identifier_sync(str(user_id))
+
+
+def get_pending_registrations_sync() -> list[dict]:
+    """Return all users waiting for approval."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM users WHERE registration_status = 'PENDING_APPROVAL' ORDER BY created_at DESC"
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 
 # ── Subscription Management ───────────────────────────────────────────────────
 def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
@@ -282,14 +498,35 @@ def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
     conn.close()
 
     if not row:
-        return {"active": False, "days_remaining": 0, "message": "المستخدم غير موجود"}
+        return {"active": False, "days_remaining": 0, "message": "المستخدم غير موجود", "status": "NOT_FOUND"}
 
     user = UserRecord(row)
-    if not user.is_active:
-        return {"active": False, "days_remaining": 0, "message": "الحساب معطل"}
+    if not user.is_active or user.registration_status in ("SUSPENDED", "REJECTED"):
+        return {
+            "active": False,
+            "days_remaining": 0,
+            "message": f"الحساب غير مفعل ({user.registration_status})",
+            "status": user.registration_status
+        }
+
+    if user.registration_status == "PENDING_APPROVAL":
+        return {
+            "active": False,
+            "days_remaining": 0,
+            "message": "طلب التسجيل قيد المراجعة من الإدارة",
+            "status": "PENDING_APPROVAL"
+        }
+
+    if user.registration_status == "APPROVED":
+        return {
+            "active": False,
+            "days_remaining": 0,
+            "message": "تم قبول الطلب، يرجى إدخال رمز التحقق (30 ثانية)",
+            "status": "APPROVED"
+        }
 
     if not user.subscription_end:
-        return {"active": False, "days_remaining": 0, "message": "لا يوجد اشتراك"}
+        return {"active": False, "days_remaining": 0, "message": "لا يوجد اشتراك", "status": "NO_SUBSCRIPTION"}
 
     now = datetime.now(timezone.utc)
     sub_end = user.subscription_end
@@ -300,13 +537,11 @@ def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
     total_sec = diff.total_seconds()
 
     if total_sec <= 0:
-        return {"active": False, "days_remaining": 0, "message": "انتهى الاشتراك"}
+        return {"active": False, "days_remaining": 0, "message": "انتهى الاشتراك (30 يوماً)", "status": "EXPIRED"}
 
-    import math
     days_remaining = max(1, int(math.ceil(total_sec / 86400)))
-
     message = f"متبقي على انتهاء الاشتراك {days_remaining} يوم"
-    return {"active": True, "days_remaining": days_remaining, "message": message}
+    return {"active": True, "days_remaining": days_remaining, "message": message, "status": "ACTIVE"}
 
 
 async def check_subscription(session=None, user_id: int = 0) -> Dict[str, Any]:
@@ -338,7 +573,8 @@ def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
 
     cur.execute(
         """UPDATE users 
-           SET subscription_start = ?, subscription_end = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+           SET subscription_start = ?, subscription_end = ?, is_active = 1,
+               registration_status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP
            WHERE id = ?""",
         (new_start.isoformat(), new_end.isoformat(), user_id)
     )
@@ -356,41 +592,58 @@ async def renew_subscription(session=None, user_id: int = 0, days: int = 30) -> 
     return renew_subscription_sync(user_id, days)
 
 
-# ── Verification Codes (5-digit, strictly 10s expiry) ─────────────────────────
-def create_verification_code_sync(user_id: int = 0) -> str:
-    code = f"{random.randint(10000, 99999)}"
-    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=10)
-
+# ── Verification Codes (Strictly 30s expiry) ──────────────────────────────────
+def create_verification_code_sync(user_id: int = 0, purpose: str = "auth") -> str:
+    """Generates a secure 5-digit OTP with exactly 30-second server TTL."""
+    # Invalidate previous unused codes for this user
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO verification_codes (user_id, code_hash, code, expires_at, used)
-           VALUES (?, ?, ?, ?, 0)""",
-        (user_id, code_hash, code, expires_at.isoformat())
+        "UPDATE verification_codes SET used = 1 WHERE user_id = ? AND used = 0",
+        (user_id,)
+    )
+
+    code = f"{random.randint(10000, 99999)}"
+    code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=OTP_TTL_SECONDS)
+
+    cur.execute(
+        """INSERT INTO verification_codes (user_id, code_hash, code, expires_at, used, attempts, purpose)
+           VALUES (?, ?, ?, ?, 0, 0, ?)""",
+        (user_id, code_hash, code, expires_at.isoformat(), purpose)
     )
     conn.commit()
     conn.close()
 
-    log_audit(user_id, "CODE_REQUESTED", "Verification code generated (10s expiry)")
+    log_audit(user_id, "CODE_REQUESTED", f"Verification code generated (30s expiry, purpose: {purpose})")
     return code
 
 
-async def create_verification_code(session=None, user_id: int = 0) -> str:
-    return create_verification_code_sync(user_id)
+async def create_verification_code(session=None, user_id: int = 0, purpose: str = "auth") -> str:
+    return create_verification_code_sync(user_id, purpose)
 
 
-def verify_code_sync(user_id: int = 0, code: str = "") -> bool:
+def verify_code_sync(user_id: int = 0, code: str = "", purpose: str = None) -> bool:
+    """Verifies a 5-digit code within the exact 30-second window."""
     code_hash = hashlib.sha256(str(code).strip().encode("utf-8")).hexdigest()
 
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT id, expires_at FROM verification_codes 
-           WHERE user_id = ? AND code_hash = ? AND used = 0
-           ORDER BY id DESC LIMIT 1""",
-        (user_id, code_hash)
-    )
+
+    if purpose:
+        cur.execute(
+            """SELECT id, expires_at, attempts FROM verification_codes 
+               WHERE user_id = ? AND code_hash = ? AND used = 0 AND purpose = ?
+               ORDER BY id DESC LIMIT 1""",
+            (user_id, code_hash, purpose)
+        )
+    else:
+        cur.execute(
+            """SELECT id, expires_at, attempts FROM verification_codes 
+               WHERE user_id = ? AND code_hash = ? AND used = 0
+               ORDER BY id DESC LIMIT 1""",
+            (user_id, code_hash)
+        )
     row = cur.fetchone()
 
     if not row:
@@ -399,27 +652,352 @@ def verify_code_sync(user_id: int = 0, code: str = "") -> bool:
         return False
 
     code_id = row["id"]
+    attempts = row["attempts"] + 1
+
+    # Check brute force threshold (max 5 attempts)
+    if attempts > 5:
+        cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (code_id,))
+        conn.commit()
+        conn.close()
+        log_audit(user_id, "CODE_BLOCKED", "Too many failed attempts for code")
+        return False
+
+    cur.execute("UPDATE verification_codes SET attempts = ? WHERE id = ?", (attempts, code_id))
+    conn.commit()
+
     exp_dt = datetime.fromisoformat(row["expires_at"])
     if exp_dt.tzinfo is None:
         exp_dt = exp_dt.replace(tzinfo=timezone.utc)
 
+    # Server-side 30-second TTL check
     if datetime.now(timezone.utc) > exp_dt:
         cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (code_id,))
         conn.commit()
         conn.close()
-        log_audit(user_id, "CODE_EXPIRED", "Verification code expired (exceeded 10 seconds)")
+        log_audit(user_id, "CODE_EXPIRED", f"Verification code expired (exceeded {OTP_TTL_SECONDS} seconds)")
         return False
 
+    # Valid! Mark code as used
     cur.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (code_id,))
     conn.commit()
     conn.close()
 
-    log_audit(user_id, "CODE_VERIFIED", "Verification code verified successfully")
+    log_audit(user_id, "CODE_VERIFIED", "Verification code verified successfully within 30s")
     return True
 
 
-async def verify_code(session=None, user_id: int = 0, code: str = "") -> bool:
-    return verify_code_sync(user_id, code)
+async def verify_code(session=None, user_id: int = 0, code: str = "", purpose: str = None) -> bool:
+    return verify_code_sync(user_id, code, purpose)
+
+
+def get_latest_code_for_user_sync(user_id: int) -> Optional[Dict[str, Any]]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, code, expires_at, used, created_at, purpose 
+           FROM verification_codes 
+           WHERE user_id = ? 
+           ORDER BY id DESC LIMIT 1""",
+        (user_id,)
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    exp = datetime.fromisoformat(d["expires_at"])
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    d["is_valid"] = (not d["used"]) and (now < exp)
+    d["seconds_left"] = max(0, int((exp - now).total_seconds()))
+    return d
+
+
+# ── Saved Reports Management (Active & Soft-Deleted) ──────────────────────────
+def save_report_full_sync(data: dict) -> None:
+    import json
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(data.get("service_code", "")).strip()
+    if not sc:
+        conn.close()
+        return
+
+    cur.execute(
+        """INSERT OR REPLACE INTO saved_reports (
+            service_code, user_id, telegram_user_id, national_id,
+            patient_name_ar, patient_name_en, nationality, nationality_en,
+            employer, employer_en, practitioner_name_ar, practitioner_name_en,
+            job_title_ar, job_title_en, hospital_name_ar, hospital_name_en,
+            hospital_type, report_type, admission_date, discharge_date,
+            leave_duration_days, issue_date, report_time, data_json,
+            is_deleted, created_at, updated_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )""",
+        (
+            sc,
+            int(data.get("user_id") or 0),
+            str(data.get("telegram_user_id") or "0"),
+            str(data.get("national_id") or ""),
+            str(data.get("patient_name_ar") or ""),
+            str(data.get("patient_name_en") or ""),
+            str(data.get("nationality") or ""),
+            str(data.get("nationality_en") or ""),
+            str(data.get("employer") or ""),
+            str(data.get("employer_en") or ""),
+            str(data.get("practitioner_name_ar") or ""),
+            str(data.get("practitioner_name_en") or ""),
+            str(data.get("job_title_ar") or ""),
+            str(data.get("job_title_en") or ""),
+            str(data.get("hospital_name_ar") or ""),
+            str(data.get("hospital_name_en") or ""),
+            str(data.get("hospital_type") or "government"),
+            str(data.get("report_type") or "GSL"),
+            str(data.get("admission_date") or ""),
+            str(data.get("discharge_date") or ""),
+            str(data.get("leave_duration_days") or "1"),
+            str(data.get("issue_date") or ""),
+            str(data.get("report_time") or ""),
+            json.dumps(data, ensure_ascii=False),
+        )
+    )
+    conn.commit()
+    conn.close()
+    log_audit(int(data.get("user_id") or 0), "REPORT_CREATED", f"Report {sc} created for {data.get('patient_name_ar')}")
+
+
+def update_saved_report_sync(service_code: str, data: dict, user_id: int = 0) -> bool:
+    """Updates an existing report in place."""
+    import json
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(service_code).strip()
+
+    cur.execute(
+        """UPDATE saved_reports 
+           SET national_id = ?, patient_name_ar = ?, patient_name_en = ?,
+               nationality = ?, nationality_en = ?, employer = ?, employer_en = ?,
+               practitioner_name_ar = ?, practitioner_name_en = ?,
+               job_title_ar = ?, job_title_en = ?, hospital_name_ar = ?,
+               hospital_name_en = ?, hospital_type = ?, report_type = ?,
+               admission_date = ?, discharge_date = ?, leave_duration_days = ?,
+               issue_date = ?, report_time = ?, data_json = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE service_code = ?""",
+        (
+            str(data.get("national_id") or ""),
+            str(data.get("patient_name_ar") or ""),
+            str(data.get("patient_name_en") or ""),
+            str(data.get("nationality") or ""),
+            str(data.get("nationality_en") or ""),
+            str(data.get("employer") or ""),
+            str(data.get("employer_en") or ""),
+            str(data.get("practitioner_name_ar") or ""),
+            str(data.get("practitioner_name_en") or ""),
+            str(data.get("job_title_ar") or ""),
+            str(data.get("job_title_en") or ""),
+            str(data.get("hospital_name_ar") or ""),
+            str(data.get("hospital_name_en") or ""),
+            str(data.get("hospital_type") or "government"),
+            str(data.get("report_type") or "GSL"),
+            str(data.get("admission_date") or ""),
+            str(data.get("discharge_date") or ""),
+            str(data.get("leave_duration_days") or "1"),
+            str(data.get("issue_date") or ""),
+            str(data.get("report_time") or ""),
+            json.dumps(data, ensure_ascii=False),
+            sc,
+        )
+    )
+    conn.commit()
+    updated = cur.rowcount > 0
+    conn.close()
+
+    if updated:
+        log_audit(user_id, "REPORT_UPDATED", f"Report {sc} updated by user {user_id}")
+    return updated
+
+
+def soft_delete_report_sync(service_code: str, user_id: int = 0, is_admin: bool = False) -> bool:
+    """Moves report to trash (is_deleted = 1)."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(service_code).strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    query = """UPDATE saved_reports 
+               SET is_deleted = 1, deleted_at = ?, deleted_by = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE service_code = ?"""
+    params = [now_iso, str(user_id), sc]
+    if user_id and not is_admin:
+        query += " AND user_id = ?"
+        params.append(user_id)
+
+    cur.execute(query, tuple(params))
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+
+    if ok:
+        log_audit(user_id, "REPORT_SOFT_DELETED", f"Report {sc} moved to trash by user {user_id}")
+    return ok
+
+
+def restore_report_sync(service_code: str, user_id: int = 0, is_admin: bool = False) -> bool:
+    """Restores report from trash (is_deleted = 0)."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(service_code).strip()
+
+    query = """UPDATE saved_reports 
+               SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
+               WHERE service_code = ?"""
+    params = [sc]
+    if user_id and not is_admin:
+        query += " AND user_id = ?"
+        params.append(user_id)
+
+    cur.execute(query, tuple(params))
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+
+    if ok:
+        log_audit(user_id, "REPORT_RESTORED", f"Report {sc} restored by user {user_id}")
+    return ok
+
+
+def permanent_delete_report_sync(service_code: str, user_id: int = 0) -> bool:
+    """Permanently deletes a report from database."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(service_code).strip()
+
+    cur.execute("DELETE FROM saved_reports WHERE service_code = ?", (sc,))
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+
+    if ok:
+        log_audit(user_id, "REPORT_PERMANENTLY_DELETED", f"Report {sc} permanently deleted by {user_id}")
+    return ok
+
+
+def get_all_saved_reports_sync(user_id: Optional[int] = None, telegram_user_id: Optional[str] = None, is_admin: bool = False) -> list[dict]:
+    """Returns active (non-deleted) reports. Admin sees all."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    if is_admin:
+        cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 0 ORDER BY created_at DESC")
+    elif user_id:
+        cur.execute("SELECT * FROM saved_reports WHERE user_id = ? AND is_deleted = 0 ORDER BY created_at DESC", (user_id,))
+    elif telegram_user_id and telegram_user_id != "0":
+        cur.execute("SELECT * FROM saved_reports WHERE telegram_user_id = ? AND is_deleted = 0 ORDER BY created_at DESC", (str(telegram_user_id),))
+    else:
+        cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 0 ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_trash_reports_sync(user_id: Optional[int] = None, is_admin: bool = False) -> list[dict]:
+    """Returns soft-deleted reports from trash bin."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    if is_admin:
+        cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    elif user_id:
+        cur.execute("SELECT * FROM saved_reports WHERE user_id = ? AND is_deleted = 1 ORDER BY deleted_at DESC", (user_id,))
+    else:
+        cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_single_saved_report_sync(service_code: str) -> Optional[dict]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM saved_reports WHERE service_code = ?", (str(service_code).strip(),))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ── Audit & System Summary ───────────────────────────────────────────────────
+def log_audit(user_id: Optional[int], action: str, details: str = ""):
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)",
+            (user_id, str(action), str(details))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to write audit log: {e}")
+
+
+def get_audit_logs_sync(limit: int = 50) -> list[dict]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT a.*, u.username, u.full_name_ar 
+           FROM audit_logs a 
+           LEFT JOIN users u ON a.user_id = u.id 
+           ORDER BY a.id DESC LIMIT ?""",
+        (limit,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_system_stats_sync() -> dict:
+    """Returns system metrics for Admin Overview."""
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT count(*) FROM users")
+    total_users = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM users WHERE registration_status = 'PENDING_APPROVAL'")
+    pending_regs = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM users WHERE registration_status = 'APPROVED'")
+    approved_users = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM users WHERE registration_status = 'REJECTED'")
+    rejected_users = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM users WHERE is_active = 1 AND registration_status = 'ACTIVE'")
+    active_users = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM users WHERE is_active = 0 OR registration_status = 'SUSPENDED'")
+    suspended_users = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM saved_reports WHERE is_deleted = 0")
+    total_reports = cur.fetchone()[0]
+
+    cur.execute("SELECT count(*) FROM saved_reports WHERE is_deleted = 1")
+    deleted_reports = cur.fetchone()[0]
+
+    conn.close()
+
+    return {
+        "total_users": total_users,
+        "pending_registrations": pending_regs,
+        "approved_users": approved_users,
+        "rejected_users": rejected_users,
+        "active_users": active_users,
+        "suspended_users": suspended_users,
+        "total_reports": total_reports,
+        "deleted_reports": deleted_reports,
+    }
 
 
 # ── Data Isolation & Report Ownership ─────────────────────────────────────────
@@ -468,81 +1046,3 @@ def get_user_reports_sync(user_id: int = 0) -> list[str]:
 
 async def get_user_reports(session=None, user_id: int = 0) -> list[str]:
     return get_user_reports_sync(user_id)
-
-
-# ── Audit Logging ─────────────────────────────────────────────────────────────
-def log_audit(user_id: Optional[int], action: str, details: str = ""):
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)",
-            (user_id, str(action), str(details))
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.warning(f"Failed to write audit log: {e}")
-
-
-# ── Saved Reports Management ──────────────────────────────────────────────────
-def save_report_full_sync(data: dict) -> None:
-    import json
-    conn = _get_conn()
-    cur = conn.cursor()
-    sc = str(data.get("service_code", "")).strip()
-    if not sc:
-        conn.close()
-        return
-    cur.execute(
-        """INSERT OR REPLACE INTO saved_reports (
-            service_code, user_id, telegram_user_id, national_id,
-            patient_name_ar, patient_name_en, nationality, nationality_en,
-            employer, employer_en, practitioner_name_ar, practitioner_name_en,
-            job_title_ar, job_title_en, hospital_name_ar, hospital_name_en,
-            hospital_type, report_type, admission_date, discharge_date,
-            leave_duration_days, issue_date, report_time, data_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-        (
-            sc,
-            int(data.get("user_id") or 0),
-            str(data.get("telegram_user_id") or "0"),
-            str(data.get("national_id") or ""),
-            str(data.get("patient_name_ar") or ""),
-            str(data.get("patient_name_en") or ""),
-            str(data.get("nationality") or ""),
-            str(data.get("nationality_en") or ""),
-            str(data.get("employer") or ""),
-            str(data.get("employer_en") or ""),
-            str(data.get("practitioner_name_ar") or ""),
-            str(data.get("practitioner_name_en") or ""),
-            str(data.get("job_title_ar") or ""),
-            str(data.get("job_title_en") or ""),
-            str(data.get("hospital_name_ar") or ""),
-            str(data.get("hospital_name_en") or ""),
-            str(data.get("hospital_type") or "government"),
-            str(data.get("report_type") or "GSL"),
-            str(data.get("admission_date") or ""),
-            str(data.get("discharge_date") or ""),
-            str(data.get("leave_duration_days") or "1"),
-            str(data.get("issue_date") or ""),
-            str(data.get("report_time") or ""),
-            json.dumps(data, ensure_ascii=False)
-        )
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_all_saved_reports_sync(user_id: Optional[int] = None, telegram_user_id: Optional[str] = None) -> list[dict]:
-    conn = _get_conn()
-    cur = conn.cursor()
-    if user_id:
-        cur.execute("SELECT * FROM saved_reports WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
-    elif telegram_user_id and telegram_user_id != "0":
-        cur.execute("SELECT * FROM saved_reports WHERE telegram_user_id = ? ORDER BY created_at DESC", (str(telegram_user_id),))
-    else:
-        cur.execute("SELECT * FROM saved_reports ORDER BY created_at DESC")
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
