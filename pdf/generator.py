@@ -498,6 +498,7 @@ def generate_pdf(data: dict, output_path) -> Path:
     )
 
     # ── QR code ────────────────────────────────────────────────────────────────
+    qr_size = 110 * pt  # Exact reference size
     qr_flowable = None
     if with_qr:
         try:
@@ -513,7 +514,6 @@ def generate_pdf(data: dict, output_path) -> Path:
             buf = BytesIO()
             qr_img.save(buf, "PNG")
             buf.seek(0)
-            qr_size = 120 * pt  # Exact reference size
             qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
             qr_flowable.hAlign = "CENTER"
         except ImportError:
@@ -524,6 +524,9 @@ def generate_pdf(data: dict, output_path) -> Path:
     if qr_flowable:
         r1_left.append(qr_flowable)
         r1_left.append(Spacer(1, 8 * pt))
+    else:
+        # Keep the exact same reserved space empty when QR is disabled
+        r1_left.append(Spacer(1, qr_size + 8 * pt))
     r1_left += [
         arb("للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة", 12.0, BLACK, TA_CENTER),
         Spacer(1, 2 * pt),
