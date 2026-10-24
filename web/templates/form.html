@@ -50,36 +50,70 @@
     .field input::placeholder{color:rgba(255,255,255,0.38)}
     .field select option{background:#0d3a8e;color:#fff}
         .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:center}
-    /* Clean date inputs - center calendar icon and hide placeholder text when empty */
-    .field input[type=date] {
+    /* Clean date inputs - centered calendar icon only, completely remove mm/dd/yyyy */
+    .field input[type=date], .field input[type=time] {
+      color-scheme: dark;
+      direction: ltr;
+      text-align: center;
       position: relative;
       cursor: pointer;
-      text-align: center;
-      direction: ltr;
     }
-    .field input[type=date]:not(.has-value)::-webkit-datetime-edit {
+    .field input[type=date]:not(.has-value) {
+      color: transparent !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: center center !important;
+      background-size: 20px 20px !important;
+    }
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit,
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit-fields-wrapper,
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit-text,
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit-month-field,
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit-day-field,
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit-year-field {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      font-size: 0 !important;
       color: transparent !important;
     }
-    .field input[type=date]::-webkit-calendar-picker-indicator {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      cursor: pointer;
-      filter: invert(1);
-      opacity: 0.85;
+    .field input[type=date]:not(.has-value)::-webkit-calendar-picker-indicator {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      opacity: 0 !important;
+      cursor: pointer !important;
+    }
+    .field input[type=date].has-value {
+      background-image: none !important;
+      color: #ffffff !important;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .field input[type=date].has-value::-webkit-datetime-edit,
+    .field input[type=date].has-value::-webkit-datetime-edit * {
+      display: inline-block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      font-size: 15px !important;
+      color: #ffffff !important;
     }
     .field input[type=date].has-value::-webkit-calendar-picker-indicator {
-      position: absolute;
-      right: 12px;
-      left: auto;
-      transform: none;
-      opacity: 0.7;
+      position: absolute !important;
+      top: 50% !important;
+      right: 12px !important;
+      left: auto !important;
+      transform: translateY(-50%) !important;
+      width: 18px !important;
+      height: 18px !important;
+      opacity: 0.75 !important;
+      cursor: pointer !important;
+      filter: invert(1) !important;
     }
-    .field input[type=date]::-webkit-datetime-edit-text { color: rgba(255,255,255,0.7); }
-    .field input[type=date]::-webkit-datetime-edit-month-field,
-    .field input[type=date]::-webkit-datetime-edit-day-field,
-    .field input[type=date]::-webkit-datetime-edit-year-field { color: #fff; }
-    .field input[type=date].has-value { color: #fff; }
 
     /* ── Row (2 cols) ─────────────────────────────────── */
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -270,11 +304,11 @@
   <div class="row">
     <div class="field">
       <label>📅 تاريخ الدخول</label>
-      <input type="date" id="admission_date" required onchange="onDateChange()">
+      <input type="date" id="admission_date" required onchange="onDateChange()" oninput="markDateFilled('admission_date')">
     </div>
     <div class="field">
       <label>📅 تاريخ الخروج</label>
-      <input type="date" id="discharge_date" required onchange="onDateChange()">
+      <input type="date" id="discharge_date" required onchange="onDateChange()" oninput="markDateFilled('discharge_date')">
     </div>
   </div>
 
@@ -288,7 +322,7 @@
   <!-- تاريخ الإصدار — full width -->
   <div class="field">
     <label>🗓️ تاريخ الإصدار</label>
-    <input type="date" id="issue_date" required onchange="markDateFilled('issue_date')">
+    <input type="date" id="issue_date" required onchange="markDateFilled('issue_date')" oninput="markDateFilled('issue_date')">
   </div>
 
   <!-- وقت الإصدار — underneath issue date, with AM / PM buttons -->
@@ -942,10 +976,8 @@ async function submitForm() {
       a.click();
       document.body.removeChild(a);
 
-      // If user is inside Telegram WebApp, notify WebApp
-      if (tg && tg.initData) {
-        tg.sendData(JSON.stringify({ service_code: sCode, status: 'success' }));
-      }
+      // Do NOT call tg.sendData here because Telegram will immediately close the WebApp!
+      // Keep the success screen open so user can download PDF and view details.
     } else {
       showErr('e3', '❌ ' + (json.error || 'حدث خطأ، حاول مجدداً'));
     }
@@ -958,26 +990,26 @@ async function submitForm() {
 </script>
 
 
-<!-- ── Success Modal ────────────────────────────────────────────────── -->
-<div id="success-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.92);backdrop-filter:blur(10px);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#0e3683;border:2px solid #38bdf8;border-radius:24px;padding:32px 24px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
-    <div style="font-size:52px;margin-bottom:10px;">🎉</div>
-    <h2 style="font-size:22px;margin-bottom:8px;color:#fff;font-weight:800">تم إصدار التقرير الطبي بنجاح!</h2>
-    <p style="font-size:14px;color:#cbd5e1;margin-bottom:18px;">تم إنشاء ملف الـ PDF وحفظ بيانات الإجازة بالكامل</p>
+<!-- ── Success Modal (Matches Image 2 Pixel-Perfect) ── -->
+<div id="success-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(14px);z-index:99999;display:none;align-items:center;justify-content:center;padding:18px;">
+  <div style="background:#0e3683;border:1.5px solid rgba(56,189,248,0.4);border-radius:24px;padding:32px 22px;max-width:400px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+    <div style="font-size:52px;margin-bottom:8px;line-height:1">🎉</div>
+    <h2 style="font-size:21px;margin-bottom:6px;color:#fff;font-weight:800;letter-spacing:-0.3px">تم إصدار التقرير الطبي بنجاح!</h2>
+    <p style="font-size:13.5px;color:#cbd5e1;margin-bottom:22px;line-height:1.4">تم إنشاء ملف الـ PDF وحفظ بيانات الإجازة بالكامل</p>
 
-    <div style="background:rgba(0,0,0,0.3);border:1px dashed #38bdf8;border-radius:14px;padding:12px;margin-bottom:22px;">
-      <div style="font-size:12px;color:#93c5fd;margin-bottom:4px;">رمز الخدمة المعتمد:</div>
-      <div id="res-service-code" style="font-size:20px;font-weight:800;color:#38bdf8;letter-spacing:1px;font-family:monospace;"></div>
+    <div style="background:rgba(0,0,0,0.32);border:1.5px dashed #38bdf8;border-radius:14px;padding:14px 12px;margin-bottom:22px;">
+      <div style="font-size:12px;color:#93c5fd;margin-bottom:6px;font-weight:600">رمز الخدمة المعتمد:</div>
+      <div id="res-service-code" style="font-size:22px;font-weight:800;color:#38bdf8;letter-spacing:1.5px;font-family:monospace;"></div>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <a id="btn-download-pdf" href="#" class="btn btn-submit" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;font-size:16px;text-decoration:none;border-radius:12px;">
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <a id="btn-download-pdf" href="#" class="btn" style="background:#22c55e;color:#fff;font-size:15.5px;font-weight:800;padding:14px;border-radius:14px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 15px rgba(34,197,94,0.35);">
         📥 تحميل ملف التقرير (PDF)
       </a>
-      <a id="btn-verify-portal" href="#" target="_blank" class="btn btn-prev" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;font-size:14px;text-decoration:none;border-radius:12px;">
+      <a id="btn-verify-portal" href="#" target="_blank" class="btn" style="background:rgba(56,189,248,0.12);border:1.5px solid #38bdf8;color:#38bdf8;font-size:14px;font-weight:700;padding:13px;border-radius:14px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;">
         🌐 فتح الاستعلام في منصة صحة
       </a>
-      <button type="button" class="btn" onclick="resetFormForNewReport()" style="padding:12px;font-size:14px;background:rgba(255,255,255,0.12);color:#fff;border-radius:12px;border:none;cursor:pointer;">
+      <button type="button" class="btn" onclick="resetFormForNewReport()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;font-size:13.5px;font-weight:600;padding:12px;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;">
         ➕ إنشاء تقرير إجازة جديدة
       </button>
     </div>
