@@ -64,7 +64,7 @@ PAGE_H = 1190.25 * pt  # ≈ 420mm  (A3 height)
 # We'll work top-down: y_from_top = PAGE_H - y_pdf
 MAR_L = 36 * pt    # left margin
 MAR_R = 36 * pt    # right margin  
-MAR_T = 36 * pt    # top margin
+MAR_T = 62 * pt    # top margin (matches Canva reference: 75px on 1448h)
 MAR_B = 36 * pt    # bottom margin
 
 USABLE_W = PAGE_W - MAR_L - MAR_R   # ≈ 770pt
@@ -291,10 +291,10 @@ def generate_pdf(data: dict, output_path) -> Path:
     dd_g      = _norm(data.get("discharge_date_gregorian", ""))
     dd_h      = _norm(data.get("discharge_date_hijri", ""))
     iss_g     = _norm(data.get("issue_date_gregorian", ""))
-    iss_long  = data.get("issue_date_long", iss_g)    # "Friday ،3 July 2026"
+    iss_long  = data.get("issue_date_long", iss_g)    # "Saturday, 24 October 2026"
     if iss_long:
-        iss_long = str(iss_long).replace(" ,", " ،").replace(",", " ،").replace("  ", " ")
-    iss_t     = data.get("issue_time", "")             # "6:20 PM"
+        iss_long = str(iss_long).replace("،", ",").replace(" ,", ",").replace(", ", ", ").replace("  ", " ")
+    iss_t     = data.get("issue_time", "")             # "6:46 PM"
     dur       = str(data.get("leave_duration_days", ""))
     h_en      = (data.get("hospital_name_en", "") or "").strip()
     h_ar      = (data.get("hospital_name_ar", "") or "").strip()
@@ -324,10 +324,10 @@ def generate_pdf(data: dict, output_path) -> Path:
                 return f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
         return str(d_str)
 
-    # Duration display strings — match reference: "1 day (03-07-2026 to 03-07-2026)"
+    # Duration display strings — match Canva reference: "1 day ( 06-10-2026 to 06-10-2026 )"
     day_word = "day" if dur == "1" else "days"
-    dur_en   = f"{dur} {day_word} ({ad_g} to {dd_g})"
-    dur_ar   = f"{dur} يوم ({_to_ymd(dd_h)} الى {_to_ymd(ad_h)})"
+    dur_en   = f"{dur} {day_word} ( {ad_g} to {dd_g} )"
+    dur_ar   = f"{dur} يوم ( {_to_ymd(ad_h)} الى {_to_ymd(dd_h)} )"
 
     # ── Load images ─────────────────────────────────────────────────────────────
     seha_r = _reader(_SEHA_LOGO)
@@ -354,24 +354,19 @@ def generate_pdf(data: dict, output_path) -> Path:
                   150 * pt, 66 * pt,
                   anchor="nw")
 
-        # ── KSA CALLIGRAPHY — center top (compact, matching original crop) ────
+        # ── KSA CALLIGRAPHY — center top (compact, matching Canva reference) ────
         w_ksa, h_ksa = _draw_img(
             c, ksa_r,
-            PAGE_W / 2, H - MAR_T - 4,
+            PAGE_W / 2, H - MAR_T - 14,
             195 * pt, 55 * pt,
             anchor="n"
         )
-        ksa_bottom_y = H - MAR_T - 4 - h_ksa
+        ksa_bottom_y = H - MAR_T - 14 - h_ksa
 
         # "Kingdom of Saudi Arabia" — directly under calligraphy with no big gap
         c.setFillColor(BLACK)
         c.setFont(_SERIF_B, 11)
         c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 10, "Kingdom of Saudi Arabia")
-
-        # ── PAGE NUMBER (1/1) — bottom left corner ──────────────────────────────
-        c.setFont(_ENB if _ENB else "Helvetica-Bold", 9.0)
-        c.setFillColor(colors.HexColor("#555555"))
-        c.drawString(MAR_L, 18 * pt, "1/1")
 
         c.restoreState()
 
@@ -382,7 +377,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         pagesize=(PAGE_W, PAGE_H),
         leftMargin=MAR_L,
         rightMargin=MAR_R,
-        topMargin=158 * pt,
+        topMargin=170 * pt,
         bottomMargin=36 * pt,   # minimal — all footer content is in the story
     )
 
@@ -391,18 +386,18 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     # ── TITLES ─────────────────────────────────────────────────────────────────
     story.append(arb("تقرير إجازة مرضية", 23, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 6 * pt))
+    story.append(Spacer(1, 4 * pt))
     story.append(enb("Sick Leave Report", 19.5, C_TITLE_EN, TA_CENTER))
-    story.append(Spacer(1, 16 * pt))
+    story.append(Spacer(1, 24 * pt))
 
     # ── DATA TABLE ──────────────────────────────────────────────────────────────
-    CL_EN = BODY_W * 0.18
-    CV    = BODY_W * 0.29
-    CV2   = BODY_W * 0.29
-    CL_AR = BODY_W * 0.24
+    CL_EN = BODY_W * 0.212
+    CV    = BODY_W * 0.309
+    CV2   = BODY_W * 0.310
+    CL_AR = BODY_W * 0.169
 
-    LSZ_EN = 13.5   # English label font size (Serif Bold)
-    LSZ_AR = 14.0   # Arabic label font size (Tahoma Bold)
+    LSZ_EN = 13.0   # English label font size (Serif Bold)
+    LSZ_AR = 13.5   # Arabic label font size (Noto Naskh Bold)
     VSZ    = 12.0   # Value font size
     NSZ    = 10.5   # Smaller for long names
 
@@ -418,7 +413,15 @@ def generate_pdf(data: dict, output_path) -> Path:
     def val_a(t, sz=VSZ):
         return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
 
-    ROW_H = 41.5 * pt
+    ROW_H = 37.0 * pt
+
+    # Employer row: if only Arabic or English is provided, span across middle columns centered
+    if emp_en and emp_ar and emp_en.strip() != emp_ar.strip():
+        emp_row = (lbl_e("Employer"), val_e(emp_en, NSZ), val_a(emp_ar, NSZ), lbl_a("جهة العمل"), False, False)
+    else:
+        emp_val = emp_ar or emp_en
+        emp_widget = val_a(emp_val, NSZ) if has_ar(emp_val) else val_e(emp_val, NSZ)
+        emp_row = (lbl_e("Employer"), emp_widget, "", lbl_a("جهة العمل"), True, False)
 
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
@@ -434,7 +437,7 @@ def generate_pdf(data: dict, output_path) -> Path:
         (lbl_e("National ID / Iqama", 12.0), val_e(nid),       "",                     lbl_a("رقم الهوية / الإقامة", 13.0),
                                                                                                       True,  False),
         (lbl_e("Nationality"),         val_e(nat_en),          val_a(nat_ar),          lbl_a("الجنسية"),               False, False),
-        (lbl_e("Employer"),            val_e(emp_en),          val_a(emp_ar),          lbl_a("جهة العمل"),             False, False),
+        emp_row,
         (lbl_e("Practitioner Name", 12.0), val_e(p_en, NSZ),   val_a(p_ar, NSZ),       lbl_a("اسم الممارس"),           False, False),
         (lbl_e("Position"),            val_e(pos_en),          val_a(pos_ar),          lbl_a("المسمى الوظيفى"),        False, False),
     ]
@@ -463,17 +466,17 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
     tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 9),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+        ("TOPPADDING",    (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("GRID",          (0, 0), (-1, -1), 0.6, C_BORDER),
         ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
     ] + extras))
 
     story.append(tbl)
-    story.append(Spacer(1, 35 * pt))
+    story.append(Spacer(1, 30 * pt))
 
     # ══════════════════════════════════════════════════════════════════════════
     # FOOTER — 2-row table (exact match to original reference):
@@ -484,7 +487,7 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     verify_ar       = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
     verify_en       = "To check the report please visit Seha's offical website"
-    verify_url_text = "https://www.seha.sa/#/inquiries/slenquiry"
+    verify_url_text = "www.seha.sa/#/inquiries/slenquiry"
     verify_url_href = "https://seha-8xj.pages.dev/"
 
     url_para = Paragraph(
