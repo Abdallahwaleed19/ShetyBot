@@ -185,6 +185,11 @@ def init_db_sync() -> None:
         ("saved_reports", "deleted_at", "TEXT"),
         ("saved_reports", "deleted_by", "TEXT"),
         ("saved_reports", "updated_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+        ("saved_reports", "nationality_en", "TEXT"),
+        ("saved_reports", "employer_en", "TEXT"),
+        ("saved_reports", "practitioner_name_en", "TEXT"),
+        ("saved_reports", "job_title_en", "TEXT"),
+        ("saved_reports", "hospital_name_en", "TEXT"),
     ]
     for tbl, col, col_type in alter_queries:
         try:

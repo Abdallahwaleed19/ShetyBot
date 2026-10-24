@@ -125,7 +125,7 @@ async def send_telegram_message_safe(chat_id: str, html_text: str):
     if not bot_token or not chat_id or str(chat_id) in ("0", "-1"):
         return
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
             await client.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
                 json={"chat_id": str(chat_id), "text": html_text, "parse_mode": "HTML"}
@@ -176,7 +176,11 @@ async def get_current_user(request: Request) -> User:
             )
 
     # 3. Fallback to Telegram WebApp user
-    telegram_user_id = request.query_params.get("telegram_user_id") or "0"
+    telegram_user_id = (
+        request.headers.get("x-telegram-user-id")
+        or request.query_params.get("telegram_user_id")
+        or "0"
+    ).strip()
     u_rec = get_user_by_identifier_sync(telegram_user_id)
     if u_rec:
         return User(
@@ -366,18 +370,16 @@ async def submit_report(
             "include_barcode":           with_barcode,
         }
 
-        # Generate PDF
+        # Generate PDF (fast & isolated thread)
         from pdf.generator import generate_pdf
         pdf_path = REPORTS_DIR / f"{service_code}.pdf"
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, generate_pdf, pdf_data, pdf_path)
+        await asyncio.to_thread(generate_pdf, pdf_data, pdf_path)
 
         # Track ownership in database for data isolation
         try:
-            async for s in get_session():
-                await record_report_ownership(s, service_code, current_user.id, current_user.telegram_user_id)
-        except Exception:
-            pass
+            record_report_ownership_sync(service_code, current_user.id, current_user.telegram_user_id)
+        except Exception as e:
+            logger.warning(f"Failed to record ownership: {e}")
 
         # Save to Cloudflare Worker (D1) and local SQLite
         report_data = {
@@ -413,9 +415,16 @@ async def submit_report(
         except Exception as e:
             logger.warning(f"Failed to save locally: {e}")
 
-        worker_result = await create_report(report_data)
-        if not worker_result.get("success"):
-            logger.warning("Worker save skipped/failed: %s", worker_result.get("error"))
+        # Sync to Cloudflare Worker (D1) asynchronously in background so response never hangs
+        async def _sync_worker():
+            try:
+                res = await create_report(report_data)
+                if not res.get("success"):
+                    logger.warning("Worker save skipped/failed: %s", res.get("error"))
+            except Exception as e:
+                logger.warning(f"Worker background sync exception: {e}")
+
+        asyncio.create_task(_sync_worker())
 
         log_audit(current_user.id, "REPORT_CREATED", f"Created report {service_code} for {patient_name_ar}")
         return JSONResponse({"success": True, "service_code": service_code})
@@ -555,7 +564,7 @@ async def api_register_user(
 
         # 1. Send Email Notification to Admin
         asyncio.create_task(
-            asyncio.to_thread(send_admin_new_registration_notification, user_dict)
+            send_admin_new_registration_notification(user_dict)
         )
 
         # 2. Send Telegram Notification to Admin
@@ -721,36 +730,73 @@ async def api_request_code(username: str = Form(...)):
     if not user:
         return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
 
-    sub = check_subscription_sync(user.id)
-    if not sub["active"] and user.role != "admin":
-        return JSONResponse({
-            "success": False,
-            "error": "عذراً، انتهت فترة اشتراك هذا الحساب (30 يوماً). يرجى التواصل مع الإدارة للتجديد.",
-            "expired": True,
-            "days_remaining": 0
-        })
+    is_admin = (
+        user.role == "admin"
+        or str(user.telegram_user_id) == ADMIN_TELEGRAM_ID
+        or (user.username and user.username.lower() == ADMIN_USERNAME.lower())
+        or (user.email and user.email.lower() == ADMIN_EMAIL.lower())
+    )
+
+    if not is_admin:
+        if user.registration_status == "PENDING_APPROVAL":
+            return JSONResponse({
+                "success": False,
+                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@As1_oi). ستصلك رسالة فور الموافقة على الحساب.",
+                "status": "PENDING_APPROVAL"
+            })
+        if user.registration_status == "REJECTED":
+            return JSONResponse({
+                "success": False,
+                "error": f"تم رفض طلب التسجيل لهذا الحساب ({user.rejection_reason or 'يرجى التواصل مع الإدارة'}).",
+                "status": "REJECTED"
+            })
+        if user.registration_status == "SUSPENDED":
+            return JSONResponse({
+                "success": False,
+                "error": "تم إيقاف هذا الحساب مؤقتاً. يرجى التواصل مع الإدارة للتجديد.",
+                "status": "SUSPENDED"
+            })
+        if user.registration_status == "ACTIVE":
+            sub = check_subscription_sync(user.id)
+            if not sub["active"] or sub["days_remaining"] <= 0:
+                return JSONResponse({
+                    "success": False,
+                    "error": "عذراً، انتهت فترة اشتراك هذا الحساب (30 يوماً). يرجى التواصل مع الإدارة للتجديد.",
+                    "expired": True,
+                    "days_remaining": 0
+                })
 
     code = create_verification_code_sync(user.id)
 
-    # 1. Send to user email if available
+    # 1. Send OTP to User's Email
     if user.email:
         asyncio.create_task(
-            asyncio.to_thread(send_user_otp_email, user.email, code, user.full_name_ar or user.username or "")
+            send_user_otp_email(user.email, code, user.full_name_ar or user.username or "")
         )
 
-    # 2. Send Telegram notification to Admin
-    msg = (
-        f"🔔 <b>رمز دخول مؤقت جديد (30 ثانية)</b>\n\n"
+    # 2. Send OTP to User's Telegram if known
+    if user.telegram_user_id and str(user.telegram_user_id) not in ("0", "-1"):
+        user_tg_msg = (
+            f"🔐 <b>رمز التحقق الخاص بك (30 ثانية)</b>\n\n"
+            f"🔑 <b>الرمز:</b> <code>{code}</code>\n"
+            f"⏳ <b>المدة:</b> 30 ثانية فقط!\n\n"
+            f"أدخل الرمز الآن في نموذج صحتي لتفعيل اشتراكك لمدة 30 يوماً."
+        )
+        asyncio.create_task(send_telegram_message_safe(user.telegram_user_id, user_tg_msg))
+
+    # 3. Notify Admin on Telegram for real-time tracking
+    admin_msg = (
+        f"🔔 <b>طلب رمز دخول مؤقت (30 ثانية)</b>\n\n"
         f"👤 <b>المستخدم:</b> <code>{user.username or user.telegram_user_id}</code>\n"
         f"📧 <b>البريد:</b> {user.email or '-'}\n"
         f"🔑 <b>رمز الدخول:</b> <code>{code}</code>\n"
         f"⏳ <b>المدة:</b> 30 ثانية فقط!"
     )
-    asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, msg))
+    asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_msg))
 
     return JSONResponse({
         "success": True,
-        "message": "تم إنشاء رمز التحقق (صالح لمدة 30 ثانية)",
+        "message": "تم إرسال رمز التحقق بنجاح (صالح لمدة 30 ثانية)",
         "expires_in": OTP_TTL_SECONDS
     })
 
@@ -772,8 +818,19 @@ async def api_verify_code(username: str = Form(...), code: str = Form(...)):
             "error": "الرمز غير صحيح أو انتهت صلاحيته (30 ثانية). يرجى طلب رمز جديد."
         })
 
+    # Activate user and start 30-day subscription upon successful verification
+    if user.registration_status == "APPROVED":
+        activate_user_sync(user.id)
+        renew_subscription_sync(user.id, days=30)
+    elif user.registration_status == "ACTIVE":
+        sub_chk = check_subscription_sync(user.id)
+        if not sub_chk["active"] or sub_chk["days_remaining"] <= 0:
+            renew_subscription_sync(user.id, days=30)
+
     sub = check_subscription_sync(user.id)
     token = _make_token(user.id)
+
+    log_audit(user.id, "OTP_VERIFIED", f"User {user.username or user.email} verified 30s OTP and logged in")
 
     return JSONResponse({
         "success": True,
@@ -1054,8 +1111,7 @@ async def api_admin_approve_registration(
     # 1. Send OTP to User's Email
     if user_rec.email:
         asyncio.create_task(
-            asyncio.to_thread(
-                send_user_otp_email,
+            send_user_otp_email(
                 user_rec.email,
                 otp_code,
                 user_rec.full_name_ar or user_rec.username or "المستخدم الكريم"

@@ -34,7 +34,7 @@ async def get_client() -> httpx.AsyncClient:
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(
             base_url=WORKER_URL,
-            timeout=30.0,
+            timeout=8.0,
             headers=_headers(),
         )
     return _client

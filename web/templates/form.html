@@ -967,7 +967,7 @@ async function submitForm() {
   fd.append('hospital_type',        document.getElementById('hospital_type').value);
 
   // User identifiers
-  const uid = tg?.initDataUnsafe?.user?.id || 0;
+  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || new URLSearchParams(window.location.search).get('telegram_user_id') || '0';
   fd.append('telegram_user_id', uid);
   fd.append('username', username);
 
@@ -976,19 +976,29 @@ async function submitForm() {
   if (logo) fd.append('logo', logo);
 
   try {
-    const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`;
+    const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'x-auth-token': token,
-        'x-username': username
+        'x-username': username,
+        'x-telegram-user-id': String(uid)
       },
       body: fd
     });
-    const json = await res.json();
+
+    let json;
+    try {
+      json = await res.json();
+    } catch (parseErr) {
+      document.getElementById('loading').classList.remove('show');
+      showErr('e3', `❌ خطأ من الخادم (${res.status})`);
+      return;
+    }
+
     document.getElementById('loading').classList.remove('show');
 
-    if (json.success) {
+    if (json && json.success) {
       const sCode = json.service_code;
 
       // Set up Success Modal
@@ -1004,15 +1014,12 @@ async function submitForm() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-
-      // Do NOT call tg.sendData here because Telegram will immediately close the WebApp!
-      // Keep the success screen open so user can download PDF and view details.
     } else {
-      showErr('e3', '❌ ' + (json.error || 'حدث خطأ، حاول مجدداً'));
+      showErr('e3', '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً'));
     }
   } catch (ex) {
     document.getElementById('loading').classList.remove('show');
-    showErr('e3', '❌ فشل الاتصال بالخادم');
+    showErr('e3', '❌ تعذر الاتصال بالخادم، حاول ثانية');
     console.error(ex);
   }
 }
