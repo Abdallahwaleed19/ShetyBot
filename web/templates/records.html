@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>السجلات السابقة - SehtyBot</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: #0B2763;
+      --card-bg: rgba(255, 255, 255, 0.07);
+      --border: rgba(255, 255, 255, 0.15);
+      --accent: #3b9eff;
+      --green: #10b981;
+      --text: #ffffff;
+      --muted: #cbd5e1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      min-height: 100vh;
+      padding: 18px 14px 40px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    /* Top bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 14px;
+    }
+    .back-btn {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .back-btn:hover { background: rgba(255, 255, 255, 0.2); }
+    h1 {
+      font-size: 18px;
+      font-weight: 800;
+      text-align: center;
+      flex: 1;
+    }
+
+    /* Search bar */
+    .search-box {
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .search-input {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 15px rgba(59, 158, 255, 0.3);
+    }
+    .search-input::placeholder { color: rgba(255, 255, 255, 0.45); }
+
+    /* Records List */
+    .records-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Record Card */
+    .record-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      transition: transform .15s, border-color .2s;
+    }
+    .record-card:hover {
+      border-color: rgba(59, 158, 255, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+    .patient-name {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.3;
+    }
+    .patient-name-en {
+      font-size: 12.5px;
+      color: #93c5fd;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      direction: ltr;
+      text-align: right;
+      margin-top: 2px;
+    }
+
+    .head-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .badge-type {
+      background: var(--accent);
+      color: #fff;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .badge-code {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #38bdf8;
+      font-family: monospace;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
+    /* Details Grid */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px 14px;
+      margin-bottom: 16px;
+      font-size: 13.5px;
+    }
+    .grid-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .grid-label {
+      font-size: 11.5px;
+      color: #93c5fd;
+      opacity: 0.85;
+    }
+    .grid-value {
+      font-weight: 600;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    /* Actions row */
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 14px;
+    }
+    .action-btn {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all .15s;
+      font-family: inherit;
+    }
+    .action-btn:active { transform: scale(0.97); }
+
+    .btn-copy {
+      background: rgba(59, 158, 255, 0.18);
+      border: 1px solid rgba(59, 158, 255, 0.4);
+      color: #60a5fa;
+    }
+    .btn-copy:hover {
+      background: rgba(59, 158, 255, 0.3);
+      color: #fff;
+    }
+
+    .btn-edit {
+      background: #10b981;
+      color: #fff;
+    }
+    .btn-edit:hover { background: #059669; }
+
+    .btn-pdf {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #cbd5e1;
+      flex: 0 0 auto;
+      padding: 10px 14px;
+    }
+    .btn-pdf:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 50px 20px;
+      background: var(--card-bg);
+      border-radius: 20px;
+      border: 1.5px dashed var(--border);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .empty-desc { font-size: 13.5px; opacity: 0.75; margin-bottom: 20px; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #10b981;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      z-index: 99999;
+      opacity: 0;
+      transition: all .25s ease-out;
+      pointer-events: none;
+    }
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Header -->
+  <div class="top-bar">
+    <a href="/form" class="back-btn" id="btn-back">← فتح النموذج</a>
+    <h1>📋 سجلات وبيانات الأشخاص</h1>
+    <span style="font-size:12px;opacity:0.75" id="rec-count">0 سجل</span>
+  </div>
+
+  <!-- Search Input -->
+  <div class="search-box">
+    <input type="text" id="searchInput" class="search-input" placeholder="🔍 ابحث بالاسم، أو رقم الهوية، أو رمز الخدمة..." oninput="filterRecords()">
+  </div>
+
+  <!-- Records Container -->
+  <div id="recordsContainer" class="records-list">
+    <div style="text-align:center;padding:40px">
+      <div style="font-size:28px">⏳</div>
+      <p style="margin-top:10px;font-size:14px;opacity:.7">جاري تحميل السجلات...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast">✅ تم نسخ البيانات بنجاح!</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+let allRecords = [];
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// Copy person data to clipboard
+function copyPersonData(code) {
+  const r = allRecords.find(item => item.service_code === code);
+  if (!r) return;
+
+  const text = 
+`🏥 تقرير إجازة مرضية
+👤 اسم المريض: ${r.patient_name_ar || '-'}${r.patient_name_en ? ' (' + r.patient_name_en + ')' : ''}
+🪪 رقم الهوية: ${r.national_id || '-'}
+🌍 الجنسية: ${r.nationality || '-'}${r.nationality_en ? ' (' + r.nationality_en + ')' : ''}
+⏱️ مدة الإجازة: ${r.leave_duration_days || '1'} يوم (من ${r.admission_date || '-'} إلى ${r.discharge_date || '-'})
+🗓️ تاريخ الإصدار: ${r.issue_date || '-'} ${r.report_time || ''}
+🏥 المستشفى: ${r.hospital_name_ar || '-'}
+👨‍⚕️ الممارس: ${r.practitioner_name_ar || '-'}
+🔑 رمز الخدمة: ${r.service_code || '-'}`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`📋 تم نسخ بيانات (${r.patient_name_ar || code}) بنجاح!`);
+  }).catch(() => {
+    prompt('نسخ بيانات الشخص:', text);
+  });
+}
+
+// Edit person data -> opens form pre-filled
+function editPersonData(code) {
+  window.location.href = `/form?edit=${encodeURIComponent(code)}`;
+}
+
+// Render cards
+function renderRecords(records) {
+  const container = document.getElementById('recordsContainer');
+  document.getElementById('rec-count').textContent = `${records.length} سجل`;
+
+  if (!records || records.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📂</div>
+        <div class="empty-title">لا توجد سجلات سابقة</div>
+        <div class="empty-desc">لم يتم إصدار أي تقارير بعد أو لا توجد نتائج مطابقة لبحثك</div>
+        <a href="/form" class="back-btn" style="background:#3b9eff;border-color:#3b9eff;padding:12px 20px;font-size:15px">
+          ➕ إنشاء أول تقرير طبي
+        </a>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = records.map(r => `
+    <div class="record-card">
+      <div class="card-head">
+        <div>
+          <div class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</div>
+          ${r.patient_name_en ? `<div class="patient-name-en">${r.patient_name_en}</div>` : ''}
+        </div>
+        <div class="head-badges">
+          <span class="badge-type">${r.report_type || 'GSL'}</span>
+          <span class="badge-code">${r.service_code}</span>
+        </div>
+      </div>
+
+      <div class="card-grid">
+        <div class="grid-item">
+          <span class="grid-label">🪪 رقم الهوية</span>
+          <span class="grid-value">${r.national_id || '-'}</span>
+        </div>
+        <div class="grid-item">
+          <span class="grid-label">⏱️ مدة الإجازة</span>
+          <span class="grid-value" style="color:#10b981;font-weight:700">
+            ${r.leave_duration_days || '1'} يوم (${r.admission_date || ''} → ${r.discharge_date || ''})
+          </span>
+        </div>
+        <div class="grid-item">
+          <span class="grid-label">🗓️ تاريخ الإصدار</span>
+          <span class="grid-value">${r.issue_date || '-'}</span>
+        </div>
+        <div class="grid-item">
+          <span class="grid-label">🌍 الجنسية</span>
+          <span class="grid-value">${r.nationality || r.nationality_en || '-'}</span>
+        </div>
+        <div class="grid-item">
+          <span class="grid-label">🏥 المستشفى</span>
+          <span class="grid-value">${r.hospital_name_ar || '-'}</span>
+        </div>
+        <div class="grid-item">
+          <span class="grid-label">👨‍⚕️ الممارس</span>
+          <span class="grid-value">${r.practitioner_name_ar || '-'}</span>
+        </div>
+      </div>
+
+      <!-- Actions: Copy button & Pencil Edit button -->
+      <div class="card-actions">
+        <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
+          📋 نسخ البيانات
+        </button>
+        <button class="action-btn btn-edit" onclick="editPersonData('${r.service_code}')" title="تعديل بيانات الشخص">
+          ✏️ تعديل
+        </button>
+        <a class="action-btn btn-pdf" href="/api/download/${r.service_code}" download="SickLeave_${r.service_code}.pdf" title="تحميل PDF">
+          📥 PDF
+        </a>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Search / Filter
+function filterRecords() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (!q) {
+    renderRecords(allRecords);
+    return;
+  }
+  const filtered = allRecords.filter(r => {
+    return (r.patient_name_ar && r.patient_name_ar.toLowerCase().includes(q)) ||
+           (r.patient_name_en && r.patient_name_en.toLowerCase().includes(q)) ||
+           (r.national_id && r.national_id.includes(q)) ||
+           (r.service_code && r.service_code.toLowerCase().includes(q)) ||
+           (r.hospital_name_ar && r.hospital_name_ar.toLowerCase().includes(q));
+  });
+  renderRecords(filtered);
+}
+
+// Load records on start
+async function loadRecords() {
+  const token = localStorage.getItem('sehty_token') || '';
+  const username = localStorage.getItem('sehty_username') || '';
+  const uid = tg?.initDataUnsafe?.user?.id || 0;
+
+  try {
+    const url = `/api/all-records?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${uid}`;
+    const res = await fetch(url, {
+      headers: {
+        'x-auth-token': token,
+        'x-username': username
+      }
+    });
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data)) {
+      allRecords = json.data;
+    } else {
+      allRecords = [];
+    }
+  } catch (e) {
+    console.error('Failed to load records:', e);
+    allRecords = [];
+  }
+  renderRecords(allRecords);
+}
+
+document.addEventListener('DOMContentLoaded', loadRecords);
+</script>
+</body>
+</html>

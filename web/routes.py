@@ -53,6 +53,8 @@ from db.database import (
     get_user_by_identifier_sync,
     create_new_user_sync,
     get_latest_code_for_user_sync,
+    save_report_full_sync,
+    get_all_saved_reports_sync,
 )
 import hashlib
 from db.models import User
@@ -325,6 +327,12 @@ async def submit_report(
             "telegram_user_id":     current_user.telegram_user_id,
             "user_id":              current_user.id,  # For data isolation
         }
+                # Save to local SQLite database for instant retrieval in Records page
+        try:
+            save_report_full_sync(report_data)
+        except Exception as e:
+            logger.warning(f"Failed to save locally: {e}")
+
         worker_result = await create_report(report_data)
         if not worker_result.get("success"):
             import logging
@@ -522,6 +530,37 @@ async def api_check_session(token: str = Query(...)):
         "days_remaining": sub["days_remaining"],
         "message": sub["message"]
     })
+
+
+# ── Records & Previous Persons Management ─────────────────────────────────────
+@router.get("/records", response_class=HTMLResponse)
+async def records_page(request: Request):
+    return templates.TemplateResponse(request, "records.html", {})
+
+
+@router.get("/api/all-records")
+async def api_all_records(request: Request, current_user: User = Depends(get_current_user)):
+    """Return all previous reports for the user (or all if admin)"""
+    uid = current_user.id if current_user.role != "admin" else None
+    tg_id = current_user.telegram_user_id if current_user.role != "admin" else None
+
+    # 1. Fetch from local SQLite saved_reports
+    local_reports = get_all_saved_reports_sync(uid, tg_id)
+    if local_reports:
+        return {"success": True, "data": local_reports}
+
+    # 2. Fallback to Cloudflare Worker
+    from db.worker_client import get_client
+    try:
+        client = await get_client()
+        params = {"telegram_user_id": tg_id} if tg_id and tg_id != "0" else {}
+        resp = await client.get("/api/reports", params=params)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+
+    return {"success": True, "data": []}
 
 # ── Admin Panel ───────────────────────────────────────────────────────────────
 @router.get("/admin", response_class=HTMLResponse)

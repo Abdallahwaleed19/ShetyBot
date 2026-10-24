@@ -34,20 +34,24 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
+    base_url = webapp_url.replace("/form", "")
+    records_url = f"{base_url}/records"
+
     keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton(
-            "📋 فتح نموذج الإجازة المرضية",
-            web_app=WebAppInfo(url=webapp_url),
-        )]],
+        [
+            [
+                KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=webapp_url)),
+                KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=records_url)),
+            ]
+        ],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        one_time_keyboard=False,
     )
 
     await update.message.reply_text(
-        "🏥 *مرحباً في نظام الإجازات المرضية* (@SehtyBot)\n\n"
-        "اضغط الزر لفتح النموذج وملء بيانات الإجازة.\n\n"
-        "💡 للتعديل على تقرير سابق: /edit\n"
-        "📄 لعرض آخر تقرير: /myreport",
+        "🏥 *مرحباً بك في نظام الإجازات المرضية* (@SehtyBot)\n\n"
+        "• اضغط *📋 فتح نموذج الإجازة المرضية* لإصدار تقرير جديد.\n"
+        "• اضغط *➕ البيانات السابقة* لعرض سجلات الأشخاص ونسخها وتعديلها.",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
@@ -268,3 +272,25 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         f"👨‍⚕️ الممارس: {r.get('practitioner_name_ar', '')}\n"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
+
+
+# ── Text Handler for "+" & Records Menu ─────────────────────────────────────────
+async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    txt = (update.message.text or "").strip()
+    webapp_url = ctx.bot_data.get("webapp_url", "")
+    base_url = webapp_url.replace("/form", "")
+    records_url = f"{base_url}/records"
+
+    if any(k in txt for k in ["+", "➕", "بيانات", "سابق", "سجل", "سجلات", "تعديل"]):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 عرض البيانات السابقة", web_app=WebAppInfo(url=records_url))]
+        ])
+        await update.message.reply_text(
+            "📋 *سجلات وبيانات الأشخاص السابقة*\n\n"
+            "اضغط على الزر بالأسفل لفتح صفحة السجلات، حيث يمكنك:\n"
+            "• عرض بيانات المرضى في خانات منظمة.\n"
+            "• نسخ بيانات أي مريض بضغطة زر.\n"
+            "• تعديل بيانات أي شخص بالضغط على علامة القلم ✏️.",
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )

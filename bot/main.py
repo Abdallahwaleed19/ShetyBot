@@ -17,6 +17,7 @@ from config import BOT_TOKEN, PROXY_URL
 from bot.handlers import (
     start, handle_webapp_data, verify,
     edit_report, my_report, handle_callback,
+    handle_text_menu,
 )
 
 logging.basicConfig(
@@ -65,6 +66,7 @@ def main() -> None:
     app.add_handler(CommandHandler("myreport", my_report))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_menu))
 
     logger.info("Bot starting (polling)…")
     app.run_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])

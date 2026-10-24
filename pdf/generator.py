@@ -484,7 +484,7 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     verify_ar       = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
     verify_en       = "To check the report please visit Seha's offical website"
-    verify_url_text = "https://seha-8xj.pages.dev/"
+    verify_url_text = "https://www.seha.sa/#/inquiries/slenquiry"
     verify_url_href = "https://seha-8xj.pages.dev/"
 
     url_para = Paragraph(

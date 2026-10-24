@@ -100,6 +100,36 @@ def init_db_sync() -> None:
     )
     """)
     cur.execute("""
+        cur.execute('''
+    CREATE TABLE IF NOT EXISTS saved_reports (
+        service_code TEXT PRIMARY KEY,
+        user_id INTEGER,
+        telegram_user_id TEXT,
+        national_id TEXT,
+        patient_name_ar TEXT,
+        patient_name_en TEXT,
+        nationality TEXT,
+        nationality_en TEXT,
+        employer TEXT,
+        employer_en TEXT,
+        practitioner_name_ar TEXT,
+        practitioner_name_en TEXT,
+        job_title_ar TEXT,
+        job_title_en TEXT,
+        hospital_name_ar TEXT,
+        hospital_name_en TEXT,
+        hospital_type TEXT,
+        report_type TEXT,
+        admission_date TEXT,
+        discharge_date TEXT,
+        leave_duration_days TEXT,
+        issue_date TEXT,
+        report_time TEXT,
+        data_json TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
     CREATE TABLE IF NOT EXISTS report_ownership (
         service_code TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -453,3 +483,66 @@ def log_audit(user_id: Optional[int], action: str, details: str = ""):
         conn.close()
     except Exception as e:
         logger.warning(f"Failed to write audit log: {e}")
+
+
+# ── Saved Reports Management ──────────────────────────────────────────────────
+def save_report_full_sync(data: dict) -> None:
+    import json
+    conn = _get_conn()
+    cur = conn.cursor()
+    sc = str(data.get("service_code", "")).strip()
+    if not sc:
+        conn.close()
+        return
+    cur.execute(
+        """INSERT OR REPLACE INTO saved_reports (
+            service_code, user_id, telegram_user_id, national_id,
+            patient_name_ar, patient_name_en, nationality, nationality_en,
+            employer, employer_en, practitioner_name_ar, practitioner_name_en,
+            job_title_ar, job_title_en, hospital_name_ar, hospital_name_en,
+            hospital_type, report_type, admission_date, discharge_date,
+            leave_duration_days, issue_date, report_time, data_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+        (
+            sc,
+            int(data.get("user_id") or 0),
+            str(data.get("telegram_user_id") or "0"),
+            str(data.get("national_id") or ""),
+            str(data.get("patient_name_ar") or ""),
+            str(data.get("patient_name_en") or ""),
+            str(data.get("nationality") or ""),
+            str(data.get("nationality_en") or ""),
+            str(data.get("employer") or ""),
+            str(data.get("employer_en") or ""),
+            str(data.get("practitioner_name_ar") or ""),
+            str(data.get("practitioner_name_en") or ""),
+            str(data.get("job_title_ar") or ""),
+            str(data.get("job_title_en") or ""),
+            str(data.get("hospital_name_ar") or ""),
+            str(data.get("hospital_name_en") or ""),
+            str(data.get("hospital_type") or "government"),
+            str(data.get("report_type") or "GSL"),
+            str(data.get("admission_date") or ""),
+            str(data.get("discharge_date") or ""),
+            str(data.get("leave_duration_days") or "1"),
+            str(data.get("issue_date") or ""),
+            str(data.get("report_time") or ""),
+            json.dumps(data, ensure_ascii=False)
+        )
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_saved_reports_sync(user_id: Optional[int] = None, telegram_user_id: Optional[str] = None) -> list[dict]:
+    conn = _get_conn()
+    cur = conn.cursor()
+    if user_id:
+        cur.execute("SELECT * FROM saved_reports WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+    elif telegram_user_id and telegram_user_id != "0":
+        cur.execute("SELECT * FROM saved_reports WHERE telegram_user_id = ? ORDER BY created_at DESC", (str(telegram_user_id),))
+    else:
+        cur.execute("SELECT * FROM saved_reports ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

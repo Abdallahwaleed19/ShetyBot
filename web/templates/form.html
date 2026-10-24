@@ -49,15 +49,36 @@
     .field input[readonly]{opacity:.65;cursor:default;background:rgba(255,255,255,0.06)}
     .field input::placeholder{color:rgba(255,255,255,0.38)}
     .field select option{background:#0d3a8e;color:#fff}
-    .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:right}
-    /* Clean date inputs - no placeholder text */
-    .field input[type=date]::-webkit-datetime-edit { padding: 0; }
-    .field input[type=date]::-webkit-datetime-edit-fields-wrapper { padding: 0; }
-    .field input[type=date]::-webkit-datetime-edit-text { color: rgba(255,255,255,0.5); }
+        .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:center}
+    /* Clean date inputs - center calendar icon and hide placeholder text when empty */
+    .field input[type=date] {
+      position: relative;
+      cursor: pointer;
+      text-align: center;
+      direction: ltr;
+    }
+    .field input[type=date]:not(.has-value)::-webkit-datetime-edit {
+      color: transparent !important;
+    }
+    .field input[type=date]::-webkit-calendar-picker-indicator {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      cursor: pointer;
+      filter: invert(1);
+      opacity: 0.85;
+    }
+    .field input[type=date].has-value::-webkit-calendar-picker-indicator {
+      position: absolute;
+      right: 12px;
+      left: auto;
+      transform: none;
+      opacity: 0.7;
+    }
+    .field input[type=date]::-webkit-datetime-edit-text { color: rgba(255,255,255,0.7); }
     .field input[type=date]::-webkit-datetime-edit-month-field,
     .field input[type=date]::-webkit-datetime-edit-day-field,
     .field input[type=date]::-webkit-datetime-edit-year-field { color: #fff; }
-    .field input[type=date]:not(.has-value) { color: rgba(255,255,255,0.3); }
     .field input[type=date].has-value { color: #fff; }
 
     /* ── Row (2 cols) ─────────────────────────────────── */
@@ -101,29 +122,35 @@
     .logo-preview{width:72px;height:72px;border-radius:10px;object-fit:contain;background:#fff;display:none;margin:0 auto 8px}
     .logo-hint{font-size:12px;opacity:.6}
 
-    /* ── Barcode toggle ───────────────────────────────── */
+    /* ── Barcode toggle (Compact + checkmark slider) ── */
     .barcode-toggle{
-      display:flex;align-items:center;gap:12px;
-      background:var(--input);border:1.5px solid var(--border);border-radius:12px;
-      padding:14px;cursor:pointer;transition:border-color .2s
+      display:inline-flex;align-items:center;gap:10px;
+      background:var(--input);border:1.5px solid var(--border);border-radius:10px;
+      padding:8px 14px;cursor:pointer;transition:all .2s;
+      max-width:240px;margin:0 auto;
     }
     .barcode-toggle:hover{border-color:var(--accent)}
-    .barcode-toggle.enabled{border-color:var(--accent);background:rgba(59,158,255,0.12)}
+    .barcode-toggle.enabled{border-color:#10b981;background:rgba(16,185,129,0.12)}
     .toggle-switch{
-      position:relative;width:46px;height:26px;flex-shrink:0
+      position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer
     }
     .toggle-switch input{opacity:0;width:0;height:0}
     .toggle-slider{
       position:absolute;inset:0;background:rgba(255,255,255,0.2);
-      border-radius:26px;cursor:pointer;transition:.3s
+      border-radius:24px;cursor:pointer;transition:.25s
     }
     .toggle-slider:before{
-      content:'';position:absolute;height:20px;width:20px;
-      left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s
+      content:'';position:absolute;height:18px;width:18px;
+      left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.25s;
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;font-weight:900;color:#10b981;line-height:18px;text-align:center
     }
-    input:checked + .toggle-slider{background:var(--accent)}
-    input:checked + .toggle-slider:before{transform:translateX(20px)}
-    .barcode-label{font-size:14px;font-weight:600;flex:1}
+    input:checked + .toggle-slider{background:#10b981}
+    input:checked + .toggle-slider:before{
+      content:'✓';
+      transform:translateX(20px);
+    }
+    .barcode-label{font-size:13.5px;font-weight:700;flex:1}
 
     /* ── Buttons ─────────────────────────────────────── */
     .btn-row{display:flex;gap:10px;margin-top:20px;padding-bottom:20px}
@@ -205,18 +232,41 @@
     </div>
   </div>
 
-  <!-- نوع التقرير: GSL / PSL only -->
+  <!-- نوع التقرير: زر تظهر منه الخيارات GSL / PSL -->
   <div class="field">
     <label>نوع التقرير</label>
-    <div class="toggle-group">
-      <div class="tog sel" id="trt_gsl" onclick="pickReportType('GSL')">GSL</div>
-      <div class="tog"     id="trt_psl" onclick="pickReportType('PSL')">PSL</div>
+    <div style="position:relative">
+      <button type="button" id="btn-report-type-menu" onclick="toggleReportTypeMenu(event)"
+              style="width:100%;padding:13px 16px;background:var(--input);border:1.5px solid var(--border);border-radius:12px;color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .2s;font-family:inherit">
+        <span style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px">📄</span>
+          <span>نوع التقرير:</span>
+          <span id="selected-report-badge" style="background:#3b9eff;color:#fff;padding:3px 12px;border-radius:8px;font-size:14px;letter-spacing:1px;font-weight:800">GSL</span>
+        </span>
+        <span id="report-type-arrow" style="font-size:14px;color:#93c5fd;transition:transform .2s">▾</span>
+      </button>
+
+      <div id="report-type-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#0d3683;border:1.5px solid #3b9eff;border-radius:12px;overflow:hidden;z-index:90;box-shadow:0 12px 30px rgba(0,0,0,0.6)">
+        <div onclick="selectReportType('GSL')" style="padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
+          <div>
+            <div style="color:#38bdf8;font-size:15px;font-weight:800">GSL</div>
+            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">إجازة مرضية حكومية (Government Sick Leave)</div>
+          </div>
+          <span id="chk-gsl" style="color:#10b981;font-size:18px;font-weight:bold">✓</span>
+        </div>
+        <div onclick="selectReportType('PSL')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
+          <div>
+            <div style="color:#38bdf8;font-size:15px;font-weight:800">PSL</div>
+            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">إجازة مرضية خاصة (Private Sick Leave)</div>
+          </div>
+          <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
+        </div>
+      </div>
     </div>
     <input type="hidden" id="report_type" value="GSL">
   </div>
 
-
-  <!-- تاريخ الدخول / الخروج — compact, no placeholder text -->
+  <!-- تاريخ الدخول / الخروج — center calendar icon, no placeholder -->
   <div class="row">
     <div class="field">
       <label>📅 تاريخ الدخول</label>
@@ -235,20 +285,20 @@
     <input type="hidden" id="leave_duration" value="">
   </div>
 
-  <!-- تاريخ الإصدار — editable date -->
-  <div class="row">
-    <div class="field">
-      <label>🗓️ تاريخ الإصدار</label>
-      <input type="date" id="issue_date" required>
-    </div>
-    <div class="field">
-      <label>🕐 وقت الإصدار</label>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="time" id="issue_time" style="flex:1" dir="ltr">
-        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-          <div class="ampm-btn sel" id="am_btn" onclick="setAmPm('AM')">ص</div>
-          <div class="ampm-btn"     id="pm_btn" onclick="setAmPm('PM')">م</div>
-        </div>
+  <!-- تاريخ الإصدار — full width -->
+  <div class="field">
+    <label>🗓️ تاريخ الإصدار</label>
+    <input type="date" id="issue_date" required onchange="markDateFilled('issue_date')">
+  </div>
+
+  <!-- وقت الإصدار — underneath issue date, with AM / PM buttons -->
+  <div class="field">
+    <label>🕐 وقت الإصدار</label>
+    <div style="display:flex;gap:10px;align-items:center">
+      <input type="time" id="issue_time" style="flex:1" dir="ltr">
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <div class="ampm-btn sel" id="am_btn" onclick="setAmPm('AM')">AM</div>
+        <div class="ampm-btn"     id="pm_btn" onclick="setAmPm('PM')">PM</div>
       </div>
     </div>
   </div>
@@ -295,32 +345,13 @@
 
   <div class="field">
     <label>🌍 الجنسية — عربي</label>
-    <input type="text" id="nationality" placeholder="مثال: سعودي">
+    <input type="text" id="nationality" placeholder="مثال: سعودي" oninput="autoTranslateNationality()">
   </div>
 
   <div class="field ltr-field">
     <label>Nationality — English</label>
-    <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr">
+    <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr" oninput="onUserEditNationalityEn()">
   </div>
-
-  <!-- جهة العمل (changed from اسم المؤسسة) -->
-  <div class="field">
-    <label>🏢 جهة العمل</label>
-    <input type="text" id="employer" placeholder="اسم جهة العمل">
-  </div>
-
-  <!-- Institution Name — English: OPTIONAL -->
-  <div class="field ltr-field">
-    <label style="opacity:.7">Institution Name — English <span style="font-size:11px;opacity:.6">(اختياري)</span></label>
-    <input type="text" id="employer_en" placeholder="Employer / Institution (optional)" dir="ltr">
-  </div>
-
-  <div class="err" id="e2"></div>
-  <div class="btn-row">
-    <button class="btn btn-next" onclick="go(2,3)">التالي ←</button>
-    <button class="btn btn-prev" onclick="go(2,1)">→ السابق</button>
-  </div>
-</div>
 
 <!-- ═══════════════════════════════════════════════
      PAGE 3 — بيانات الممارس والمستشفى
@@ -378,18 +409,17 @@
   </div>
 
   <!-- ── إضافة الباركود (Optional barcode) ─── -->
-  <div class="field" style="margin-top:18px">
-    <label>الخيارات الإضافية</label>
+  <div class="field" style="margin-top:16px;text-align:center">
     <div class="barcode-toggle" id="barcode_toggle" onclick="toggleBarcode()">
       <label class="toggle-switch" onclick="event.stopPropagation()">
-        <input type="checkbox" id="include_barcode" onchange="toggleBarcode()">
-        <span class="toggle-slider"></span>
+        <input type="checkbox" id="include_barcode" onchange="syncBarcodeState()">
+        <span class="toggle-slider" onclick="toggleBarcode(); event.stopPropagation();"></span>
       </label>
-      <span class="barcode-label">إضافة الباركود</span>
-      <span style="font-size:20px">📷</span>
+      <span class="barcode-label">إضافة الباركود (QR)</span>
+      <span style="font-size:18px">📷</span>
     </div>
-    <div id="barcode_note" style="font-size:11px;opacity:.55;margin-top:6px;text-align:center;display:none">
-      سيُضاف رمز QR للتحقق في الوثيقة
+    <div id="barcode_note" style="font-size:11px;color:#93c5fd;margin-top:6px;display:none">
+      ✓ سيُضاف رمز QR للتحقق في الوثيقة
     </div>
   </div>
 
@@ -603,6 +633,112 @@ function pickType(t, syncReportType = true) {
     const isEditMode = Boolean(new URLSearchParams(window.location.search).get('edit'));
     if (!isEditMode && !_serviceCodeUserEdited) {
       document.getElementById('service_code').value = generateServiceCode(rType);
+    }
+  }
+}
+
+
+// ── Report Type Dropdown Menu ───────────────────────────────────────────────
+function toggleReportTypeMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('report-type-dropdown');
+  const arr = document.getElementById('report-type-arrow');
+  const isOpen = m.style.display === 'block';
+  m.style.display = isOpen ? 'none' : 'block';
+  arr.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function selectReportType(type) {
+  document.getElementById('report_type').value = type;
+  document.getElementById('selected-report-badge').textContent = type;
+  document.getElementById('chk-gsl').style.display = (type === 'GSL') ? 'block' : 'none';
+  document.getElementById('chk-psl').style.display = (type === 'PSL') ? 'block' : 'none';
+  document.getElementById('report-type-dropdown').style.display = 'none';
+  document.getElementById('report-type-arrow').style.transform = 'rotate(0deg)';
+  pickReportType(type);
+}
+
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('report-type-dropdown');
+  const b = document.getElementById('btn-report-type-menu');
+  if (m && !m.contains(e.target) && !b.contains(e.target)) {
+    m.style.display = 'none';
+    const arr = document.getElementById('report-type-arrow');
+    if (arr) arr.style.transform = 'rotate(0deg)';
+  }
+});
+
+// ── Barcode Switch Helper ───────────────────────────────────────────────────
+function toggleBarcode() {
+  const cb = document.getElementById('include_barcode');
+  cb.checked = !cb.checked;
+  syncBarcodeState();
+}
+
+function syncBarcodeState() {
+  const cb = document.getElementById('include_barcode');
+  const tog = document.getElementById('barcode_toggle');
+  const note = document.getElementById('barcode_note');
+  tog.classList.toggle('enabled', cb.checked);
+  note.style.display = cb.checked ? 'block' : 'none';
+}
+
+// ── Auto-translate Nationality ───────────────────────────────────────────────
+let _userEditedNationalityEn = false;
+
+function onUserEditNationalityEn() {
+  _userEditedNationalityEn = Boolean(document.getElementById('nationality_en').value.trim());
+}
+
+const NATIONALITY_MAP = {
+  'سعودي': 'Saudi', 'سعوديه': 'Saudi', 'سعودية': 'Saudi', 'المملكة العربية السعودية': 'Saudi',
+  'مصري': 'Egyptian', 'مصريه': 'Egyptian', 'مصرية': 'Egyptian', 'مصر': 'Egyptian',
+  'سوري': 'Syrian', 'سوريه': 'Syrian', 'سورية': 'Syrian', 'سوريا': 'Syrian',
+  'اردني': 'Jordanian', 'أردني': 'Jordanian', 'اردنية': 'Jordanian', 'أردنية': 'Jordanian',
+  'فلسطيني': 'Palestinian', 'فلسطينيه': 'Palestinian', 'فلسطينية': 'Palestinian',
+  'لبناني': 'Lebanese', 'لبنانيه': 'Lebanese', 'لبنانية': 'Lebanese',
+  'عراقي': 'Iraqi', 'عراقيه': 'Iraqi', 'عراقية': 'Iraqi',
+  'يمني': 'Yemeni', 'يمنيه': 'Yemeni', 'يمنية': 'Yemeni',
+  'سوداني': 'Sudanese', 'سودانيه': 'Sudanese', 'سودانية': 'Sudanese',
+  'كويتي': 'Kuwaiti', 'كويتيه': 'Kuwaiti', 'كويتية': 'Kuwaiti',
+  'اماراتي': 'Emirati', 'إماراتي': 'Emirati', 'اماراتية': 'Emirati', 'إماراتية': 'Emirati',
+  'قطري': 'Qatari', 'قطريه': 'Qatari', 'قطرية': 'Qatari',
+  'بحريني': 'Bahraini', 'بحرينيه': 'Bahraini', 'بحرينية': 'Bahraini',
+  'عماني': 'Omani', 'عمانيه': 'Omani', 'عمانية': 'Omani',
+  'مغربي': 'Moroccan', 'مغربيه': 'Moroccan', 'مغربية': 'Moroccan',
+  'جزائري': 'Algerian', 'جزائريه': 'Algerian', 'جزائرية': 'Algerian',
+  'تونسي': 'Tunisian', 'تونسيه': 'Tunisian', 'تونسية': 'Tunisian',
+  'ليبي': 'Libyan', 'ليبيه': 'Libyan', 'ليبية': 'Libyan',
+  'هندي': 'Indian', 'هنديه': 'Indian', 'هندية': 'Indian',
+  'باكستاني': 'Pakistani', 'باكستانيه': 'Pakistani', 'باكستانية': 'Pakistani',
+  'بنغلاديشي': 'Bangladeshi', 'بنجلاديشي': 'Bangladeshi', 'بنغالي': 'Bangladeshi',
+  'فلبيني': 'Filipino', 'فلبينيه': 'Filipino', 'فلبينية': 'Filipino',
+  'اندونيسي': 'Indonesian', 'إندونيسي': 'Indonesian', 'اندونيسية': 'Indonesian',
+  'سريلانكي': 'Sri Lankan', 'سريلانكيه': 'Sri Lankan',
+  'نيبالي': 'Nepali', 'نيباليه': 'Nepali',
+  'تركي': 'Turkish', 'تركيه': 'Turkish', 'تركية': 'Turkish',
+  'بريطاني': 'British', 'امريكي': 'American', 'أمريكي': 'American',
+  'كندي': 'Canadian', 'فرنسي': 'French', 'الماني': 'German', 'ألماني': 'German',
+  'روسي': 'Russian', 'صيني': 'Chinese'
+};
+
+function autoTranslateNationality() {
+  if (_userEditedNationalityEn) return;
+  const val = document.getElementById('nationality').value.trim();
+  const enInput = document.getElementById('nationality_en');
+  if (!val) {
+    enInput.value = '';
+    return;
+  }
+  const clean = val.replace(/[^\u0621-\u064A\s]/g, '').trim();
+  if (NATIONALITY_MAP[clean]) {
+    enInput.value = NATIONALITY_MAP[clean];
+  } else {
+    for (const [k, v] of Object.entries(NATIONALITY_MAP)) {
+      if (clean.includes(k)) {
+        enInput.value = v;
+        return;
+      }
     }
   }
 }
