@@ -70,11 +70,14 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     # 1. Admin Access
     if is_admin:
         admin_url = f"{base_url}/admin?key=admin123"
+        admin_form_url = f"{webapp_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}"
+        admin_records_url = f"{records_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}"
+
         keyboard = ReplyKeyboardMarkup(
             [
                 [
-                    KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}")),
-                    KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
+                    KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=admin_form_url)),
+                    KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=admin_records_url)),
                 ]
             ],
             resize_keyboard=True,
@@ -82,8 +85,9 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
         inline_admin = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚙️ لوحة الإدارة الشاملة", url=admin_url)],
-            [InlineKeyboardButton("📂 استعراض كافة السجلات", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}"))]
+            [InlineKeyboardButton("👑 فتح لوحة تحكم الأدمن", url=admin_url)],
+            [InlineKeyboardButton("📋 فتح النموذج كمدير", web_app=WebAppInfo(url=admin_form_url))],
+            [InlineKeyboardButton("📂 استعراض كافة السجلات", web_app=WebAppInfo(url=admin_records_url))]
         ])
 
         admin_msg = (

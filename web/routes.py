@@ -591,17 +591,36 @@ async def api_auth_status(
     """
     Checks user registration & subscription status.
     """
+    clean_tg = str(telegram_user_id or "").strip()
+    clean_un = str(username or "").lstrip("@").strip().lower()
+
+    # Immediate Admin Check by incoming params
+    if clean_tg == ADMIN_TELEGRAM_ID or clean_un == ADMIN_USERNAME.lower():
+        return JSONResponse({
+            "success": True,
+            "registered": True,
+            "user_id": 1,
+            "username": ADMIN_USERNAME,
+            "email": ADMIN_EMAIL,
+            "full_name_ar": "مدير النظام",
+            "status": "ACTIVE",
+            "is_admin": True,
+            "active": True,
+            "days_remaining": 3650,
+            "message": "حساب الأدمن الرئيسي نشط بصلاحيات كاملة",
+        })
+
     user_rec = None
     if token:
         uid = _verify_token(token)
         if uid:
             user_rec = get_user_by_identifier_sync(str(uid))
 
-    if not user_rec and username:
-        user_rec = get_user_by_identifier_sync(username)
+    if not user_rec and clean_un:
+        user_rec = get_user_by_identifier_sync(clean_un)
 
-    if not user_rec and telegram_user_id and str(telegram_user_id) not in ("0", ""):
-        user_rec = get_user_by_identifier_sync(str(telegram_user_id))
+    if not user_rec and clean_tg and clean_tg not in ("0", ""):
+        user_rec = get_user_by_identifier_sync(clean_tg)
 
     if not user_rec:
         return JSONResponse({
@@ -612,12 +631,28 @@ async def api_auth_status(
             "message": "المستخدم غير مسجل في النظام",
         })
 
-    # Admin check
+    # Admin check on user_rec
     is_admin = (
         user_rec.role == "admin"
         or str(user_rec.telegram_user_id) == ADMIN_TELEGRAM_ID
         or (user_rec.username and user_rec.username.lower() == ADMIN_USERNAME.lower())
+        or (user_rec.email and user_rec.email.lower() == ADMIN_EMAIL.lower())
     )
+
+    if is_admin:
+        return JSONResponse({
+            "success": True,
+            "registered": True,
+            "user_id": user_rec.id,
+            "username": user_rec.username or ADMIN_USERNAME,
+            "email": user_rec.email or ADMIN_EMAIL,
+            "full_name_ar": user_rec.full_name_ar or "مدير النظام",
+            "status": "ACTIVE",
+            "is_admin": True,
+            "active": True,
+            "days_remaining": 3650,
+            "message": "حساب الأدمن الرئيسي نشط بصلاحيات كاملة",
+        })
 
     sub = check_subscription_sync(user_rec.id)
 
@@ -629,10 +664,10 @@ async def api_auth_status(
         "email": user_rec.email,
         "full_name_ar": user_rec.full_name_ar,
         "status": user_rec.registration_status,
-        "is_admin": is_admin,
-        "active": sub["active"] if not is_admin else True,
-        "days_remaining": sub["days_remaining"] if not is_admin else 365,
-        "message": sub["message"] if not is_admin else "حساب الأدمن نشط بصلاحيات كاملة",
+        "is_admin": False,
+        "active": sub["active"],
+        "days_remaining": sub["days_remaining"],
+        "message": sub["message"],
     })
 
 

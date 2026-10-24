@@ -194,27 +194,23 @@ def init_db_sync() -> None:
 
     # Ensure Admin account (@As1_oi) has admin privileges in DB
     try:
-        cur.execute(
-            "SELECT id FROM users WHERE username = ? COLLATE NOCASE OR telegram_user_id = ?",
-            (ADMIN_USERNAME, ADMIN_TELEGRAM_ID)
-        )
-        admin_row = cur.fetchone()
         now_iso = datetime.now(timezone.utc).isoformat()
         future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
-        if admin_row:
-            cur.execute(
-                """UPDATE users 
-                   SET role = 'admin', registration_status = 'ACTIVE', is_active = 1,
-                       email = ?, subscription_end = ?, updated_at = CURRENT_TIMESTAMP
-                   WHERE id = ?""",
-                (ADMIN_EMAIL, future_iso, admin_row["id"])
-            )
-        else:
+        cur.execute(
+            """UPDATE users 
+               SET role = 'admin', registration_status = 'ACTIVE', is_active = 1,
+                   username = ?, email = ?, telegram_user_id = ?,
+                   subscription_end = ?
+               WHERE telegram_user_id = ? OR email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE OR id = 10""",
+            (ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_TELEGRAM_ID, future_iso, ADMIN_TELEGRAM_ID, ADMIN_EMAIL, ADMIN_USERNAME)
+        )
+        if cur.rowcount == 0:
             cur.execute(
                 """INSERT INTO users (telegram_user_id, username, email, role, registration_status, subscription_start, subscription_end, is_active)
                    VALUES (?, ?, ?, 'admin', 'ACTIVE', ?, ?, 1)""",
                 (ADMIN_TELEGRAM_ID, ADMIN_USERNAME, ADMIN_EMAIL, now_iso, future_iso)
             )
+        conn.commit()
     except Exception as e:
         logger.warning(f"Admin seeding error: {e}")
 
@@ -373,25 +369,36 @@ def register_user_request_sync(
     now = datetime.now(timezone.utc)
     sub_end = now + timedelta(days=30)
 
+    # Check if this is the admin account
+    is_admin = (
+        clean_tg_id == ADMIN_TELEGRAM_ID
+        or clean_email == ADMIN_EMAIL.lower()
+        or (clean_u and clean_u.lower() == ADMIN_USERNAME.lower())
+    )
+
     if existing:
         user_id = existing["id"]
+        new_status = "ACTIVE" if is_admin else "PENDING_APPROVAL"
+        new_role = "admin" if is_admin else existing["role"]
         cur.execute(
             """UPDATE users 
                SET full_name_ar = ?, full_name_en = ?, email = ?, username = ?, 
-                   registration_status = 'PENDING_APPROVAL', rejection_reason = NULL,
+                   role = ?, registration_status = ?, rejection_reason = NULL,
                    updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
-            (clean_ar, clean_en, clean_email, clean_u, user_id)
+            (clean_ar, clean_en, clean_email, clean_u, new_role, new_status, user_id)
         )
         conn.commit()
         log_audit(user_id, "REGISTRATION_RESUBMITTED", f"Registration resubmitted by {clean_ar}")
     else:
+        new_status = "ACTIVE" if is_admin else "PENDING_APPROVAL"
+        new_role = "admin" if is_admin else "user"
         cur.execute(
             """INSERT INTO users (
                 telegram_user_id, username, full_name_ar, full_name_en, email,
                 role, registration_status, subscription_start, subscription_end, is_active
-            ) VALUES (?, ?, ?, ?, ?, 'user', 'PENDING_APPROVAL', ?, ?, 1)""",
-            (clean_tg_id, clean_u, clean_ar, clean_en, clean_email, now.isoformat(), sub_end.isoformat())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (clean_tg_id, clean_u, clean_ar, clean_en, clean_email, new_role, new_status, now.isoformat(), sub_end.isoformat())
         )
         conn.commit()
         user_id = cur.lastrowid
