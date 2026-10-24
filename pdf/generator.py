@@ -185,20 +185,72 @@ def _p(text, font, sz, color=BLACK, align=TA_LEFT, lh=1.2) -> Paragraph:
     )
 
 
-def en(text, sz=9.5, color=BLACK, align=TA_LEFT):
-    return _p(str(text or ""), _EN, sz, color, align)
+def en(text, sz=9.5, color=BLACK, align=TA_LEFT, lh=1.15):
+    return Paragraph(
+        str(text or ""),
+        ParagraphStyle(
+            "en_p",
+            fontName=_EN,
+            fontSize=sz,
+            textColor=color,
+            alignment=align,
+            leading=sz * lh,
+            spaceBefore=0,
+            spaceAfter=0,
+            wordWrap="LTR",
+        ),
+    )
 
 
-def enb(text, sz=9.5, color=BLACK, align=TA_LEFT):
-    return _p(str(text or ""), _ENB if _ENB else _EN, sz, color, align)
+def enb(text, sz=9.5, color=BLACK, align=TA_LEFT, lh=1.15):
+    return Paragraph(
+        str(text or ""),
+        ParagraphStyle(
+            "enb_p",
+            fontName=_ENB if _ENB else _EN,
+            fontSize=sz,
+            textColor=color,
+            alignment=align,
+            leading=sz * lh,
+            spaceBefore=0,
+            spaceAfter=0,
+            wordWrap="LTR",
+        ),
+    )
 
 
-def arabic(text, sz=9.5, color=BLACK, align=TA_RIGHT):
-    return _p(ar(text), _AR, sz, color, align)
+def arabic(text, sz=9.5, color=BLACK, align=TA_RIGHT, lh=1.2):
+    return Paragraph(
+        ar(text),
+        ParagraphStyle(
+            "ar_p",
+            fontName=_AR,
+            fontSize=sz,
+            textColor=color,
+            alignment=align,
+            leading=sz * lh,
+            spaceBefore=0,
+            spaceAfter=0,
+            wordWrap="RTL",
+        ),
+    )
 
 
-def arb(text, sz=9.5, color=BLACK, align=TA_RIGHT):
-    return _p(ar(text), _ARB if _ARB else _AR, sz, color, align)
+def arb(text, sz=9.5, color=BLACK, align=TA_RIGHT, lh=1.2):
+    return Paragraph(
+        ar(text),
+        ParagraphStyle(
+            "arb_p",
+            fontName=_ARB if _ARB else _AR,
+            fontSize=sz,
+            textColor=color,
+            alignment=align,
+            leading=sz * lh,
+            spaceBefore=0,
+            spaceAfter=0,
+            wordWrap="RTL",
+        ),
+    )
 
 
 # ── Image helpers ────────────────────────────────────────────────────────────────
@@ -391,15 +443,15 @@ def generate_pdf(data: dict, output_path) -> Path:
     story.append(Spacer(1, 24 * pt))
 
     # ── DATA TABLE ──────────────────────────────────────────────────────────────
-    CL_EN = BODY_W * 0.212
-    CV    = BODY_W * 0.309
-    CV2   = BODY_W * 0.310
-    CL_AR = BODY_W * 0.169
+    CL_EN = BODY_W * 0.225
+    CV    = BODY_W * 0.298
+    CV2   = BODY_W * 0.297
+    CL_AR = BODY_W * 0.180
 
-    LSZ_EN = 13.0   # English label font size (Serif Bold)
+    LSZ_EN = 13.5   # English label font size (Times-Bold)
     LSZ_AR = 13.5   # Arabic label font size (Noto Naskh Bold)
-    VSZ    = 12.0   # Value font size
-    NSZ    = 10.5   # Smaller for long names
+    VSZ    = 12.5   # Value font size (Times-Roman / Noto Naskh Regular)
+    NSZ    = 12.0   # For names (allows natural 2-line wrap on long names)
 
     def lbl_e(t, sz=LSZ_EN):
         return enb(t, sz, C_LABEL, TA_CENTER)
@@ -413,32 +465,32 @@ def generate_pdf(data: dict, output_path) -> Path:
     def val_a(t, sz=VSZ):
         return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
 
-    ROW_H = 37.0 * pt
+    ROW_H = 39.5 * pt
 
     # Employer row: if only Arabic or English is provided, span across middle columns centered
     if emp_en and emp_ar and emp_en.strip() != emp_ar.strip():
-        emp_row = (lbl_e("Employer"), val_e(emp_en, NSZ), val_a(emp_ar, NSZ), lbl_a("جهة العمل"), False, False)
+        emp_row = (lbl_e("Employer"), val_e(emp_en, VSZ), val_a(emp_ar, VSZ), lbl_a("جهة العمل"), False, False)
     else:
         emp_val = emp_ar or emp_en
-        emp_widget = val_a(emp_val, NSZ) if has_ar(emp_val) else val_e(emp_val, NSZ)
+        emp_widget = val_a(emp_val, VSZ) if has_ar(emp_val) else val_e(emp_val, VSZ)
         emp_row = (lbl_e("Employer"), emp_widget, "", lbl_a("جهة العمل"), True, False)
 
     rows = [
         (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
         (enb("Leave Duration", LSZ_EN, WHITE, TA_CENTER),
-                                       enb(dur_en, 11.5, WHITE, TA_CENTER),
-                                                              arabic(dur_ar, 11.5, WHITE, TA_CENTER),
+                                       en(dur_en, 12.0, WHITE, TA_CENTER),
+                                                              arabic(dur_ar, 12.0, WHITE, TA_CENTER),
                                                                                       arb("مدة الإجازة", LSZ_AR, WHITE, TA_CENTER),
                                                                                                       False, True),
         (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
         (lbl_e("Discharge Date"),      val_e(dd_g),            val_a(dd_h),            lbl_a("تاريخ الخروج"),          False, False),
         (lbl_e("Issue Date"),          val_e(iss_g),           "",                     lbl_a("تاريخ إصدار التقرير", 13.0), True,  False),
-        (lbl_e("Name"),                val_e(name_en, NSZ),    val_a(name_ar, NSZ),    lbl_a("الاسم"),                 False, False),
-        (lbl_e("National ID / Iqama", 12.0), val_e(nid),       "",                     lbl_a("رقم الهوية / الإقامة", 13.0),
+        (lbl_e("Name"),                val_e(name_en, NSZ),    val_a(name_ar, VSZ),    lbl_a("الاسم"),                 False, False),
+        (lbl_e("National ID / Iqama", 12.5), val_e(nid),       "",                     lbl_a("رقم الهوية / الإقامة", 13.0),
                                                                                                       True,  False),
         (lbl_e("Nationality"),         val_e(nat_en),          val_a(nat_ar),          lbl_a("الجنسية"),               False, False),
         emp_row,
-        (lbl_e("Practitioner Name", 12.0), val_e(p_en, NSZ),   val_a(p_ar, NSZ),       lbl_a("اسم الممارس"),           False, False),
+        (lbl_e("Practitioner Name", 12.5), val_e(p_en, NSZ),   val_a(p_ar, VSZ),       lbl_a("اسم الممارس"),           False, False),
         (lbl_e("Position"),            val_e(pos_en),          val_a(pos_ar),          lbl_a("المسمى الوظيفى"),        False, False),
     ]
 
@@ -466,10 +518,10 @@ def generate_pdf(data: dict, output_path) -> Path:
 
     tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
     tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+        ("TOPPADDING",    (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("GRID",          (0, 0), (-1, -1), 0.6, C_BORDER),
         ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
