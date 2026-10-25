@@ -62,26 +62,59 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
         )
         return True
 
-    # 3. Send via SMTP
+    # 3. Send via SMTP (Robust multi-strategy with SSL 465 & STARTTLS 587)
     try:
+        import ssl
         msg = MIMEMultipart("alternative")
-        msg["From"] = f"SehtyBot صحتي <{SMTP_FROM}>"
+        sender_email = SMTP_FROM or SMTP_USER
+        msg["From"] = f"SehtyBot صحتي <{sender_email}>"
         msg["To"] = to_clean
         msg["Subject"] = subject
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
+        clean_user = str(SMTP_USER).strip()
+        clean_pass = str(SMTP_PASS).strip().replace(" ", "")
+        ctx = ssl.create_default_context()
 
-        logger.info(f"Email successfully sent to {to_clean} with subject: {subject}")
-        return True
+        # Strategy 1: Direct SSL on port 465 (Preferred for Gmail on cloud hosts)
+        try:
+            with smtplib.SMTP_SSL(SMTP_HOST, 465, context=ctx, timeout=12) as server:
+                server.login(clean_user, clean_pass)
+                server.send_message(msg)
+            logger.info(f"Email successfully sent to {to_clean} via SMTP_SSL (port 465)")
+            return True
+        except Exception as e_ssl:
+            logger.warning(f"SMTP port 465 failed ({e_ssl}), trying port 587 STARTTLS...")
+
+        # Strategy 2: STARTTLS on port 587 with strict RFC 3207 EHLO negotiation
+        try:
+            with smtplib.SMTP(SMTP_HOST, 587, timeout=12) as server:
+                server.ehlo()
+                server.starttls(context=ctx)
+                server.ehlo()  # Essential: renegotiate capabilities after TLS
+                server.login(clean_user, clean_pass)
+                server.send_message(msg)
+            logger.info(f"Email successfully sent to {to_clean} via SMTP STARTTLS (port 587)")
+            return True
+        except Exception as e_587:
+            logger.error(f"SMTP port 587 failed ({e_587})")
+
+        # Strategy 3: Configured port if custom
+        if SMTP_PORT not in (465, 587):
+            try:
+                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=12) as server:
+                    server.ehlo()
+                    server.starttls(context=ctx)
+                    server.ehlo()
+                    server.login(clean_user, clean_pass)
+                    server.send_message(msg)
+                logger.info(f"Email successfully sent to {to_clean} via SMTP custom port ({SMTP_PORT})")
+                return True
+            except Exception as e_custom:
+                logger.error(f"SMTP custom port {SMTP_PORT} failed: {e_custom}")
+
+        logger.error(f"Failed to deliver email to {to_clean} across all SMTP strategies.")
+        return False
     except Exception as e:
         logger.error(f"Failed to send email to {to_clean}: {e}")
         return False
