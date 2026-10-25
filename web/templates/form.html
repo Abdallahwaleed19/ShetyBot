@@ -387,7 +387,7 @@
     <label>🌍 الجنسية — عربي</label>
     <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.18);border-radius:10px;color:#fff;font-size:14.5px;margin-bottom:8px">
       <option value="">- اختر الجنسية -</option>
-      <option value="سعودي|Saudi">🇸🇦 سعودي</option>
+      <option value="سعودي|Saudi" selected>🇸🇦 سعودي</option>
       <option value="مصري|Egyptian">🇪🇬 مصري</option>
       <option value="سوري|Syrian">🇸🇾 سوري</option>
       <option value="أردني|Jordanian">🇯🇴 أردني</option>
@@ -411,12 +411,12 @@
       <option value="فلبيني|Filipino">🇵🇭 فلبيني</option>
       <option value="أخرى|Other">🌍 أخرى...</option>
     </select>
-    <input type="text" id="nationality" placeholder="مثال: سعودي" oninput="autoTranslateNationality()" style="display:none">
+    <input type="text" id="nationality" value="سعودي" placeholder="مثال: سعودي" oninput="autoTranslateNationality()" style="display:none">
   </div>
 
   <div class="field ltr-field">
     <label>Nationality — English</label>
-    <input type="text" id="nationality_en" placeholder="e.g. Saudi" dir="ltr" oninput="onUserEditNationalityEn()">
+    <input type="text" id="nationality_en" value="Saudi" placeholder="e.g. Saudi" dir="ltr" oninput="onUserEditNationalityEn()">
   </div>
 
   <div class="field">
@@ -454,7 +454,7 @@
     </div>
     <div class="field ltr-field">
       <label>Job Title — English</label>
-      <input type="text" id="job_title_en" value="General Practitioner" placeholder="General Practitioner" dir="ltr">
+      <input type="text" id="job_title_en" value="General" placeholder="General" dir="ltr">
     </div>
   </div>
 

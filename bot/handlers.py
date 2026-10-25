@@ -91,8 +91,8 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = ReplyKeyboardMarkup(
             [
                 [
-                    KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=admin_form_url)),
-                    KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=admin_records_url)),
+                    KeyboardButton("📝 تقديم تقرير جديد", web_app=WebAppInfo(url=admin_form_url)),
+                    KeyboardButton("📋 البيانات السابقة", web_app=WebAppInfo(url=admin_records_url)),
                 ]
             ],
             resize_keyboard=True,
@@ -107,10 +107,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
         admin_msg = (
             f"👑 <b>مرحباً بك يا مدير النظام (@{ADMIN_USERNAME})</b>\n\n"
-            f"لديك صلاحيات إدارية كاملة لإدارة البوت والموافقة على المستخدمين واستعراض كافة السجلات.\n\n"
-            f"• اضغط <b>📋 فتح نموذج الإجازة المرضية</b> لإصدار تقرير جديد.\n"
-            f"• اضغط <b>➕ البيانات السابقة</b> لإدارة جميع السجلات وسلة المحذوفات.\n"
-            f"• أو اضغط الزر أدناه لفتح لوحة الإدارة:"
+            f"لديك صلاحيات إدارية كاملة لإدارة البوت والموافقة على المستخدمين واستعراض كافة السجلات."
         )
         await reply_safe(update.message, admin_msg, reply_markup=keyboard)
         await reply_safe(update.message, "⚙️ <b>لوحة التحكم والإدارة:</b>", reply_markup=inline_admin)
@@ -238,9 +235,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     active_msg = (
         "🏥 <b>مرحباً بك مجدداً في نظام الإجازات المرضية (@SehtyBot)</b>\n\n"
-        f"🟢 <b>حالة الاشتراك:</b> نشط (متبقي {sub['days_remaining']} يوم)\n\n"
-        "• اضغط <b>📝 تقديم تقرير جديد</b> لإصدار تقرير جديد.\n"
-        "• اضغط <b>📋 البيانات السابقة</b> لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات.\n"
+        f"🟢 <b>حالة الاشتراك:</b> نشط (متبقي {sub['days_remaining']} يوم)"
     )
 
 

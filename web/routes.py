@@ -256,15 +256,15 @@ async def submit_report(
     national_id:          str = Form(...),
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
-    nationality:          str = Form(""),
-    nationality_en:       str = Form(""),
+    nationality:          str = Form("سعودي"),
+    nationality_en:       str = Form("Saudi"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     # Page 3
     practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
     practitioner_name_en: str = Form("MOHAMMED ABDULLAH AL-SHARARI"),
     job_title_ar:         str = Form("طبيب عام"),
-    job_title_en:         str = Form("General Practitioner"),
+    job_title_en:         str = Form("General"),
     hospital_name_ar:     str = Form(""),
     hospital_name_en:     str = Form(""),
     hospital_type:        str = Form("government"),
@@ -330,8 +330,12 @@ async def submit_report(
             practitioner_name_en = "MOHAMMED ABDULLAH AL-SHARARI"
         if not job_title_ar or not job_title_ar.strip():
             job_title_ar = "طبيب عام"
+        if not nationality or not nationality.strip():
+            nationality = "سعودي"
+        if not nationality_en or not nationality_en.strip():
+            nationality_en = "Saudi"
         if not job_title_en or not job_title_en.strip():
-            job_title_en = "General Practitioner"
+            job_title_en = "General"
         with_barcode = (include_barcode.strip() == "1")
 
         # Upload logo to R2
@@ -1118,14 +1122,14 @@ async def api_update_record(
     national_id:          str = Form(...),
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
-    nationality:          str = Form(""),
-    nationality_en:       str = Form(""),
+    nationality:          str = Form("سعودي"),
+    nationality_en:       str = Form("Saudi"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
     practitioner_name_en: str = Form("MOHAMMED ABDULLAH AL-SHARARI"),
     job_title_ar:         str = Form("طبيب عام"),
-    job_title_en:         str = Form("General Practitioner"),
+    job_title_en:         str = Form("General"),
     hospital_name_ar:     str = Form(""),
     hospital_name_en:     str = Form(""),
     hospital_type:        str = Form("government"),
