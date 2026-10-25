@@ -294,17 +294,11 @@
 
       <div id="report-type-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#0d3683;border:1.5px solid #3b9eff;border-radius:12px;overflow:hidden;z-index:90;box-shadow:0 12px 30px rgba(0,0,0,0.6)">
         <div onclick="selectReportType('GSL')" style="padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
-          <div>
-            <div style="color:#38bdf8;font-size:15px;font-weight:800">GSL</div>
-            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">Government Sick Leave</div>
-          </div>
+          <div style="color:#38bdf8;font-size:16px;font-weight:800">GSL</div>
           <span id="chk-gsl" style="color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
         <div onclick="selectReportType('PSL')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
-          <div>
-            <div style="color:#38bdf8;font-size:15px;font-weight:800">PSL</div>
-            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">Private Sick Leave</div>
-          </div>
+          <div style="color:#38bdf8;font-size:16px;font-weight:800">PSL</div>
           <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
       </div>
@@ -568,13 +562,23 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.report_type) {
       const rt = d.report_type;
       document.getElementById('report_type').value = rt;
-      document.getElementById('trt_gsl').classList.toggle('sel', rt === 'GSL');
-      document.getElementById('trt_psl').classList.toggle('sel', rt === 'PSL');
-      // Sync hospital type silently
+      const b = document.getElementById('selected-report-badge');
+      if (b) b.textContent = rt;
+      const cg = document.getElementById('chk-gsl');
+      if (cg) cg.style.display = (rt === 'GSL') ? 'block' : 'none';
+      const cp = document.getElementById('chk-psl');
+      if (cp) cp.style.display = (rt === 'PSL') ? 'block' : 'none';
       const ht = (rt === 'GSL') ? 'government' : 'private';
       document.getElementById('hospital_type').value = ht;
       document.getElementById('tg').classList.toggle('sel', ht === 'government');
       document.getElementById('tp').classList.toggle('sel', ht === 'private');
+    }
+    if (typeof d.include_barcode !== 'undefined') {
+      const bc = document.getElementById('include_barcode');
+      if (bc) {
+        bc.checked = Boolean(Number(d.include_barcode) === 1 || d.include_barcode === true || d.include_barcode === "1");
+        syncBarcodeState();
+      }
     }
     if (d.issue_date)          { document.getElementById('issue_date').value = d.issue_date; markDateFilled('issue_date'); }
     if (d.report_time)         { document.getElementById('issue_time').value = d.report_time; }
@@ -750,11 +754,20 @@ function toggleReportTypeMenu(e) {
 
 function selectReportType(type) {
   document.getElementById('report_type').value = type;
-  document.getElementById('selected-report-badge').textContent = type;
-  document.getElementById('chk-gsl').style.display = (type === 'GSL') ? 'block' : 'none';
-  document.getElementById('chk-psl').style.display = (type === 'PSL') ? 'block' : 'none';
-  document.getElementById('report-type-dropdown').style.display = 'none';
-  document.getElementById('report-type-arrow').style.transform = 'rotate(0deg)';
+  const badge = document.getElementById('selected-report-badge');
+  if (badge) badge.textContent = type;
+  const chkG = document.getElementById('chk-gsl');
+  if (chkG) chkG.style.display = (type === 'GSL') ? 'block' : 'none';
+  const chkP = document.getElementById('chk-psl');
+  if (chkP) chkP.style.display = (type === 'PSL') ? 'block' : 'none';
+  const dd = document.getElementById('report-type-dropdown');
+  if (dd) dd.style.display = 'none';
+  const arr = document.getElementById('report-type-arrow');
+  if (arr) arr.style.transform = 'rotate(0deg)';
+
+  // Auto-sync hospital type: GSL -> government (حكومي), PSL -> private (خاص)
+  const hospType = (type === 'GSL') ? 'government' : 'private';
+  pickType(hospType, false);
   pickReportType(type);
 }
 

@@ -26,6 +26,7 @@ from db.database import (
     check_subscription_sync,
     record_user_activity_sync,
     get_latest_code_for_user_sync,
+    get_all_saved_reports_sync,
     ADMIN_TELEGRAM_ID,
     ADMIN_USERNAME,
 )
@@ -207,14 +208,24 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, expired_msg, reply_markup=ReplyKeyboardRemove())
         return
 
-    # Active and verified! Display both main buttons
-    keyboard = ReplyKeyboardMarkup(
+    # Active and verified! Check if user has any submitted report
+    user_reports = get_all_saved_reports_sync(user_id=user_rec.id, telegram_user_id=str(user_tg_id))
+    latest_code = user_reports[0]["service_code"] if user_reports else None
+
+    keyboard_rows = [
         [
-            [
-                KeyboardButton("📋 فتح نموذج الإجازة المرضية", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}")),
-                KeyboardButton("➕ البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
-            ]
-        ],
+            KeyboardButton("📝 تقديم تقرير جديد", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}")),
+            KeyboardButton("📋 البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
+        ]
+    ]
+    if latest_code:
+        edit_url = f"{webapp_url}?telegram_user_id={user_tg_id}&edit={latest_code}"
+        keyboard_rows.append([
+            KeyboardButton("✏️ تعديل التقرير", web_app=WebAppInfo(url=edit_url))
+        ])
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard_rows,
         resize_keyboard=True,
         one_time_keyboard=False,
     )
@@ -222,9 +233,12 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     active_msg = (
         "🏥 <b>مرحباً بك مجدداً في نظام الإجازات المرضية (@SehtyBot)</b>\n\n"
         f"🟢 <b>حالة الاشتراك:</b> نشط (متبقي {sub['days_remaining']} يوم)\n\n"
-        "• اضغط <b>📋 فتح نموذج الإجازة المرضية</b> لإصدار تقرير جديد.\n"
-        "• اضغط <b>➕ البيانات السابقة</b> لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات."
+        "• اضغط <b>📝 تقديم تقرير جديد</b> لإصدار تقرير جديد.\n"
+        "• اضغط <b>📋 البيانات السابقة</b> لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات.\n"
     )
+    if latest_code:
+        active_msg += f"• اضغط <b>✏️ تعديل التقرير</b> لتعديل بيانات آخر تقرير أصدرته (<code>{latest_code}</code>).\n"
+
     await reply_safe(update.message, active_msg, reply_markup=keyboard)
 
 

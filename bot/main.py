@@ -136,6 +136,7 @@ def main() -> None:
             )
 
             app.add_handler(CommandHandler("start",    start))
+            app.add_handler(CommandHandler("menu",     start))
             app.add_handler(CommandHandler("verify",   verify))
             app.add_handler(CommandHandler("edit",     edit_report))
             app.add_handler(CommandHandler("myreport", my_report))

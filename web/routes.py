@@ -405,12 +405,36 @@ async def submit_report(
                     f"🔗 <b>رابط التحقق في صحة:</b> https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"
                 )
                 import json
+                webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
+                edit_url = f"{webapp_base}/form?telegram_user_id={chat_id_to_send}&edit={s_code}"
+                new_form_url = f"{webapp_base}/form?telegram_user_id={chat_id_to_send}"
+                records_url = f"{webapp_base}/records?telegram_user_id={chat_id_to_send}"
+
                 reply_markup = {
                     "inline_keyboard": [
                         [
                             {"text": "🔗 التحقق في منصة صحة", "url": f"https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"}
+                        ],
+                        [
+                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
+                        ],
+                        [
+                            {"text": "📝 تقديم تقرير جديد", "web_app": {"url": new_form_url}},
+                            {"text": "📋 البيانات السابقة", "web_app": {"url": records_url}}
                         ]
                     ]
+                }
+                chat_keyboard = {
+                    "keyboard": [
+                        [
+                            {"text": "📝 تقديم تقرير جديد", "web_app": {"url": new_form_url}},
+                            {"text": "📋 البيانات السابقة", "web_app": {"url": records_url}}
+                        ],
+                        [
+                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
+                        ]
+                    ],
+                    "resize_keyboard": True
                 }
                 try:
                     async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
@@ -429,6 +453,18 @@ async def submit_report(
                             )
                             if resp.status_code == 200:
                                 logger.info(f"Successfully delivered PDF to Telegram chat {chat_id_to_send}")
+                                try:
+                                    await client.post(
+                                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                                        json={
+                                            "chat_id": str(chat_id_to_send),
+                                            "text": "👇 <b>لوحة التحكم السريعة:</b>\nيمكنك استخدام الأزرار أدناه لتعديل التقرير أو إصدار تقرير جديد في أي وقت:",
+                                            "parse_mode": "HTML",
+                                            "reply_markup": chat_keyboard
+                                        }
+                                    )
+                                except Exception as e_kb:
+                                    logger.warning(f"Failed to update chat keyboard: {e_kb}")
                             else:
                                 logger.warning(f"Telegram sendDocument error: {resp.status_code} - {resp.text}")
                 except Exception as e:
