@@ -20,6 +20,7 @@ from telegram.ext import ContextTypes
 
 from config import REPORTS_DIR
 from db.worker_client import get_report, search_by_national_id
+from config import ADMIN_USERNAMES
 from db.database import (
     get_user_by_identifier_sync,
     check_subscription_sync,
@@ -62,7 +63,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     user_name = (user.username or "").lstrip("@").strip()
     record_user_activity_sync(telegram_user_id=user_tg_id)
 
-    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() == ADMIN_USERNAME.lower())
+    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() in [u.lower() for u in ADMIN_USERNAMES])
 
     # Look up user in database
     user_rec = get_user_by_identifier_sync(user_tg_id)
@@ -103,36 +104,53 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, "⚙️ <b>لوحة التحكم والإدارة:</b>", reply_markup=inline_admin)
         return
 
-    # 2. Unregistered User (Friendly welcome with user name and @username)
+    # 2. Unregistered User (First-time /start)
     if not user_rec:
         reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}"
-        display_full_name = user.full_name or "المستخدم العزيز"
-        display_username = f"@{user.username}" if user.username else "لا يوجد اسم مستخدم متاح"
-
         inline_reg = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📝 تقديم طلب إنشاء تقرير جديد", web_app=WebAppInfo(url=reg_url))]
+            [InlineKeyboardButton("📝 تقديم طلب إنشاء تقرير جديد", web_app=WebAppInfo(url=reg_url))],
+            [InlineKeyboardButton("💬 تواصل مع المشرف (@RE_i1i)", url="https://t.me/RE_i1i")]
         ])
         unreg_msg = (
-            f"🏥 <b>أهلاً وسهلاً بك في منصة صحتي، {display_full_name}! 👋</b>\n\n"
-            f"👤 <b>معلومات الحساب:</b>\n"
-            f"• الاسم: <b>{display_full_name}</b>\n"
-            f"• معرف الحساب: <code>{display_username}</code>\n"
-            f"• الآيدي: <code>{user_tg_id}</code>\n\n"
-            "✨ <b>حول الخدمة:</b>\n"
-            "تتيح لك منصتنا إنشاء وإصدار تقارير الإجازات المرضية المعتمدة بسهولة ودقة عالية، مع إمكانية التحقق المباشر عبر منصة صحة (seha-sea.com).\n\n"
-            f"⚠️ <b>تنبيه:</b> للاستفادة من الخدمة، يتطلب النظام إرسال طلب إنشاء التقرير والتسجيل أولاً، ثم مراجعة الإدارة (@{ADMIN_USERNAME}) وتفعيل اشتراكك لمدة 30 يوماً.\n\n"
-            "اضغط على الزر أدناه لبدء تقديم طلبك وإنشاء تقرير جديد الآن 👇"
+            "🔴 <b>اسعار الاشتراك</b> 🔴\n"
+            "اشتراك شهر =٥٠ ريال\n"
+            "اشتراك ٣ أشهر = ١١٠ ريال\n"
+            "اشتراك ٦ أشهر = ٢٠٠ريال\n"
+            "اشتراك ٩ أشهر ٣٥٠ ريال\n\n"
+            "🛑 <b>قم بدعوة ٣ من أصدقائك واحصل على شهر مجاني</b> 🛑\n"
+            "⭕ <b>لشحن رصيدك تواصل مع المشرف</b>⭕\n\n"
+            "• التحويل على حسابي الكريمي\n"
+            "• رقم الحساب اليمني: <code>3126519272</code>\n"
+            "• رقم الحساب السعودي: <code>3142525843</code>\n"
+            "✅ <b>أرسل صورة الإشعار بعد التحويل</b> ✅\n\n"
+            "&اذا عندك طريقة دفع اخرى علمنا وش هي &\n"
+            "وانتظر حتى يتم الرد عليك 🫡\n"
+            "رابط التواصل تلجرام:\n"
+            "@RE_i1i\n\n"
+            "👇 <b>للبدء وتقديم طلب تقرير جديد اضغط الزر أدناه:</b>"
         )
         await reply_safe(update.message, unreg_msg, reply_markup=inline_reg)
         return
 
     # 3. User with PENDING_APPROVAL status
     if user_rec.registration_status == "PENDING_APPROVAL":
+        inline_pending = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💬 تواصل مع الإدارة (@RE_i1i)", url="https://t.me/RE_i1i")],
+            [InlineKeyboardButton("💬 تواصل مع المشرف (@WS2030W)", url="https://t.me/WS2030W")]
+        ])
         pending_msg = (
-            f"⏳ <b>طلب تسجيلك قيد المراجعة لدى الإدارة (@{ADMIN_USERNAME})</b>\n\n"
-            "تم استلام بياناتك وهي قيد التدقيق حالياً. بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني وهاتفك لتفعيل الاشتراك لمدة 30 يوماً."
+            "⏳ <b>طلب تسجيلك قيد المراجعة</b>\n\n"
+            "تم استلام بياناتك بنجاح وهي قيد التدقيق حالياً.\n\n"
+            "🔴 <b>إذا كنت ترغب في الاشتراك وتفعيل الحساب فوراً:</b>\n"
+            "يرجى التواصل مع الإدارة أو المشرف:\n"
+            "👑 <b>الإدارة:</b> @RE_i1i\n"
+            "🛡️ <b>المشرف:</b> @WS2030W\n\n"
+            "• التحويل على حساب الكريمي:\n"
+            "• رقم الحساب اليمني: <code>3126519272</code>\n"
+            "• رقم الحساب السعودي: <code>3142525843</code>\n"
+            "✅ أرسل صورة الإشعار بعد التحويل لتفعيل حسابك فوراً."
         )
-        await reply_safe(update.message, pending_msg, reply_markup=ReplyKeyboardRemove())
+        await reply_safe(update.message, pending_msg, reply_markup=inline_pending)
         return
 
     # 4. User with REJECTED status
@@ -425,7 +443,7 @@ async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
     user_tg_id = str(user.id).strip()
     user_name = (user.username or "").lstrip("@").strip()
 
-    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() == ADMIN_USERNAME.lower())
+    is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() in [u.lower() for u in ADMIN_USERNAMES])
     user_rec = get_user_by_identifier_sync(user_tg_id)
 
     # If user wants previous records

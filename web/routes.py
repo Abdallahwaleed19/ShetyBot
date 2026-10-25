@@ -69,7 +69,7 @@ from db.database import (
 )
 import hashlib
 from db.models import User
-from config import BASE_DIR, UPLOADS_DIR, REPORTS_DIR
+from config import BASE_DIR, UPLOADS_DIR, REPORTS_DIR, ADMIN_USERNAMES, SUPPORT_ADMIN, SUPERVISOR_USERNAME
 from web.form_logic import inclusive_duration
 from services.email_service import (
     send_admin_new_registration_notification,
@@ -116,7 +116,7 @@ def is_admin_request(user: Optional[User], request: Request) -> bool:
     if tg_id and tg_id == ADMIN_TELEGRAM_ID:
         return True
     un = str(getattr(user, "username", "")).lstrip("@").strip().lower()
-    if un and un == ADMIN_USERNAME.lower():
+    if un and (un == ADMIN_USERNAME.lower() or un in [a.lower() for a in ADMIN_USERNAMES]):
         return True
     return False
 
@@ -641,11 +641,27 @@ async def api_register_user(
         )
         asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg))
 
+        # Notify registering user on Telegram if chat available
+        if clean_tg and clean_tg not in ("0", "-1"):
+            user_tg_msg = (
+                "✅ <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n"
+                "طلبك قيد المراجعة حالياً.\n\n"
+                "🔴 <b>إذا كنت ترغب في الاشتراك وتفعيل الحساب فوراً:</b>\n"
+                "يرجى التواصل مع الإدارة أو المشرف:\n"
+                "👑 <b>الإدارة:</b> @RE_i1i\n"
+                "🛡️ <b>المشرف:</b> @WS2030W\n\n"
+                "• التحويل على حساب الكريمي:\n"
+                "• رقم الحساب اليمني: <code>3126519272</code>\n"
+                "• رقم الحساب السعودي: <code>3142525843</code>\n"
+                "✅ أرسل صورة الإشعار بعد التحويل لتفعيل حسابك فوراً."
+            )
+            asyncio.create_task(send_telegram_message_safe(clean_tg, user_tg_msg))
+
         return JSONResponse({
             "success": True,
             "user_id": user_rec.id,
             "status": "PENDING_APPROVAL",
-            "message": "تم إرسال طلب التسجيل بنجاح! طلبك قيد مراجعة الإدارة وسوف يتم إشعارك فور الموافقة."
+            "message": "تم إرسال طلب التسجيل بنجاح! إذا كنت ترغب في الاشتراك وتفعيل الحساب، يرجى التواصل مع الإدارة (@RE_i1i) أو المشرف (@WS2030W)."
         })
 
     except Exception as e:

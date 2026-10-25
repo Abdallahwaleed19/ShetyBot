@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any
 from config import (
     BASE_DIR,
     ADMIN_USERNAME,
+    ADMIN_USERNAMES,
     ADMIN_EMAIL,
     ADMIN_TELEGRAM_ID,
     OTP_TTL_SECONDS,
@@ -202,10 +203,10 @@ def init_db_sync() -> None:
         except Exception:
             pass
 
-    # Ensure Admin account (@ME_ii0) has admin privileges in DB
+    # Ensure Admin accounts (@ME_ii0 and @As1_oi) have admin privileges in DB
+    now_iso = datetime.now(timezone.utc).isoformat()
+    future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
     try:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
         cur.execute(
             """UPDATE users 
                SET role = 'admin', registration_status = 'ACTIVE', is_active = 1,
@@ -223,6 +224,25 @@ def init_db_sync() -> None:
         conn.commit()
     except Exception as e:
         logger.warning(f"Admin seeding error: {e}")
+
+    # Seed co-admin @As1_oi
+    try:
+        cur.execute(
+            """UPDATE users 
+               SET role = 'admin', registration_status = 'ACTIVE', is_active = 1,
+                   subscription_end = ?
+               WHERE username = 'As1_oi' COLLATE NOCASE""",
+            (future_iso,)
+        )
+        if cur.rowcount == 0:
+            cur.execute(
+                """INSERT INTO users (telegram_user_id, username, role, registration_status, subscription_start, subscription_end, is_active)
+                   VALUES ('admin_as1_oi', 'As1_oi', 'admin', 'ACTIVE', ?, ?, 1)""",
+                (now_iso, future_iso)
+            )
+        conn.commit()
+    except Exception as e:
+        logger.warning(f"Co-admin As1_oi seeding error: {e}")
 
     # Seed past report GSL26102444927 if not present so previous data is visible immediately
     try:

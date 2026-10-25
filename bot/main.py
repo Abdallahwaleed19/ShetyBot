@@ -98,6 +98,16 @@ async def post_init(app) -> None:
             "Run ngrok/cloudflared then add WEBAPP_URL=https://xxxx.ngrok.io to .env"
         )
 
+    # Set bot bio and description
+    try:
+        bio_desc = "بوت الإجازات المرضية _ لتفعيل تواصل مع \nالإدارة:@RE_i1i\nالمشرف:@WS2030W"
+        short_desc = "بوت الإجازات المرضية _ لتفعيل تواصل مع الإدارة:@RE_i1i المشرف:@WS2030W"
+        await app.bot.set_my_description(description=bio_desc)
+        await app.bot.set_my_short_description(short_description=short_desc)
+        logger.info("Bot bio and description set successfully.")
+    except Exception as e:
+        logger.warning(f"Could not set bot bio: {e}")
+
 
 def main() -> None:
     if BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":

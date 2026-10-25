@@ -18,9 +18,17 @@ PROXY_URL:  str = os.getenv("PROXY_URL", "").strip()
 
 # ── Admin Account & Credentials ──────────────────────────────────────────────
 ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "ME_ii0").lstrip("@").strip()
+ADMIN_USERNAMES: list[str] = [
+    u.lstrip("@").strip().lower() 
+    for u in os.getenv("ADMIN_USERNAMES", "ME_ii0,As1_oi").split(",") 
+    if u.strip()
+]
 ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "ramo.711.vip@gmail.com").strip().lower()
 ADMIN_TELEGRAM_ID: str = os.getenv("ADMIN_TELEGRAM_ID", "8733335095").strip()
 ADMIN_KEY: str = os.getenv("ADMIN_KEY", "admin123").strip()
+SUPPORT_ADMIN: str = os.getenv("SUPPORT_ADMIN", "RE_i1i").lstrip("@").strip()
+SUPERVISOR_USERNAME: str = os.getenv("SUPERVISOR_USERNAME", "WS2030W").lstrip("@").strip()
+BOT_BIO_DESCRIPTION: str = "بوت الإجازات المرضية _ لتفعيل تواصل مع \nالإدارة:@RE_i1i\nالمشرف:@WS2030W" 
 
 # ── OTP & Activity Security ──────────────────────────────────────────────────
 # Central setting for verification code lifetime: exactly 30 seconds

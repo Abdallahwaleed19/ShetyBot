@@ -1205,13 +1205,20 @@ function sendToTelegramAndClose() {
     <div id="auth-step-pending" style="display:none;">
       <div style="background:rgba(245,158,11,0.15);border:1.5px solid rgba(245,158,11,0.4);border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">
         <div style="font-size:32px;margin-bottom:8px">⏳</div>
-        <div style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:6px">طلبك قيد المراجعة لدى الأدمن</div>
+        <div style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:6px">تم استلام طلب تسجيلك بنجاح!</div>
         <div style="font-size:13px;color:#cbd5e1;line-height:1.6">
-          تم إشعار إدارة البوت (@ME_ii0) بطلب التسجيل الخاص بك.<br>
+          طلبك قيد المراجعة والتدقيق حالياً.<br>
+          <div style="margin:10px 0;background:rgba(0,0,0,0.3);padding:10px;border-radius:10px;text-align:right;font-size:13px">
+            <span style="color:#fbbf24;font-weight:bold">🔴 إذا كنت ترغب في الاشتراك وتفعيل الحساب:</span><br>
+            يرجى التواصل مع الإدارة أو المشرف لشحن الرصيد:<br>
+            👑 <b>الإدارة:</b> <a href="https://t.me/RE_i1i" target="_blank" style="color:#38bdf8;text-decoration:none">@RE_i1i</a><br>
+            🛡️ <b>المشرف:</b> <a href="https://t.me/WS2030W" target="_blank" style="color:#34d399;text-decoration:none">@WS2030W</a>
+          </div>
           بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني.
         </div>
       </div>
-      <button type="button" class="btn btn-next" onclick="checkUserStatusOnDemand()" style="width:100%;padding:12px;font-size:14px;margin-bottom:8px;">🔄 التحقق من حالة الموافقة الآن</button>
+      <a href="https://t.me/RE_i1i" target="_blank" class="btn btn-submit" style="display:block;text-align:center;text-decoration:none;padding:11px;font-size:14px;margin-bottom:8px;background:linear-gradient(135deg,#3b9eff,#2563eb);">💬 تواصل مع الإدارة (@RE_i1i)</a>
+      <button type="button" class="btn btn-next" onclick="checkUserStatusOnDemand()" style="width:100%;padding:11px;font-size:13.5px;margin-bottom:8px;">🔄 التحقق من حالة الموافقة الآن</button>
       <button type="button" class="btn btn-prev" onclick="switchAuthMode('login')" style="width:100%;padding:9px;font-size:12.5px;">تغيير الحساب</button>
     </div>
 
