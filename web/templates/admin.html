@@ -531,6 +531,28 @@
                 }
               }
             }, 1000);
+            // Poll every 5s to detect when user activates
+            const pollInterval = setInterval(async () => {
+              try {
+                const sr = await fetch(`/api/admin/user-status?user_id=${userId}&key=${adminKey}`);
+                const sd = await sr.json();
+                if (sd.found && sd.status === 'ACTIVE') {
+                  clearInterval(pollInterval);
+                  clearInterval(interval);
+                  if (cell) {
+                    cell.innerHTML = `
+                      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                        <span style="color:#34d399;font-size:11px;font-weight:bold">🟢 تم التفعيل</span>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+                          <button type="button" class="btn btn-warning" onclick="renewSubscription(${userId})" style="font-size:11px;padding:4px 8px">🔄 تجديد</button>
+                          <button type="button" class="btn btn-info" onclick="generateCode(${userId})" style="font-size:11px;padding:4px 8px">🔑 كود</button>
+                          <button type="button" class="btn btn-danger" onclick="suspendUser(${userId})" style="font-size:11px;padding:4px 8px">⏸️ تعليق</button>
+                        </div>
+                      </div>`;
+                  }
+                }
+              } catch(pe) { /* silent */ }
+            }, 5000);
           }
         } else {
           alert('خطأ: ' + (json.error || 'تعذر قبول الطلب'));

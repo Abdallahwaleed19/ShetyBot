@@ -25,6 +25,7 @@ from db.database import (
     get_user_by_identifier_sync,
     check_subscription_sync,
     record_user_activity_sync,
+    get_latest_code_for_user_sync,
     ADMIN_TELEGRAM_ID,
     ADMIN_USERNAME,
 )
@@ -106,7 +107,9 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     # 2. Unregistered User (First-time /start)
     if not user_rec:
+        reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}"
         inline_reg = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 تقديم طلب إنشاء تقرير جديد", web_app=WebAppInfo(url=reg_url))],
             [InlineKeyboardButton("💬 تواصل مع المشرف (@RE_i1i)", url="https://t.me/RE_i1i")]
         ])
         unreg_msg = (
@@ -161,17 +164,27 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, rejected_msg, reply_markup=ReplyKeyboardRemove())
         return
 
-    # 5. User with APPROVED status (waiting for 30s OTP)
+    # 5. User with APPROVED status (waiting for 50s OTP)
     if user_rec.registration_status == "APPROVED":
         otp_url = f"{webapp_url}?telegram_user_id={user_tg_id}&u={user_rec.username or user_tg_id}"
+        code_info = get_latest_code_for_user_sync(user_rec.id)
+        if code_info and code_info.get("is_valid"):
+            code_str = code_info.get("code", "")
+            sec_left = code_info.get("seconds_left", 50)
+            approved_msg = (
+                "🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
+                f"🔑 <b>رمز الدخول المؤقت:</b> <code>{code_str}</code>\n"
+                f"⏱️ <b>متبقي من الصلاحية:</b> {sec_left} ثانية!\n\n"
+                "اضغط على الزر أدناه لإدخال الرمز وتفعيل اشتراكك لمدة 30 يوماً فوراً:"
+            )
+        else:
+            approved_msg = (
+                "🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
+                "اضغط على الزر أدناه لإدخال رمز التحقق المؤقت الخاص بك وتفعيل اشتراكك لمدة 30 يوماً:"
+            )
         inline_otp = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔑 إدخال رمز التحقق (50 ثانية)", web_app=WebAppInfo(url=otp_url))]
+            [InlineKeyboardButton("🚀 إدخال رمز التحقق وتفعيل البوت", web_app=WebAppInfo(url=otp_url))]
         ])
-        approved_msg = (
-            "🎉 <b>تمت الموافقة على طلب تسجيلك!</b>\n\n"
-            f"تم إرسال رمز التحقق المؤقت (صالح لمدة 50 ثانية) إلى بريدك الإلكتروني (<code>{user_rec.email}</code>).\n\n"
-            "اضغط على الزر أدناه لإدخال الرمز المكون من 5 أرقام فوراً وتفعيل اشتراكك لمدة 30 يوماً:"
-        )
         await reply_safe(update.message, approved_msg, reply_markup=inline_otp)
         return
 

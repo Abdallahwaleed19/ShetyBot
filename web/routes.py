@@ -121,16 +121,19 @@ def is_admin_request(user: Optional[User], request: Request) -> bool:
     return False
 
 
-async def send_telegram_message_safe(chat_id: str, html_text: str):
+async def send_telegram_message_safe(chat_id: str, html_text: str, reply_markup: Optional[dict] = None):
     """Safely deliver a Telegram message without raising exceptions."""
     bot_token = os.getenv("BOT_TOKEN", "").strip()
     if not bot_token or not chat_id or str(chat_id) in ("0", "-1"):
         return
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
+        payload = {"chat_id": str(chat_id), "text": html_text, "parse_mode": "HTML"}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as client:
             await client.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                json={"chat_id": str(chat_id), "text": html_text, "parse_mode": "HTML"}
+                json=payload
             )
     except Exception as e:
         logger.warning(f"Telegram notification to {chat_id} failed: {e}")
@@ -1197,6 +1200,9 @@ async def api_admin_approve_registration(
         )
 
     # 2. Send Telegram message to user if available
+    webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
+    u_param = user_rec.username or user_rec.telegram_user_id
+    user_link = f"{webapp_base}/form?telegram_user_id={user_rec.telegram_user_id}&u={u_param}"
     if user_rec.telegram_user_id and str(user_rec.telegram_user_id) not in ("0", "-1"):
         user_tg_msg = (
             f"🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
@@ -1205,13 +1211,17 @@ async def api_admin_approve_registration(
             f"تم إرسال الرمز أيضاً إلى بريدك الإلكتروني (<code>{user_rec.email or ''}</code>).\n"
             f"أدخل الرمز الآن في نموذج التسجيل لتفعيل اشتراكك لمدة 30 يوماً."
         )
-        asyncio.create_task(send_telegram_message_safe(user_rec.telegram_user_id, user_tg_msg))
+        btn_markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "🚀 إدخال رمز التحقق وتفعيل البوت", "web_app": {"url": user_link}}
+                ]
+            ]
+        }
+        asyncio.create_task(send_telegram_message_safe(user_rec.telegram_user_id, user_tg_msg, reply_markup=btn_markup))
 
     log_audit(user_id, "ADMIN_APPROVE", f"Admin approved registration for user {user_rec.username or user_id}")
 
-    webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
-    u_param = user_rec.username or user_rec.telegram_user_id
-    user_link = f"{webapp_base}/form?telegram_user_id={user_rec.telegram_user_id}&u={u_param}"
 
     return JSONResponse({
         "success": True,
@@ -1222,6 +1232,27 @@ async def api_admin_approve_registration(
         "expires_in": OTP_TTL_SECONDS
     })
 
+
+
+@router.get("/api/admin/user-status")
+async def api_admin_user_status(
+    request: Request,
+    user_id: int,
+    current_user: User = Depends(get_current_user)
+):
+    """Check a user's current registration status and code validity (for dashboard polling)."""
+    if not is_admin_request(current_user, request):
+        raise HTTPException(403, "Admin only")
+    user_rec = get_user_by_identifier_sync(str(user_id))
+    if not user_rec:
+        return JSONResponse({"found": False})
+    code_info = get_latest_code_for_user_sync(user_rec.id)
+    return JSONResponse({
+        "found": True,
+        "status": user_rec.registration_status,
+        "is_active": user_rec.is_active,
+        "code_valid": code_info["is_valid"] if code_info else False
+    })
 
 @router.post("/api/admin/reject-registration")
 async def api_admin_reject_registration(
