@@ -60,6 +60,8 @@ from db.database import (
     permanent_delete_report_sync,
     update_saved_report_sync,
     log_audit,
+    record_user_activity_sync,
+    get_currently_active_users_sync,
     ADMIN_TELEGRAM_ID,
     ADMIN_EMAIL,
     ADMIN_USERNAME,
@@ -146,6 +148,7 @@ async def get_current_user(request: Request) -> User:
         if uid:
             u_rec = get_user_by_identifier_sync(str(uid))
             if u_rec:
+                record_user_activity_sync(user_id=u_rec.id, telegram_user_id=u_rec.telegram_user_id)
                 return User(
                     id=u_rec.id,
                     telegram_user_id=u_rec.telegram_user_id,
@@ -165,6 +168,7 @@ async def get_current_user(request: Request) -> User:
     if username:
         u_rec = get_user_by_identifier_sync(username)
         if u_rec:
+            record_user_activity_sync(user_id=u_rec.id, telegram_user_id=u_rec.telegram_user_id)
             return User(
                 id=u_rec.id,
                 telegram_user_id=u_rec.telegram_user_id,
@@ -183,6 +187,7 @@ async def get_current_user(request: Request) -> User:
     ).strip()
     u_rec = get_user_by_identifier_sync(telegram_user_id)
     if u_rec:
+        record_user_activity_sync(user_id=u_rec.id, telegram_user_id=u_rec.telegram_user_id)
         return User(
             id=u_rec.id,
             telegram_user_id=u_rec.telegram_user_id,
@@ -394,16 +399,13 @@ async def submit_report(
                     f"🔑 <b>رمز الخدمة:</b> <code>{s_code}</code>\n"
                     f"🏥 <b>المنشأة:</b> {hosp_name or '-'}\n"
                     f"⏱️ <b>المدة:</b> {d_days} يوم\n\n"
-                    f"🔗 <b>رابط التحقق في صحة:</b> https://seha-8xj.pages.dev/inquiries?q={s_code}"
+                    f"🔗 <b>رابط التحقق في صحة:</b> https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"
                 )
-                webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
-                edit_url = f"{webapp_base}/form?edit={s_code}&telegram_user_id={chat_id_to_send}"
                 import json
                 reply_markup = {
                     "inline_keyboard": [
                         [
-                            {"text": "🔗 التحقق في منصة صحة", "url": f"https://seha-8xj.pages.dev/inquiries?q={s_code}"},
-                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
+                            {"text": "🔗 التحقق في منصة صحة", "url": f"https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"}
                         ]
                     ]
                 }
@@ -1345,6 +1347,20 @@ async def admin_create_user_api(
         "message": f"تم إنشاء المستخدم {clean_u} باشتراك {days} يوم بنجاح",
         "user_id": new_u.id
     })
+
+
+
+@router.get("/api/admin/active-now-users")
+async def api_admin_active_now_users(
+    request: Request,
+    minutes: int = Query(15),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns users currently active within given minutes threshold (admin only)."""
+    if not is_admin_request(current_user, request):
+        raise HTTPException(403, "Access denied: Admin authorization required")
+    users = get_currently_active_users_sync(minutes=minutes)
+    return JSONResponse({"success": True, "data": users, "count": len(users)})
 
 
 @router.get("/api/admin/stats")

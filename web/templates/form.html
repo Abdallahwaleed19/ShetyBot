@@ -391,7 +391,35 @@
 
   <div class="field">
     <label>🌍 الجنسية — عربي</label>
-    <input type="text" id="nationality" placeholder="مثال: سعودي" oninput="autoTranslateNationality()">
+    <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.18);border-radius:10px;color:#fff;font-size:14.5px;margin-bottom:8px">
+      <option value="">— اختر الجنسية —</option>
+      <option value="سعودي|Saudi">🇸🇦 سعودي</option>
+      <option value="مصري|Egyptian">🇪🇬 مصري</option>
+      <option value="سوري|Syrian">🇸🇾 سوري</option>
+      <option value="أردني|Jordanian">🇯🇴 أردني</option>
+      <option value="سوداني|Sudanese">🇸🇩 سوداني</option>
+      <option value="يمني|Yemeni">🇾🇪 يمني</option>
+      <option value="عراقي|Iraqi">🇮🇶 عراقي</option>
+      <option value="فلسطيني|Palestinian">🇵🇸 فلسطيني</option>
+      <option value="كويتي|Kuwaiti">🇰🇼 كويتي</option>
+      <option value="إماراتي|Emirati">🇦🇪 إماراتي</option>
+      <option value="بحريني|Bahraini">🇧🇭 بحريني</option>
+      <option value="قطري|Qatari">🇶🇦 قطري</option>
+      <option value="عماني|Omani">🇴🇲 عماني</option>
+      <option value="مغربي|Moroccan">🇲🇦 مغربي</option>
+      <option value="جزائري|Algerian">🇩🇿 جزائري</option>
+      <option value="تونسي|Tunisian">🇹🇳 تونسي</option>
+      <option value="ليبي|Libyan">🇱🇾 ليبي</option>
+      <option value="لبناني|Lebanese">🇱🇧 لبناني</option>
+      <option value="باكستاني|Pakistani">🇵🇰 باكستاني</option>
+      <option value="هندي|Indian">🇮🇳 هندي</option>
+      <option value="بنغلاديشي|Bangladeshi">🇧🇩 بنغلاديشي</option>
+      <option value="إندونيسي|Indonesian">🇮🇩 إندونيسي</option>
+      <option value="فلبيني|Filipino">🇵🇭 فلبيني</option>
+      <option value="أثيوبي|Ethiopian">🇪🇹 أثيوبي</option>
+      <option value="أخرى|Other">🌍 أخرى...</option>
+    </select>
+    <input type="text" id="nationality" placeholder="مثال: سعودي" oninput="autoTranslateNationality()" style="display:none">
   </div>
 
   <div class="field ltr-field">
@@ -556,7 +584,22 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.national_id)          document.getElementById('national_id').value = d.national_id;
     if (d.patient_name_ar)      document.getElementById('patient_name_ar').value = d.patient_name_ar;
     if (d.patient_name_en)      document.getElementById('patient_name_en').value = d.patient_name_en;
-    if (d.nationality)          document.getElementById('nationality').value = d.nationality;
+    if (d.nationality) {
+          document.getElementById('nationality').value = d.nationality;
+          document.getElementById('nationality').style.display = '';
+          // Try to match dropdown
+          const sel = document.getElementById('nationality_select');
+          let matched = false;
+          for (let opt of sel.options) {
+            if (opt.value.startsWith(d.nationality + '|')) {
+              sel.value = opt.value;
+              document.getElementById('nationality').style.display = 'none';
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) { sel.value = ''; document.getElementById('nationality').style.display = ''; }
+        }
     if (d.nationality_en)       document.getElementById('nationality_en').value = d.nationality_en;
     if (d.employer)             document.getElementById('employer').value = d.employer;
 
@@ -779,7 +822,25 @@ const NATIONALITY_MAP = {
   'روسي': 'Russian', 'صيني': 'Chinese'
 };
 
-function autoTranslateNationality() {
+function applyNationalitySelect() {
+    const sel = document.getElementById('nationality_select');
+    const val = sel.value;
+    if (!val) return;
+    if (val === 'أخرى|Other') {
+      // Show text input for custom entry
+      document.getElementById('nationality').style.display = '';
+      document.getElementById('nationality').value = '';
+      document.getElementById('nationality_en').value = '';
+      document.getElementById('nationality').focus();
+      return;
+    }
+    const [ar, en] = val.split('|');
+    document.getElementById('nationality').value = ar;
+    document.getElementById('nationality_en').value = en;
+    document.getElementById('nationality').style.display = 'none';
+  }
+
+  function autoTranslateNationality() {
   if (_userEditedNationalityEn) return;
   const val = document.getElementById('nationality').value.trim();
   const enInput = document.getElementById('nationality_en');

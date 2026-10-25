@@ -23,6 +23,7 @@ from db.worker_client import get_report, search_by_national_id
 from db.database import (
     get_user_by_identifier_sync,
     check_subscription_sync,
+    record_user_activity_sync,
     ADMIN_TELEGRAM_ID,
     ADMIN_USERNAME,
 )
@@ -59,6 +60,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.message.from_user
     user_tg_id = str(user.id).strip()
     user_name = (user.username or "").lstrip("@").strip()
+    record_user_activity_sync(telegram_user_id=user_tg_id)
 
     is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() == ADMIN_USERNAME.lower())
 
@@ -101,18 +103,25 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, "⚙️ <b>لوحة التحكم والإدارة:</b>", reply_markup=inline_admin)
         return
 
-    # 2. Unregistered User
+    # 2. Unregistered User (Friendly welcome with user name and @username)
     if not user_rec:
         reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}"
+        display_full_name = user.full_name or "المستخدم العزيز"
+        display_username = f"@{user.username}" if user.username else "لا يوجد اسم مستخدم متاح"
+
         inline_reg = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📝 تقديم طلب تسجيل جديد", web_app=WebAppInfo(url=reg_url))]
+            [InlineKeyboardButton("📝 تقديم طلب إنشاء تقرير جديد", web_app=WebAppInfo(url=reg_url))]
         ])
         unreg_msg = (
-            "🏥 <b>أهلاً وسهلاً بك في نظام الإجازات المرضية صحتي (@SehtyBot)! 🎉</b>\n\n"
-            "نرحب بك في منصتنا الطبية المتكاملة. للاستفادة من خدماتنا يرجى إتمام التسجيل أولاً.\n\n"
-            f"⚠️ <b>تنبيه:</b> يتطلب استخدام البوت تسجيلاً مسبقاً وموافقة من الإدارة (@{ADMIN_USERNAME}).\n\n"
-            "بعد الموافقة على طلبك ستحصل على اشتراك لمدة <b>30 يوماً</b> كاملة للوصول إلى جميع خدمات المنصة.\n\n"
-            "يرجى الضغط على الزر أدناه لإرسال طلب تسجيلك (الاسم والبريد الإلكتروني)، وفور مراجعة الطلب والموافقة عليه ستصلك رسالة تحتوي على رمز التفعيل المؤقت."
+            f"🏥 <b>أهلاً وسهلاً بك في منصة صحتي، {display_full_name}! 👋</b>\n\n"
+            f"👤 <b>معلومات الحساب:</b>\n"
+            f"• الاسم: <b>{display_full_name}</b>\n"
+            f"• معرف الحساب: <code>{display_username}</code>\n"
+            f"• الآيدي: <code>{user_tg_id}</code>\n\n"
+            "✨ <b>حول الخدمة:</b>\n"
+            "تتيح لك منصتنا إنشاء وإصدار تقارير الإجازات المرضية المعتمدة بسهولة ودقة عالية، مع إمكانية التحقق المباشر عبر منصة صحة (seha-sea.com).\n\n"
+            f"⚠️ <b>تنبيه:</b> للاستفادة من الخدمة، يتطلب النظام إرسال طلب إنشاء التقرير والتسجيل أولاً، ثم مراجعة الإدارة (@{ADMIN_USERNAME}) وتفعيل اشتراكك لمدة 30 يوماً.\n\n"
+            "اضغط على الزر أدناه لبدء تقديم طلبك وإنشاء تقرير جديد الآن 👇"
         )
         await reply_safe(update.message, unreg_msg, reply_markup=inline_reg)
         return
@@ -324,12 +333,10 @@ async def handle_webapp_data(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
-    edit_url = f"{webapp_base}/form?edit={service_code}&telegram_user_id={user_id}"
+    record_user_activity_sync(telegram_user_id=user_id)
     buttons = [
         [
-            InlineKeyboardButton("🔗 التحقق في منصة صحة", url=f"https://seha-8xj.pages.dev/inquiries?q={service_code}"),
-            InlineKeyboardButton("✏️ تعديل التقرير", web_app=WebAppInfo(url=edit_url))
+            InlineKeyboardButton("🔗 التحقق في منصة صحة", url=f"https://seha-sea.com/#/inquiries/slenquiry?id={service_code}"),
         ]
     ]
     markup = InlineKeyboardMarkup(buttons)

@@ -22,9 +22,11 @@ ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "ramo.711.vip@gmail.com").strip().lo
 ADMIN_TELEGRAM_ID: str = os.getenv("ADMIN_TELEGRAM_ID", "8733335095").strip()
 ADMIN_KEY: str = os.getenv("ADMIN_KEY", "admin123").strip()
 
-# ── OTP Security ─────────────────────────────────────────────────────────────
+# ── OTP & Activity Security ──────────────────────────────────────────────────
 # Central setting for verification code lifetime: exactly 30 seconds
 OTP_TTL_SECONDS: int = int(os.getenv("OTP_TTL_SECONDS", "30"))
+# Inactivity threshold in minutes to consider a user "currently active"
+ACTIVE_USER_MINUTES: int = int(os.getenv("ACTIVE_USER_MINUTES", "15"))
 
 # ── Email Service (SMTP) ─────────────────────────────────────────────────────
 SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()

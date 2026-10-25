@@ -210,10 +210,15 @@
         <div class="stat-label">المستخدمين النشطين</div>
         <div class="stat-val" style="color:#10b981">{{ stats.active_users }}</div>
       </div>
+      <div class="stat-card" id="activeNowCard" style="cursor:pointer;border-color:rgba(16,185,129,0.4)" onclick="showActiveNowUsers()" title="عرض المستخدمين النشطين الآن">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-label">نشطون الآن (آخر 15 دقيقة)</div>
+        <div class="stat-val" style="color:#34d399" id="activeNowCount">{{ stats.active_now_users }}</div>
+      </div>
       <div class="stat-card">
         <div class="stat-icon">⏳</div>
         <div class="stat-label">طلبات التسجيل المعلقة</div>
-        <div class="stat-val" style="color:#f59e0b">{{ stats.pending_requests }}</div>
+        <div class="stat-val" style="color:#f59e0b">{{ stats.pending_registrations }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">📑</div>
@@ -311,7 +316,6 @@
               <th>المستخدم</th>
               <th>البريد الإلكتروني</th>
               <th>الحالة</th>
-              <th>الأيام المتبقية</th>
               <th>تاريخ الانتهاء</th>
               <th>🔑 كود الدخول المؤقت (30s)</th>
               <th>الإجراءات</th>
@@ -339,11 +343,6 @@
                 {% else %}
                   <span class="badge">{{ u.registration_status }}</span>
                 {% endif %}
-              </td>
-              <td>
-                <strong style="color:{{ '#10b981' if u.days_remaining > 0 else '#ef4444' }}">
-                  {{ u.days_remaining }} يوم
-                </strong>
               </td>
               <td style="font-size:12px">{{ u.subscription_end[:10] if u.subscription_end else '-' }}</td>
               <td>
@@ -409,7 +408,20 @@
     </div>
   </div>
 
-  <!-- OTP Modal -->
+    <!-- Active Now Users Modal -->
+  <div class="modal" id="activeNowModal">
+    <div class="modal-content" style="max-width:600px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="font-size:18px;color:#34d399">⚡ المستخدمون النشطون الآن</h3>
+        <button class="btn btn-copy" onclick="document.getElementById('activeNowModal').classList.remove('show')" style="padding:6px 14px">✕ إغلاق</button>
+      </div>
+      <div id="activeNowList" style="display:flex;flex-direction:column;gap:10px">
+        <div style="text-align:center;opacity:0.6">جاري التحميل...</div>
+      </div>
+    </div>
+  </div>
+
+<!-- OTP Modal -->
   <div class="modal" id="verifyModal">
     <div class="modal-content">
       <h3 style="font-size:19px;margin-bottom:12px">🔑 رمز التحقق المؤقت (30 ثانية)</h3>
@@ -591,6 +603,36 @@
           }).catch(() => {});
       }
     }, 8000);
+  
+    async function showActiveNowUsers() {
+      document.getElementById('activeNowModal').classList.add('show');
+      const list = document.getElementById('activeNowList');
+      list.innerHTML = '<div style="text-align:center;opacity:0.6">جاري التحميل...</div>';
+      try {
+        const res = await fetch(`/api/admin/active-now-users?key=${adminKey}`);
+        const json = await res.json();
+        if (json.success && json.data.length > 0) {
+          list.innerHTML = json.data.map((u, i) => `
+            <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <strong style="color:#34d399">${i+1}. ${u.full_name_ar || u.username || u.telegram_user_id}</strong>
+                <div style="font-size:12px;opacity:0.7;margin-top:2px">${u.username ? '@' + u.username : 'TG: ' + u.telegram_user_id}</div>
+              </div>
+              <div style="text-align:left;font-size:12px;opacity:0.7">
+                <div>آخر نشاط</div>
+                <div style="color:#34d399">${u.last_active_at ? u.last_active_at.slice(0,19).replace('T',' ') : '-'}</div>
+              </div>
+            </div>
+          `).join('');
+          document.getElementById('activeNowCount').textContent = json.data.length;
+        } else {
+          list.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.6">لا يوجد مستخدمون نشطون في آخر 15 دقيقة</div>';
+        }
+      } catch(e) {
+        list.innerHTML = '<div style="text-align:center;color:#ef4444">خطأ في تحميل البيانات</div>';
+      }
+    }
+
   </script>
 </body>
 </html>

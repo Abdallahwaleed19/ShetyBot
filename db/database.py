@@ -17,6 +17,7 @@ from config import (
     ADMIN_EMAIL,
     ADMIN_TELEGRAM_ID,
     OTP_TTL_SECONDS,
+    ACTIVE_USER_MINUTES,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,10 @@ DB_PATH = BASE_DIR / "seha_auth.db"
 
 
 def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -71,6 +74,7 @@ class UserRecord:
 
         self.created_at = d.get("created_at")
         self.updated_at = d.get("updated_at")
+        self.last_active_at = d.get("last_active_at")
 
     def __repr__(self):
         return f"<User id={self.id} tg={self.telegram_user_id} u={self.username} status={self.registration_status} role={self.role}>"
@@ -177,6 +181,7 @@ def init_db_sync() -> None:
         ("users", "registration_status", "TEXT DEFAULT 'ACTIVE'"),
         ("users", "rejection_reason", "TEXT"),
         ("users", "approved_at", "TEXT"),
+        ("users", "last_active_at", "TEXT"),
         ("users", "approved_by", "TEXT"),
         ("verification_codes", "code", "TEXT"),
         ("verification_codes", "attempts", "INTEGER DEFAULT 0"),
@@ -561,8 +566,8 @@ async def check_subscription(session=None, user_id: int = 0) -> Dict[str, Any]:
 
 
 def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
-    if days > 30:
-        days = 30
+    # Strictly 30 days per renewal
+    days = 30
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -573,6 +578,19 @@ def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
 
     user = UserRecord(row)
     now = datetime.now(timezone.utc)
+
+    # Idempotency guard: prevent duplicate extensions from rapid double-clicks (within 5 seconds)
+    if user.updated_at:
+        try:
+            up_dt = datetime.fromisoformat(user.updated_at)
+            if up_dt.tzinfo is None:
+                up_dt = up_dt.replace(tzinfo=timezone.utc)
+            if abs((now - up_dt).total_seconds()) < 5.0 and user.subscription_end and user.subscription_end > now:
+                logger.info(f"Ignoring duplicate renewal click for user {user_id} (idempotency guard)")
+                conn.close()
+                return user
+        except Exception:
+            pass
 
     current_end = user.subscription_end
     if current_end and current_end.tzinfo is None:
@@ -917,6 +935,43 @@ def get_all_saved_reports_sync(user_id: Optional[int] = None, telegram_user_id: 
     return [dict(r) for r in rows]
 
 
+
+
+def record_user_activity_sync(user_id: Optional[int] = None, telegram_user_id: Optional[str] = None) -> None:
+    """Updates last_active_at timestamp for active tracking."""
+    if not user_id and not telegram_user_id:
+        return
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if user_id:
+            cur.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_iso, user_id))
+        elif telegram_user_id and str(telegram_user_id) != "0":
+            cur.execute("UPDATE users SET last_active_at = ? WHERE telegram_user_id = ?", (now_iso, str(telegram_user_id)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Error recording user activity: {e}")
+
+
+def get_currently_active_users_sync(minutes: int = ACTIVE_USER_MINUTES) -> list[dict]:
+    """Returns users active within the given minutes threshold."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    threshold_iso = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    cur.execute(
+        """SELECT id, telegram_user_id, username, full_name_ar, full_name_en, 
+                  email, role, registration_status, last_active_at, subscription_end
+           FROM users 
+           WHERE last_active_at IS NOT NULL AND last_active_at >= ?
+           ORDER BY last_active_at DESC""",
+        (threshold_iso,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 def get_trash_reports_sync(user_id: Optional[int] = None, is_admin: bool = False) -> list[dict]:
     """Returns soft-deleted reports from trash bin."""
     conn = _get_conn()
@@ -932,10 +987,14 @@ def get_trash_reports_sync(user_id: Optional[int] = None, is_admin: bool = False
     return [dict(r) for r in rows]
 
 
-def get_single_saved_report_sync(service_code: str) -> Optional[dict]:
+def get_single_saved_report_sync(service_code: str, include_deleted: bool = False) -> Optional[dict]:
     conn = _get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM saved_reports WHERE service_code = ?", (str(service_code).strip(),))
+    sc = str(service_code).strip()
+    if include_deleted:
+        cur.execute("SELECT * FROM saved_reports WHERE service_code = ?", (sc,))
+    else:
+        cur.execute("SELECT * FROM saved_reports WHERE service_code = ? AND is_deleted = 0", (sc,))
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -1003,6 +1062,10 @@ def get_system_stats_sync() -> dict:
     cur.execute("SELECT count(*) FROM saved_reports WHERE is_deleted = 1")
     deleted_reports = cur.fetchone()[0]
 
+    threshold_iso = (datetime.now(timezone.utc) - timedelta(minutes=ACTIVE_USER_MINUTES)).isoformat()
+    cur.execute("SELECT count(*) FROM users WHERE last_active_at IS NOT NULL AND last_active_at >= ?", (threshold_iso,))
+    active_now_users = cur.fetchone()[0]
+
     conn.close()
 
     return {
@@ -1011,6 +1074,7 @@ def get_system_stats_sync() -> dict:
         "approved_users": approved_users,
         "rejected_users": rejected_users,
         "active_users": active_users,
+        "active_now_users": active_now_users,
         "suspended_users": suspended_users,
         "total_reports": total_reports,
         "deleted_reports": deleted_reports,
