@@ -130,11 +130,16 @@ async def send_telegram_message_safe(chat_id: str, html_text: str, reply_markup:
         payload = {"chat_id": str(chat_id), "text": html_text, "parse_mode": "HTML"}
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as client:
-            await client.post(
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.5)) as client:
+            resp = await client.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
                 json=payload
             )
+            if resp.status_code != 200:
+                logger.warning(f"Telegram notification to {chat_id} returned {resp.status_code}: {resp.text}")
+                if reply_markup:
+                    fallback_payload = {"chat_id": str(chat_id), "text": html_text, "parse_mode": "HTML"}
+                    await client.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json=fallback_payload)
     except Exception as e:
         logger.warning(f"Telegram notification to {chat_id} failed: {e}")
 
@@ -552,12 +557,23 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
     record = None
     error  = None
     if q:
-        record = await get_report(q)
-        if not record:
-            results = await search_by_national_id(q)
-            record  = results[0] if results else None
-        if not record:
-            error = f"لم يتم العثور على سجل لـ: {q}"
+        clean_q = q.strip()
+        # 1. Check if soft-deleted in local SQLite
+        trashed = get_single_saved_report_sync(clean_q, include_deleted=True)
+        if trashed and trashed.get("is_deleted"):
+            record = None
+            error = f"لم يتم العثور على سجل لـ: {clean_q}"
+        else:
+            local_rec = get_single_saved_report_sync(clean_q)
+            if local_rec:
+                record = local_rec
+            else:
+                record = await get_report(clean_q)
+                if not record:
+                    results = await search_by_national_id(clean_q)
+                    record  = results[0] if results else None
+                if not record:
+                    error = f"لم يتم العثور على سجل لـ: {clean_q}"
     return templates.TemplateResponse(
         request,
         "verify.html",
@@ -567,17 +583,23 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
 
 @router.get("/api/verify")
 async def api_verify(q: str = Query(...)):
-    # Check local SQLite first for speed and offline reliability
-    local_rec = get_single_saved_report_sync(q)
+    clean_q = q.strip()
+    # 1. If soft-deleted in local SQLite, return 404
+    trashed = get_single_saved_report_sync(clean_q, include_deleted=True)
+    if trashed and trashed.get("is_deleted"):
+        raise HTTPException(404, f"No record found for: {clean_q}")
+
+    # 2. Check local SQLite active records
+    local_rec = get_single_saved_report_sync(clean_q)
     if local_rec:
         return local_rec
 
-    record = await get_report(q)
+    record = await get_report(clean_q)
     if not record:
-        results = await search_by_national_id(q)
+        results = await search_by_national_id(clean_q)
         record  = results[0] if results else None
     if not record:
-        raise HTTPException(404, f"No record found for: {q}")
+        raise HTTPException(404, f"No record found for: {clean_q}")
     return record
 
 
@@ -837,15 +859,28 @@ async def api_verify_registration_otp(
 
 
 @router.post("/api/auth/request-code")
-async def api_request_code(username: str = Form(...)):
-    """Request a fresh 30-second verification code sent to user email and telegram."""
+async def api_request_code(
+    username: str = Form(...),
+    telegram_user_id: Optional[str] = Form(None)
+):
+    """Request a fresh 50-second verification code sent to user email and telegram."""
     clean_u = str(username).strip()
-    if not clean_u:
-        return JSONResponse({"success": False, "error": "اسم المستخدم مطلوب"})
+    clean_tg = str(telegram_user_id or "").strip()
+    if not clean_u and not clean_tg:
+        return JSONResponse({"success": False, "error": "اسم المستخدم أو معرف تيليجرام مطلوب"})
 
-    user = get_user_by_identifier_sync(clean_u)
+    user = get_user_by_identifier_sync(clean_u) if clean_u else None
+    if not user and clean_tg and clean_tg not in ("0", "-1"):
+        user = get_user_by_identifier_sync(clean_tg)
+
     if not user:
         return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
+
+    # Link telegram ID if provided and not yet linked
+    from db.database import update_user_telegram_id_sync
+    if clean_tg and clean_tg not in ("0", "-1") and str(user.telegram_user_id) in ("0", "-1", "", "None"):
+        update_user_telegram_id_sync(user.id, clean_tg)
+        user.telegram_user_id = clean_tg
 
     is_admin = (
         user.role == "admin"
@@ -891,15 +926,16 @@ async def api_request_code(username: str = Form(...)):
             send_user_otp_email(user.email, code, user.full_name_ar or user.username or "")
         )
 
-    # 2. Send OTP to User's Telegram if known
-    if user.telegram_user_id and str(user.telegram_user_id) not in ("0", "-1"):
+    # 2. Send OTP to User's Telegram
+    target_tg = str(user.telegram_user_id or clean_tg).strip()
+    if target_tg and target_tg not in ("0", "-1", "None"):
         user_tg_msg = (
-            f"🔐 <b>رمز التحقق الخاص بك (30 ثانية)</b>\n\n"
+            f"🔐 <b>رمز التحقق الخاص بك (50 ثانية)</b>\n\n"
             f"🔑 <b>الرمز:</b> <code>{code}</code>\n"
-            f"⏳ <b>المدة:</b> 30 ثانية فقط!\n\n"
+            f"⏳ <b>المدة:</b> 50 ثانية فقط!\n\n"
             f"أدخل الرمز الآن في نموذج صحتي لتفعيل اشتراكك لمدة 30 يوماً."
         )
-        asyncio.create_task(send_telegram_message_safe(user.telegram_user_id, user_tg_msg))
+        asyncio.create_task(send_telegram_message_safe(target_tg, user_tg_msg))
 
     # 3. Notify Admin on Telegram for real-time tracking
     admin_msg = (

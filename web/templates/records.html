@@ -134,22 +134,44 @@
       gap: 16px;
     }
 
-    /* Record Card */
+    /* Record Card - Compact Row */
     .record-card {
       background: var(--card-bg);
       border: 1.5px solid var(--border);
-      border-radius: 18px;
-      padding: 18px 16px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-      transition: transform .15s, border-color .2s;
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: all .15s;
+      flex-wrap: wrap;
     }
     .record-card:hover {
       border-color: rgba(59, 158, 255, 0.5);
-      transform: translateY(-2px);
+      background: rgba(13, 54, 131, 0.5);
     }
     .record-card.trashed {
       border-color: rgba(239, 68, 68, 0.4);
-      background: rgba(239, 68, 68, 0.05);
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    .row-patient-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .row-idx {
+      background: rgba(59, 158, 255, 0.2);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 158, 255, 0.35);
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
     }
 
     .card-head {
@@ -423,7 +445,12 @@ function copyPersonData(code) {
 
 // Edit person data -> opens form pre-filled
 function editPersonData(code) {
-  window.location.href = `/form?edit=${encodeURIComponent(code)}`;
+  const urlParams = new URLSearchParams(window.location.search);
+  const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
+  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
+  let url = `/form?edit=${encodeURIComponent(code)}`;
+  if (uid && uid !== '0') url += `&telegram_user_id=${encodeURIComponent(uid)}`;
+  window.location.href = url;
 }
 
 // Soft delete record (moves to trash)
@@ -547,74 +574,31 @@ function renderRecords(records) {
 
   container.innerHTML = records.map((r, idx) => `
     <div class="record-card ${currentTab === 'trash' ? 'trashed' : ''}">
-      <div class="card-head">
-        <div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="background:rgba(59,158,255,0.2);color:#93c5fd;border:1px solid rgba(59,158,255,0.3);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">#${idx + 1}</span>
-            <div class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</div>
-          </div>
-          ${r.patient_name_en ? `<div class="patient-name-en" style="margin-right:32px;">${r.patient_name_en}</div>` : ''}
-        </div>
-        <div class="head-badges">
-          <span class="badge-type">${r.report_type || 'GSL'}</span>
-          <span class="badge-code">${r.service_code}</span>
-        </div>
+      <div class="row-patient-info">
+        <span class="row-idx">#${idx + 1}</span>
+        <span class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</span>
       </div>
 
-      <div class="card-grid">
-        <div class="grid-item">
-          <span class="grid-label">🪪 رقم الهوية</span>
-          <span class="grid-value">${r.national_id || '-'}</span>
-        </div>
-        <div class="grid-item">
-          <span class="grid-label">⏱️ مدة الإجازة</span>
-          <span class="grid-value" style="color:#10b981;font-weight:700">
-            ${r.leave_duration_days || '1'} يوم (${r.admission_date || ''} → ${r.discharge_date || ''})
-          </span>
-        </div>
-        <div class="grid-item">
-          <span class="grid-label">🗓️ تاريخ الإصدار</span>
-          <span class="grid-value">${r.issue_date || '-'} ${r.report_time || ''}</span>
-        </div>
-        <div class="grid-item">
-          <span class="grid-label">🌍 الجنسية</span>
-          <span class="grid-value">${r.nationality || r.nationality_en || '-'}</span>
-        </div>
-        <div class="grid-item">
-          <span class="grid-label">🏥 المستشفى</span>
-          <span class="grid-value">${r.hospital_name_ar || '-'}</span>
-        </div>
-        <div class="grid-item">
-          <span class="grid-label">👨‍⚕️ الممارس</span>
-          <span class="grid-value">${r.practitioner_name_ar || '-'}</span>
-        </div>
-        ${r.employer ? `
-        <div class="grid-item" style="grid-column: span 2">
-          <span class="grid-label">🏢 جهة العمل</span>
-          <span class="grid-value">${r.employer}${r.employer_en ? ' (' + r.employer_en + ')' : ''}</span>
-        </div>` : ''}
-      </div>
-
-      <!-- Actions -->
-      <div class="card-actions">
+      <!-- Actions beside name -->
+      <div class="card-actions" style="border:none;padding:0;margin:0;">
         ${currentTab === 'active' ? `
-          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
-            📋 نسخ
-          </button>
-          <button class="action-btn btn-edit" onclick="editPersonData('${r.service_code}')" title="تعديل بيانات الشخص">
+          <button class="action-btn btn-edit" onclick="editPersonData('${r.service_code}')" title="تعديل">
             🖊️ تعديل
           </button>
-          <button class="action-btn btn-trash" onclick="trashPersonData('${r.service_code}')" title="نقل إلى سلة المحذوفات">
-            🗑️ سلة المحذوفات
+          <button class="action-btn btn-trash" onclick="trashPersonData('${r.service_code}')" title="حذف">
+            🗑️ حذف
+          </button>
+          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ">
+            📋 نسخ
           </button>
           <a class="action-btn btn-pdf" href="/api/download/${r.service_code}" download="SickLeave_${r.service_code}.pdf" title="تحميل PDF">
             📥 PDF
           </a>
         ` : `
-          <button class="action-btn btn-restore" onclick="restorePersonData('${r.service_code}')" title="استرجاع من المحذوفات">
+          <button class="action-btn btn-restore" onclick="restorePersonData('${r.service_code}')" title="استرجاع">
             ♻️ استرجاع
           </button>
-          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ بيانات الشخص">
+          <button class="action-btn btn-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ">
             📋 نسخ
           </button>
           ${isAdmin ? `
@@ -669,8 +653,8 @@ async function loadAllData() {
   const authParams = `token=${encodeURIComponent(token)}&u=${encodeURIComponent(uname)}&telegram_user_id=${uid}&role=${qRole}`;
   const headers = { 'x-auth-token': token, 'x-username': uname };
 
+  // 1. Fetch active safely
   try {
-    // 1. Fetch active
     const resActive = await fetch(`/api/all-records?${authParams}`, { headers });
     const jsonActive = await resActive.json();
     if (jsonActive.success && Array.isArray(jsonActive.data)) {
@@ -684,8 +668,13 @@ async function loadAllData() {
     } else {
       activeRecords = [];
     }
+  } catch (eActive) {
+    console.error('Error fetching active records:', eActive);
+    activeRecords = [];
+  }
 
-    // 2. Fetch trash
+  // 2. Fetch trash safely
+  try {
     const resTrash = await fetch(`/api/trash-records?${authParams}`, { headers });
     const jsonTrash = await resTrash.json();
     if (jsonTrash.success && Array.isArray(jsonTrash.data)) {
@@ -694,14 +683,17 @@ async function loadAllData() {
     } else {
       trashRecords = [];
     }
-
-    document.getElementById('count-active').textContent = activeRecords.length;
-    document.getElementById('count-trash').textContent = trashRecords.length;
-
-    filterRecords();
-  } catch (e) {
-    console.error('Failed to load data:', e);
+  } catch (eTrash) {
+    console.error('Error fetching trash records:', eTrash);
+    trashRecords = [];
   }
+
+  // Update count badges
+  document.getElementById('count-active').textContent = activeRecords.length;
+  document.getElementById('count-trash').textContent = trashRecords.length;
+
+  // Immediate render on load
+  filterRecords();
 }
 
 document.addEventListener('DOMContentLoaded', loadAllData);

@@ -1120,16 +1120,15 @@ function downloadPdfFromModal(e) {
 }
 
 function sendToTelegramAndClose() {
-  const sCode = document.getElementById('res-service-code').textContent.trim();
-  if (tg && typeof tg.sendData === 'function') {
-    try {
-      tg.sendData(JSON.stringify({ service_code: sCode, status: 'success' }));
-      return;
-    } catch (e) {}
+  if (tg) {
+    if (typeof tg.close === 'function') {
+      try { tg.close(); } catch (e) {}
+    }
+    if (typeof tg.openTelegramLink === 'function') {
+      try { tg.openTelegramLink('https://t.me/SehtyBot'); return; } catch (e) {}
+    }
   }
-  if (tg && typeof tg.close === 'function') {
-    tg.close();
-  }
+  window.location.href = 'https://t.me/SehtyBot';
 }
 </script>
 
@@ -1313,8 +1312,11 @@ async function submitRegistration() {
   const nameEn = document.getElementById('reg-name-en').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   let username = document.getElementById('reg-username').value.trim();
+  const regParams = new URLSearchParams(window.location.search);
+  const regQTgId = regParams.get('telegram_user_id') || regParams.get('tg_id') || '';
   const tgUser = tg?.initDataUnsafe?.user;
-  const tgId = tgUser?.id || '0';
+  const tgId = (tgUser?.id ? String(tgUser.id) : '') || regQTgId || localStorage.getItem('sehty_telegram_user_id') || '0';
+  if (tgId && tgId !== '0') localStorage.setItem('sehty_telegram_user_id', tgId);
   if (!username && tgUser?.username) username = tgUser.username;
 
   if (!nameAr) return showAuthErr('⚠️ يرجى إدخال الاسم الكامل بالعربية');
@@ -1392,8 +1394,17 @@ async function requestOtpCode() {
     return;
   }
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
+  const tgUser = tg?.initDataUnsafe?.user;
+  const currentTgId = (tgUser?.id ? String(tgUser.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '0';
+  if (currentTgId && currentTgId !== '0') localStorage.setItem('sehty_telegram_user_id', currentTgId);
+
   const fd = new FormData();
   fd.append('username', username);
+  if (currentTgId && currentTgId !== '0') {
+    fd.append('telegram_user_id', currentTgId);
+  }
 
   try {
     const res = await fetch('/api/auth/request-code', { method: 'POST', body: fd });

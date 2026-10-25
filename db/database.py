@@ -992,7 +992,7 @@ def get_currently_active_users_sync(minutes: int = ACTIVE_USER_MINUTES) -> list[
     conn.close()
     return [dict(r) for r in rows]
 
-def get_trash_reports_sync(user_id: Optional[int] = None, is_admin: bool = False) -> list[dict]:
+def get_trash_reports_sync(user_id: Optional[int] = None, telegram_user_id: Optional[str] = None, is_admin: bool = False) -> list[dict]:
     """Returns soft-deleted reports from trash bin."""
     conn = _get_conn()
     cur = conn.cursor()
@@ -1000,11 +1000,26 @@ def get_trash_reports_sync(user_id: Optional[int] = None, is_admin: bool = False
         cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 1 ORDER BY deleted_at DESC")
     elif user_id:
         cur.execute("SELECT * FROM saved_reports WHERE user_id = ? AND is_deleted = 1 ORDER BY deleted_at DESC", (user_id,))
+    elif telegram_user_id and str(telegram_user_id) not in ("0", "-1"):
+        cur.execute("SELECT * FROM saved_reports WHERE telegram_user_id = ? AND is_deleted = 1 ORDER BY deleted_at DESC", (str(telegram_user_id),))
     else:
         cur.execute("SELECT * FROM saved_reports WHERE is_deleted = 1 ORDER BY deleted_at DESC")
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def update_user_telegram_id_sync(user_id: int, telegram_user_id: str) -> bool:
+    """Links or updates a user's Telegram user ID."""
+    if not user_id or not telegram_user_id or str(telegram_user_id) in ("0", "-1"):
+        return False
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET telegram_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (str(telegram_user_id), user_id))
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
 
 
 def get_single_saved_report_sync(service_code: str, include_deleted: bool = False) -> Optional[dict]:

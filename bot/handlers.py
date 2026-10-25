@@ -72,6 +72,12 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not user_rec and user_name:
         user_rec = get_user_by_identifier_sync(user_name)
 
+    # Always link Telegram User ID if missing or mismatched
+    if user_rec and user_tg_id and user_tg_id not in ("0", "-1") and str(user_rec.telegram_user_id) != user_tg_id:
+        from db.database import update_user_telegram_id_sync
+        update_user_telegram_id_sync(user_rec.id, user_tg_id)
+        user_rec.telegram_user_id = user_tg_id
+
     # 1. Admin Access
     if is_admin:
         admin_url = f"{base_url}/admin?key=admin123"
