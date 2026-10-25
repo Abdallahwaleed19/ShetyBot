@@ -228,11 +228,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             KeyboardButton("📋 البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}")),
         ]
     ]
-    if latest_code:
-        edit_url = f"{webapp_url}?telegram_user_id={user_tg_id}&edit={latest_code}"
-        keyboard_rows.append([
-            KeyboardButton("✏️ تعديل التقرير", web_app=WebAppInfo(url=edit_url))
-        ])
+
 
     keyboard = ReplyKeyboardMarkup(
         keyboard_rows,
@@ -246,8 +242,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "• اضغط <b>📝 تقديم تقرير جديد</b> لإصدار تقرير جديد.\n"
         "• اضغط <b>📋 البيانات السابقة</b> لعرض سجلاتك وتعديلها واسترجاعها من سلة المحذوفات.\n"
     )
-    if latest_code:
-        active_msg += f"• اضغط <b>✏️ تعديل التقرير</b> لتعديل بيانات آخر تقرير أصدرته (<code>{latest_code}</code>).\n"
+
 
     await reply_safe(update.message, active_msg, reply_markup=keyboard)
 

@@ -261,8 +261,8 @@ async def submit_report(
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     # Page 3
-    practitioner_name_ar: str = Form(""),
-    practitioner_name_en: str = Form(""),
+    practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
+    practitioner_name_en: str = Form("MOHAMMED ABDULLAH AL-SHARARI"),
     job_title_ar:         str = Form("طبيب عام"),
     job_title_en:         str = Form("General Practitioner"),
     hospital_name_ar:     str = Form(""),
@@ -324,6 +324,10 @@ async def submit_report(
 
         # Leave duration
         dur = inclusive_duration(adm, dis)
+        if not practitioner_name_ar or not practitioner_name_ar.strip():
+            practitioner_name_ar = "محمد عبدالله الشراري"
+        if not practitioner_name_en or not practitioner_name_en.strip():
+            practitioner_name_en = "MOHAMMED ABDULLAH AL-SHARARI"
         if not job_title_ar or not job_title_ar.strip():
             job_title_ar = "طبيب عام"
         if not job_title_en or not job_title_en.strip():
@@ -410,25 +414,15 @@ async def submit_report(
                     f"📄 <b>تم إصدار التقرير الطبي بنجاح!</b>\n\n"
                     f"👤 <b>اسم المريض:</b> {p_name}\n"
                     f"🆔 <b>رقم الهوية:</b> <code>{nat_id}</code>\n"
-                    f"🔑 <b>رمز الخدمة:</b> <code>{s_code}</code>\n"
-                    f"🏥 <b>المنشأة:</b> {hosp_name or '-'}\n"
-                    f"⏱️ <b>المدة:</b> {d_days} يوم\n\n"
-                    f"🔗 <b>رابط التحقق في صحة:</b> https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"
+                    f"🔑 <b>رمز الخدمة:</b> <code>{s_code}</code>"
                 )
                 import json
                 webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
-                edit_url = f"{webapp_base}/form?telegram_user_id={chat_id_to_send}&edit={s_code}"
                 new_form_url = f"{webapp_base}/form?telegram_user_id={chat_id_to_send}"
                 records_url = f"{webapp_base}/records?telegram_user_id={chat_id_to_send}"
 
                 reply_markup = {
                     "inline_keyboard": [
-                        [
-                            {"text": "🔗 التحقق في منصة صحة", "url": f"https://seha-sea.com/#/inquiries/slenquiry?id={s_code}"}
-                        ],
-                        [
-                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
-                        ],
                         [
                             {"text": "📝 تقديم تقرير جديد", "web_app": {"url": new_form_url}},
                             {"text": "📋 البيانات السابقة", "web_app": {"url": records_url}}
@@ -440,9 +434,6 @@ async def submit_report(
                         [
                             {"text": "📝 تقديم تقرير جديد", "web_app": {"url": new_form_url}},
                             {"text": "📋 البيانات السابقة", "web_app": {"url": records_url}}
-                        ],
-                        [
-                            {"text": "✏️ تعديل التقرير", "web_app": {"url": edit_url}}
                         ]
                     ],
                     "resize_keyboard": True
@@ -469,7 +460,7 @@ async def submit_report(
                                         f"https://api.telegram.org/bot{bot_token}/sendMessage",
                                         json={
                                             "chat_id": str(chat_id_to_send),
-                                            "text": "👇 <b>لوحة التحكم السريعة:</b>\nيمكنك استخدام الأزرار أدناه لتعديل التقرير أو إصدار تقرير جديد في أي وقت:",
+                                            "text": "👇 <b>القائمة الرئيسية:</b>\nيمكنك استخدام الأزرار أدناه لتقديم تقرير جديد أو عرض البيانات السابقة:",
                                             "parse_mode": "HTML",
                                             "reply_markup": chat_keyboard
                                         }
@@ -1131,8 +1122,8 @@ async def api_update_record(
     nationality_en:       str = Form(""),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
-    practitioner_name_ar: str = Form(""),
-    practitioner_name_en: str = Form(""),
+    practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
+    practitioner_name_en: str = Form("MOHAMMED ABDULLAH AL-SHARARI"),
     job_title_ar:         str = Form("طبيب عام"),
     job_title_en:         str = Form("General Practitioner"),
     hospital_name_ar:     str = Form(""),
