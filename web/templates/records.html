@@ -517,6 +517,16 @@ function switchTab(tab) {
 }
 
 // Render cards
+
+function formatLeavePeriod(r) {
+  const adm = r.admission_date || '';
+  const dis = r.discharge_date || '';
+  if (adm && dis && adm !== dis) {
+    return `${adm} إلى ${dis}`;
+  }
+  return adm || dis || r.issue_date || '-';
+}
+
 function renderRecords(records) {
   const container = document.getElementById('recordsContainer');
   document.getElementById('rec-count').textContent = `${records.length} تقرير`;
@@ -550,28 +560,22 @@ function renderRecords(records) {
       <!-- Patient details -->
       <div class="card-patient-info">
         <div class="patient-title">${r.patient_name_ar || 'مريض غير مسمى'}</div>
-        <div class="patient-subtitle">
-          <span>إجازة مرضية</span>
-          <span class="sub-dot">•</span>
-          <span>${r.issue_date || r.admission_date || '-'}</span>
-          <span class="sub-dot">•</span>
-          <span style="font-family:monospace;color:#38bdf8">${r.service_code || ''}</span>
+        <div class="patient-leave-date" style="font-size:13px;color:#38bdf8;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:5px;">
+          <span>📅 تاريخ الإجازة المرضية:</span>
+          <span style="color:#ffffff">${formatLeavePeriod(r)}</span>
         </div>
       </div>
 
-      <!-- Actions Inline Row (Icons only, no text, no borders) -->
+      <!-- Actions Inline Row (Only Delete and Edit icons, frameless, textless) -->
       <div class="card-actions-row">
         ${currentTab === 'active' ? `
           <button class="action-icon icon-delete" onclick="trashPersonData('${r.service_code}')" title="حذف">🗑️</button>
           <button class="action-icon icon-edit" onclick="editPersonData('${r.service_code}')" title="تعديل">✏️</button>
-          <button class="action-icon icon-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ">📋</button>
-          <a class="action-icon icon-pdf" href="/api/download/${r.service_code}" download="SickLeave_${r.service_code}.pdf" title="تحميل PDF">📥</a>
         ` : `
           ${isAdmin ? `
             <button class="action-icon icon-perm" onclick="permanentDeletePersonData('${r.service_code}')" title="حذف نهائي">❌</button>
           ` : ''}
           <button class="action-icon icon-restore" onclick="restorePersonData('${r.service_code}')" title="استرجاع">♻️</button>
-          <button class="action-icon icon-copy" onclick="copyPersonData('${r.service_code}')" title="نسخ">📋</button>
         `}
       </div>
     </div>
