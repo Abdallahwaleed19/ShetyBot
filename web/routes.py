@@ -766,44 +766,47 @@ async def api_register_user(
             "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         }
 
-        # 1. Send Email Notification to Admin
+        # Generate fresh OTP code for the registering user
+        code = create_verification_code_sync(user_rec.id)
+
+        # 1. Send OTP to User's Email IMMEDIATELY
+        asyncio.create_task(
+            send_user_otp_email(clean_email, code, clean_ar or clean_u or "المستخدم الكريم")
+        )
+
+        # 2. Send Email Notification to Admin
         asyncio.create_task(
             send_admin_new_registration_notification(user_dict)
         )
 
-        # 2. Send Telegram Notification to Admin
+        # 3. Send Telegram Notification to Admin with the code
         admin_tg_msg = (
-            f"🔔 <b>طلب تسجيل جديد ينتظر الموافقة</b>\n\n"
+            f"🔔 <b>طلب تسجيل جديد وتوليد رمز تحقق</b>\n\n"
             f"👤 <b>الاسم بالعربي:</b> {clean_ar}\n"
-            f"🔤 <b>الاسم بالإنجليزي:</b> {clean_en or '-'}\n"
             f"📧 <b>البريد:</b> <code>{clean_email}</code>\n"
+            f"🔑 <b>الرمز المرسل:</b> <code>{code}</code>\n"
             f"🆔 <b>Telegram ID:</b> <code>{clean_tg}</code>\n"
-            f"🏷️ <b>Username:</b> @{clean_u or 'بدون'}\n\n"
-            f"⚙️ للموافقة أو الرفض، افتح لوحة الأدمن: <code>/admin</code>"
+            f"🏷️ <b>Username:</b> @{clean_u or 'بدون'}"
         )
         asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg))
 
-        # Notify registering user on Telegram if chat available
+        # 4. Notify registering user on Telegram if chat available
         if clean_tg and clean_tg not in ("0", "-1"):
             user_tg_msg = (
-                "✅ <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n"
-                "طلبك قيد المراجعة حالياً.\n\n"
-                "🔴 <b>إذا كنت ترغب في الاشتراك وتفعيل الحساب فوراً:</b>\n"
-                "يرجى التواصل مع الإدارة أو المشرف:\n"
-                "👑 <b>الإدارة:</b> @RE_i1i\n"
-                "🛡️ <b>المشرف:</b> @WS2030W\n\n"
-                "• التحويل على حساب الكريمي:\n"
-                "• رقم الحساب اليمني: <code>3126519272</code>\n"
-                "• رقم الحساب السعودي: <code>3142525843</code>\n"
-                "✅ أرسل صورة الإشعار بعد التحويل لتفعيل حسابك فوراً."
+                f"🎉 <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n"
+                f"🔑 <b>رمز التحقق الخاص بك (50 ثانية):</b> <code>{code}</code>\n\n"
+                f"تم إرسال الرمز أيضاً إلى بريدك الإلكتروني (<code>{clean_email}</code>).\n"
+                f"أدخل الرمز الآن في النموذج لتفعيل حسابك فوراً."
             )
             asyncio.create_task(send_telegram_message_safe(clean_tg, user_tg_msg))
 
         return JSONResponse({
             "success": True,
             "user_id": user_rec.id,
-            "status": "PENDING_APPROVAL",
-            "message": "تم إرسال طلب التسجيل بنجاح! إذا كنت ترغب في الاشتراك وتفعيل الحساب، يرجى التواصل مع الإدارة (@RE_i1i) أو المشرف (@WS2030W)."
+            "status": "OTP_SENT",
+            "has_otp": True,
+            "expires_in": OTP_TTL_SECONDS,
+            "message": "تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح!"
         })
 
     except Exception as e:
@@ -966,8 +969,18 @@ async def api_request_code(
     if not user and clean_tg and clean_tg not in ("0", "-1"):
         user = get_user_by_identifier_sync(clean_tg)
 
+    # If user entered an email for the first time, auto-register them!
     if not user:
-        return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
+        if "@" in clean_u and "." in clean_u:
+            user = register_user_request_sync(
+                full_name_ar=clean_u.split("@")[0],
+                full_name_en="",
+                email=clean_u,
+                telegram_user_id=clean_tg or "0",
+                username=clean_u.split("@")[0]
+            )
+        else:
+            return JSONResponse({"success": False, "error": "المستخدم غير موجود. يرجى إدخال بريدك الإلكتروني للتسجيل."})
 
     # Link telegram ID if provided and not yet linked
     from db.database import update_user_telegram_id_sync
@@ -983,12 +996,6 @@ async def api_request_code(
     )
 
     if not is_admin:
-        if user.registration_status == "PENDING_APPROVAL":
-            return JSONResponse({
-                "success": False,
-                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@RE_i1i). ستصلك رسالة فور الموافقة على الحساب.",
-                "status": "PENDING_APPROVAL"
-            })
         if user.registration_status == "REJECTED":
             return JSONResponse({
                 "success": False,
@@ -1065,7 +1072,7 @@ async def api_verify_code(username: str = Form(...), code: str = Form(...)):
         })
 
     # Activate user and start 30-day subscription upon successful verification
-    if user.registration_status == "APPROVED":
+    if user.registration_status in ("APPROVED", "PENDING_APPROVAL"):
         activate_user_sync(user.id)
         renew_subscription_sync(user.id, days=30)
     elif user.registration_status == "ACTIVE":

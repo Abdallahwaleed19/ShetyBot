@@ -1317,7 +1317,16 @@ async function submitRegistration() {
     if (json.success) {
       localStorage.setItem('sehty_registered_email', email);
       if (username) localStorage.setItem('sehty_username', username);
-      switchAuthMode('pending');
+      document.getElementById('auth-username').value = email;
+      switchAuthMode('otp');
+      const codeInput = document.getElementById('auth-code');
+      codeInput.value = '';
+      codeInput.disabled = false;
+      document.getElementById('btn-verify-otp').disabled = false;
+      document.getElementById('btn-verify-otp').style.opacity = '1';
+      codeInput.focus();
+      startOtpTimer(json.expires_in || 50);
+      showToast('📩 تم إرسال رمز التحقق إلى بريدك الإلكتروني!');
     } else {
       showAuthErr('❌ ' + (json.error || 'فشل إرسال طلب التسجيل'));
     }
