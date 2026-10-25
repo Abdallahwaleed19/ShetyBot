@@ -23,6 +23,8 @@ from db.worker_client import (
     get_report,
     search_by_national_id,
     upload_logo,
+    hide_report_in_worker,
+    restore_report_in_worker,
 )
 from db.database import (
     get_session,
@@ -54,11 +56,14 @@ from db.database import (
     save_report_full_sync,
     get_all_saved_reports_sync,
     get_trash_reports_sync,
+    get_user_all_saved_reports_sync,
     get_single_saved_report_sync,
     soft_delete_report_sync,
     restore_report_sync,
     permanent_delete_report_sync,
     update_saved_report_sync,
+    soft_delete_user_sync,
+    restore_user_sync,
     log_audit,
     record_user_activity_sync,
     get_currently_active_users_sync,
@@ -75,6 +80,47 @@ from services.email_service import (
     send_admin_new_registration_notification,
     send_user_otp_email,
 )
+
+
+def extract_report_payload(row: dict) -> dict:
+    if not row:
+        return {}
+    if row.get('data_json'):
+        try:
+            import json
+            d = json.loads(row['data_json'])
+            if isinstance(d, dict) and d.get('service_code'):
+                return d
+        except Exception:
+            pass
+    return {
+        'service_code': str(row.get('service_code') or ''),
+        'national_id': str(row.get('national_id') or ''),
+        'patient_name_ar': str(row.get('patient_name_ar') or ''),
+        'patient_name_en': str(row.get('patient_name_en') or ''),
+        'nationality': str(row.get('nationality') or 'السعودية'),
+        'nationality_en': str(row.get('nationality_en') or 'Saudi'),
+        'employer': str(row.get('employer') or ''),
+        'employer_en': str(row.get('employer_en') or ''),
+        'practitioner_name_ar': str(row.get('practitioner_name_ar') or 'محمد عبدالله الشراري'),
+        'practitioner_name_en': str(row.get('practitioner_name_en') or 'MOHAMMED ABDULLAH AL-SHARARI'),
+        'job_title_ar': str(row.get('job_title_ar') or 'طبيب عام'),
+        'job_title_en': str(row.get('job_title_en') or 'General'),
+        'hospital_name_ar': str(row.get('hospital_name_ar') or ''),
+        'hospital_name_en': str(row.get('hospital_name_en') or ''),
+        'hospital_type': str(row.get('hospital_type') or 'government'),
+        'report_type': str(row.get('report_type') or 'GSL'),
+        'admission_date': str(row.get('admission_date') or ''),
+        'discharge_date': str(row.get('discharge_date') or ''),
+        'leave_duration_days': str(row.get('leave_duration_days') or '1'),
+        'issue_date': str(row.get('issue_date') or ''),
+        'report_time': str(row.get('report_time') or ''),
+        'logo_url': str(row.get('logo_url') or ''),
+        'pdf_url': str(row.get('pdf_url') or ''),
+        'telegram_user_id': str(row.get('telegram_user_id') or '0'),
+        'user_id': int(row.get('user_id') or 0),
+    }
+
 
 router    = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
@@ -256,7 +302,7 @@ async def submit_report(
     national_id:          str = Form(...),
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
-    nationality:          str = Form("سعودي"),
+    nationality:          str = Form("السعودية"),
     nationality_en:       str = Form("Saudi"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
@@ -331,7 +377,7 @@ async def submit_report(
         if not job_title_ar or not job_title_ar.strip():
             job_title_ar = "طبيب عام"
         if not nationality or not nationality.strip():
-            nationality = "سعودي"
+            nationality = "السعودية"
         if not nationality_en or not nationality_en.strip():
             nationality_en = "Saudi"
         if not job_title_en or not job_title_en.strip():
@@ -559,9 +605,20 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
     error  = None
     if q:
         clean_q = q.strip()
-        # 1. Check if soft-deleted in local SQLite
         trashed = get_single_saved_report_sync(clean_q, include_deleted=True)
-        if trashed and trashed.get("is_deleted"):
+        is_hidden = False
+        if trashed:
+            if trashed.get("is_deleted"):
+                is_hidden = True
+            else:
+                u_id = trashed.get("user_id")
+                tg_id = trashed.get("telegram_user_id")
+                if u_id or tg_id:
+                    u = get_user_by_identifier_sync(str(u_id or tg_id), include_deleted=True)
+                    if u and getattr(u, 'is_deleted', 0):
+                        is_hidden = True
+
+        if is_hidden:
             record = None
             error = f"لم يتم العثور على سجل لـ: {clean_q}"
         else:
@@ -569,10 +626,17 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
             if local_rec:
                 record = local_rec
             else:
-                record = await get_report(clean_q)
-                if not record:
+                rec_w = await get_report(clean_q)
+                if not rec_w:
                     results = await search_by_national_id(clean_q)
-                    record  = results[0] if results else None
+                    rec_w = results[0] if results else None
+                if rec_w:
+                    sc_code = rec_w.get("service_code", "")
+                    chk = get_single_saved_report_sync(sc_code, include_deleted=True)
+                    if chk and (chk.get("is_deleted") or getattr(get_user_by_identifier_sync(str(chk.get("user_id") or chk.get("telegram_user_id")), include_deleted=True), 'is_deleted', 0)):
+                        record = None
+                    else:
+                        record = rec_w
                 if not record:
                     error = f"لم يتم العثور على سجل لـ: {clean_q}"
     return templates.TemplateResponse(
@@ -585,12 +649,22 @@ async def verify_page(request: Request, q: Optional[str] = Query(None)):
 @router.get("/api/verify")
 async def api_verify(q: str = Query(...)):
     clean_q = q.strip()
-    # 1. If soft-deleted in local SQLite, return 404
     trashed = get_single_saved_report_sync(clean_q, include_deleted=True)
-    if trashed and trashed.get("is_deleted"):
+    is_hidden = False
+    if trashed:
+        if trashed.get("is_deleted"):
+            is_hidden = True
+        else:
+            u_id = trashed.get("user_id")
+            tg_id = trashed.get("telegram_user_id")
+            if u_id or tg_id:
+                u = get_user_by_identifier_sync(str(u_id or tg_id), include_deleted=True)
+                if u and getattr(u, 'is_deleted', 0):
+                    is_hidden = True
+
+    if is_hidden:
         raise HTTPException(404, f"No record found for: {clean_q}")
 
-    # 2. Check local SQLite active records
     local_rec = get_single_saved_report_sync(clean_q)
     if local_rec:
         return local_rec
@@ -598,7 +672,13 @@ async def api_verify(q: str = Query(...)):
     record = await get_report(clean_q)
     if not record:
         results = await search_by_national_id(clean_q)
-        record  = results[0] if results else None
+        record = results[0] if results else None
+    if record:
+        sc_code = record.get("service_code", "")
+        chk = get_single_saved_report_sync(sc_code, include_deleted=True)
+        if chk and (chk.get("is_deleted") or getattr(get_user_by_identifier_sync(str(chk.get("user_id") or chk.get("telegram_user_id")), include_deleted=True), 'is_deleted', 0)):
+            record = None
+
     if not record:
         raise HTTPException(404, f"No record found for: {clean_q}")
     return record
@@ -1054,13 +1134,18 @@ async def api_delete_record(
     service_code: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Soft delete: moves report to trash bin (is_deleted = 1)."""
+    """Soft delete: moves report to trash bin (is_deleted = 1) and hides it in Cloudflare Worker."""
     is_adm = is_admin_request(current_user, request)
     uid = current_user.id if current_user.id > 0 else None
+    sc = service_code.strip()
 
-    ok = soft_delete_report_sync(service_code.strip(), user_id=uid, is_admin=is_adm)
+    rec = get_single_saved_report_sync(sc, include_deleted=True)
+    ok = soft_delete_report_sync(sc, user_id=uid, is_admin=is_adm)
     if ok:
-        log_audit(current_user.id, "REPORT_TRASHED", f"Report {service_code} moved to trash by user {current_user.id}")
+        if rec:
+            payload = extract_report_payload(rec)
+            asyncio.create_task(hide_report_in_worker(sc, payload))
+        log_audit(current_user.id, "REPORT_TRASHED", f"Report {sc} moved to trash by user {current_user.id}")
         return JSONResponse({"success": True, "message": "تم نقل السجل إلى سلة المحذوفات بنجاح"})
     return JSONResponse({"success": False, "error": "تعذر حذف السجل أو ليس لديك صلاحية"})
 
@@ -1071,13 +1156,18 @@ async def api_restore_record(
     service_code: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Restores report from trash bin (is_deleted = 0)."""
+    """Restores report from trash bin (is_deleted = 0) and re-syncs to Cloudflare Worker."""
     is_adm = is_admin_request(current_user, request)
     uid = current_user.id if current_user.id > 0 else None
+    sc = service_code.strip()
 
-    ok = restore_report_sync(service_code.strip(), user_id=uid, is_admin=is_adm)
+    rec = get_single_saved_report_sync(sc, include_deleted=True)
+    ok = restore_report_sync(sc, user_id=uid, is_admin=is_adm)
     if ok:
-        log_audit(current_user.id, "REPORT_RESTORED", f"Report {service_code} restored by user {current_user.id}")
+        if rec:
+            payload = extract_report_payload(rec)
+            asyncio.create_task(restore_report_in_worker(payload))
+        log_audit(current_user.id, "REPORT_RESTORED", f"Report {sc} restored by user {current_user.id}")
         return JSONResponse({"success": True, "message": "تم استرجاع السجل من سلة المحذوفات بنجاح"})
     return JSONResponse({"success": False, "error": "تعذر استرجاع السجل أو ليس لديك صلاحية"})
 
@@ -1088,13 +1178,18 @@ async def api_permanent_delete_record(
     service_code: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Permanently deletes report from database (admin only)."""
+    """Permanently deletes report from database (admin only) and hides it in Cloudflare Worker."""
     if not is_admin_request(current_user, request):
         raise HTTPException(403, "Access denied: Admin authorization required")
 
-    ok = permanent_delete_report_sync(service_code.strip())
+    sc = service_code.strip()
+    rec = get_single_saved_report_sync(sc, include_deleted=True)
+    ok = permanent_delete_report_sync(sc)
     if ok:
-        log_audit(current_user.id, "REPORT_PERMANENT_DELETED", f"Report {service_code} permanently deleted by admin")
+        if rec:
+            payload = extract_report_payload(rec)
+            asyncio.create_task(hide_report_in_worker(sc, payload))
+        log_audit(current_user.id, "REPORT_PERMANENT_DELETED", f"Report {sc} permanently deleted by admin")
         return JSONResponse({"success": True, "message": "تم حذف السجل نهائياً من قاعدة البيانات"})
     return JSONResponse({"success": False, "error": "تعذر حذف السجل نهائياً"})
 
@@ -1122,7 +1217,7 @@ async def api_update_record(
     national_id:          str = Form(...),
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
-    nationality:          str = Form("سعودي"),
+    nationality:          str = Form("السعودية"),
     nationality_en:       str = Form("Saudi"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
@@ -1365,33 +1460,52 @@ async def api_delete_user(
     user_id: Optional[int] = Form(None),
     telegram_user_id: Optional[str] = None
 ):
-    """Soft-deletes a user and hides all their reports from search/inquiry."""
+    """Soft-deletes a user and hides all their reports from search/inquiry across local DB and Cloudflare Worker."""
     if not is_admin_request(None, request):
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=403)
 
     target_id = user_id
+    u_rec = None
     if not target_id and telegram_user_id:
-        from db.database import get_user_by_identifier_sync
         u_rec = get_user_by_identifier_sync(str(telegram_user_id), include_deleted=True)
         if u_rec:
             target_id = u_rec.id
+    elif target_id:
+        u_rec = get_user_by_identifier_sync(str(target_id), include_deleted=True)
 
     if not target_id:
         return JSONResponse({"success": False, "error": "User ID required"}, status_code=400)
 
-    from db.database import soft_delete_user_sync
+    tg_id = getattr(u_rec, 'telegram_user_id', None) if u_rec else None
+
+    # Fetch user reports to hide in Cloudflare Worker
+    user_reports = get_user_all_saved_reports_sync(int(target_id), tg_id)
+
     soft_delete_user_sync(int(target_id))
+
+    for rep in user_reports:
+        p = extract_report_payload(rep)
+        asyncio.create_task(hide_report_in_worker(rep["service_code"], p))
+
     return JSONResponse({"success": True, "message": "تم حذف المستخدم بنجاح وحظر كافة بياناته"})
 
 
 @router.post("/api/admin/restore-user")
 async def api_restore_user(request: Request, user_id: int = Form(...)):
-    """Restores a soft-deleted user and their reports."""
+    """Restores a soft-deleted user and recovers their reports across local DB and Cloudflare Worker."""
     if not is_admin_request(None, request):
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=403)
 
-    from db.database import restore_user_sync
+    u_rec = get_user_by_identifier_sync(str(user_id), include_deleted=True)
+    tg_id = getattr(u_rec, 'telegram_user_id', None) if u_rec else None
+
     restore_user_sync(int(user_id))
+
+    user_reports = get_user_all_saved_reports_sync(int(user_id), tg_id)
+    for rep in user_reports:
+        p = extract_report_payload(rep)
+        asyncio.create_task(restore_report_in_worker(p))
+
     return JSONResponse({"success": True, "message": "تم استرجاع المستخدم وتفعيل بياناته بنجاح"})
 
 @router.post("/api/admin/suspend-user")

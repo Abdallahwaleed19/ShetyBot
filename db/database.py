@@ -1091,6 +1091,20 @@ def update_user_telegram_id_sync(user_id: int, telegram_user_id: str) -> bool:
     return ok
 
 
+def get_user_all_saved_reports_sync(user_id: int, telegram_user_id: Optional[str] = None) -> list[dict]:
+    """Returns all saved reports for a user (both active and soft-deleted) for sync purposes."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT * FROM saved_reports 
+           WHERE user_id = ? OR (telegram_user_id IS NOT NULL AND telegram_user_id != '0' AND telegram_user_id = ?)""",
+        (int(user_id), str(telegram_user_id or ""))
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_single_saved_report_sync(service_code_or_id: str, include_deleted: bool = False) -> Optional[dict]:
     """Finds a report by service_code or national_id. Excludes deleted or reports of deleted users."""
     conn = _get_conn()

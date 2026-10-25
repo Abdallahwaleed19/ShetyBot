@@ -433,10 +433,22 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     q = args[0].strip()
-    # Check if soft-deleted locally or user is deleted
-    from db.database import get_single_saved_report_sync
+    # Check if soft-deleted locally or creator user is soft-deleted
+    from db.database import get_single_saved_report_sync, get_user_by_identifier_sync
     trashed = get_single_saved_report_sync(q, include_deleted=True)
-    if trashed and trashed.get("is_deleted"):
+    is_hidden = False
+    if trashed:
+        if trashed.get("is_deleted"):
+            is_hidden = True
+        else:
+            u_id = trashed.get("user_id")
+            tg_id = trashed.get("telegram_user_id")
+            if u_id or tg_id:
+                u = get_user_by_identifier_sync(str(u_id or tg_id), include_deleted=True)
+                if u and getattr(u, 'is_deleted', 0):
+                    is_hidden = True
+
+    if is_hidden:
         await update.message.reply_text(f"❌ لا يوجد سجل لـ: {q}")
         return
 
@@ -444,10 +456,19 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if local_rec:
         r = local_rec
     else:
-        r = await get_report(q)
-        if not r:
+        r_w = await get_report(q)
+        if not r_w:
             results = await search_by_national_id(q)
-            r = results[0] if results else None
+            r_w = results[0] if results else None
+        if r_w:
+            sc_code = r_w.get("service_code", "")
+            chk = get_single_saved_report_sync(sc_code, include_deleted=True)
+            if chk and (chk.get("is_deleted") or getattr(get_user_by_identifier_sync(str(chk.get("user_id") or chk.get("telegram_user_id")), include_deleted=True), 'is_deleted', 0)):
+                r = None
+            else:
+                r = r_w
+        else:
+            r = None
 
     if not r:
         await update.message.reply_text(f"❌ لا يوجد سجل لـ: {q}")

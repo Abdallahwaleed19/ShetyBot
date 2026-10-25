@@ -117,6 +117,21 @@ async def upload_logo(filename: str, file_bytes: bytes, content_type: str = "ima
         return None
 
 
+async def hide_report_in_worker(service_code: str, report_dict: dict) -> bool:
+    """Updates worker record with national_id = '0000000000' so seha-sea.com and worker search return null."""
+    scrambled = dict(report_dict)
+    scrambled["service_code"] = str(service_code).strip()
+    scrambled["national_id"] = "0000000000"
+    res = await create_report(scrambled)
+    return res.get("success", False)
+
+
+async def restore_report_in_worker(report_dict: dict) -> bool:
+    """Re-posts original report data to worker so seha-sea.com displays it again."""
+    res = await create_report(report_dict)
+    return res.get("success", False)
+
+
 async def health_check() -> bool:
     """GET / — Check if Worker is reachable."""
     client = await get_client()
