@@ -67,10 +67,14 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     is_admin = (user_tg_id == ADMIN_TELEGRAM_ID) or (user_name.lower() in [u.lower() for u in ADMIN_USERNAMES])
 
-    # Look up user in database
-    user_rec = get_user_by_identifier_sync(user_tg_id)
+    # Look up user in database (including checking if deleted)
+    user_rec = get_user_by_identifier_sync(user_tg_id, include_deleted=True)
     if not user_rec and user_name:
-        user_rec = get_user_by_identifier_sync(user_name)
+        user_rec = get_user_by_identifier_sync(user_name, include_deleted=True)
+
+    if user_rec and (getattr(user_rec, "is_deleted", False) or user_rec.registration_status == "DELETED"):
+        await update.message.reply_text("⛔ <b>عذراً، هذا الحساب محظور أو تم حذفه من قِبل إدارة المنصة.</b>", parse_mode="HTML")
+        return
 
     # Always link Telegram User ID if missing or mismatched
     if user_rec and user_tg_id and user_tg_id not in ("0", "-1") and str(user_rec.telegram_user_id) != user_tg_id:
@@ -439,10 +443,21 @@ async def verify(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     q = args[0].strip()
-    r = await get_report(q)
-    if not r:
-        results = await search_by_national_id(q)
-        r = results[0] if results else None
+    # Check if soft-deleted locally or user is deleted
+    from db.database import get_single_saved_report_sync
+    trashed = get_single_saved_report_sync(q, include_deleted=True)
+    if trashed and trashed.get("is_deleted"):
+        await update.message.reply_text(f"❌ لا يوجد سجل لـ: {q}")
+        return
+
+    local_rec = get_single_saved_report_sync(q)
+    if local_rec:
+        r = local_rec
+    else:
+        r = await get_report(q)
+        if not r:
+            results = await search_by_national_id(q)
+            r = results[0] if results else None
 
     if not r:
         await update.message.reply_text(f"❌ لا يوجد سجل لـ: {q}")

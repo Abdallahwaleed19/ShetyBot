@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from db.worker_client import get_client, close_client, health_check
 from web.routes import router
@@ -46,6 +47,15 @@ app = FastAPI(
     description="Verify sick leave reports issued via the Telegram bot.",
     version="2.0.0",
     lifespan=lifespan,
+)
+
+# CORS Middleware to support smooth API calls from web, mobile, and bot WebApp
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Static files

@@ -49,6 +49,8 @@ class UserRecord:
         self.full_name_en = d.get("full_name_en")
         self.registration_status = d.get("registration_status", "ACTIVE")
         self.rejection_reason = d.get("rejection_reason")
+        self.is_deleted = bool(d.get("is_deleted", 0))
+        self.deleted_at = d.get("deleted_at")
 
         # Parse approval dates
         self.approved_at = d.get("approved_at")
@@ -268,6 +270,15 @@ def init_db_sync() -> None:
     except Exception as e:
         logger.warning(f"Past report seeding error: {e}")
 
+        # Migrate columns if missing
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN deleted_at TEXT")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     logger.info("Database schema initialized and verified successfully at %s", DB_PATH)
@@ -332,13 +343,14 @@ async def get_all_users(session=None) -> List[UserRecord]:
     return get_all_users_sync()
 
 
-def get_user_by_identifier_sync(identifier: str) -> Optional[UserRecord]:
+def get_user_by_identifier_sync(identifier: str, include_deleted: bool = False) -> Optional[UserRecord]:
     conn = _get_conn()
     cur = conn.cursor()
     val = str(identifier).strip().lstrip("@")
+    del_clause = "" if include_deleted else "AND (is_deleted = 0 OR is_deleted IS NULL)"
     cur.execute(
-        """SELECT * FROM users 
-           WHERE telegram_user_id = ? OR username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE OR id = ?""",
+        f"""SELECT * FROM users 
+           WHERE (telegram_user_id = ? OR username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE OR id = ?) {del_clause}""",
         (val, val, val, int(val) if val.isdigit() else -1)
     )
     row = cur.fetchone()
@@ -481,6 +493,63 @@ def reject_user_registration_sync(user_id: int, reason: str = "", admin_id: str 
     log_audit(user_id, "REGISTRATION_REJECTED", f"Rejected by {admin_id}. Reason: {reason}")
     return get_user_by_identifier_sync(str(user_id))
 
+
+
+
+def soft_delete_user_sync(user_id: int, admin_id: str = "admin") -> bool:
+    """Soft-deletes a user and hides all their reports from search and inquiry."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT telegram_user_id FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    tg_id = row[0] if row else None
+
+    cur.execute(
+        """UPDATE users 
+           SET is_deleted = 1, is_active = 0, registration_status = 'DELETED',
+               deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (user_id,)
+    )
+    # Also soft-delete all user reports so they disappear from all queries
+    cur.execute(
+        """UPDATE saved_reports 
+           SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP 
+           WHERE user_id = ? OR (telegram_user_id IS NOT NULL AND telegram_user_id != '0' AND telegram_user_id = ?)""",
+        (user_id, tg_id)
+    )
+    conn.commit()
+    conn.close()
+    log_audit(user_id, "USER_SOFT_DELETED", f"User #{user_id} soft-deleted by {admin_id}")
+    return True
+
+
+def restore_user_sync(user_id: int, admin_id: str = "admin") -> bool:
+    """Restores a soft-deleted user and recovers their reports."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT telegram_user_id FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    tg_id = row[0] if row else None
+
+    cur.execute(
+        """UPDATE users 
+           SET is_deleted = 0, is_active = 1, registration_status = 'ACTIVE',
+               deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (user_id,)
+    )
+    # Restore user reports
+    cur.execute(
+        """UPDATE saved_reports 
+           SET is_deleted = 0, deleted_at = NULL 
+           WHERE user_id = ? OR (telegram_user_id IS NOT NULL AND telegram_user_id != '0' AND telegram_user_id = ?)""",
+        (user_id, tg_id)
+    )
+    conn.commit()
+    conn.close()
+    log_audit(user_id, "USER_RESTORED", f"User #{user_id} restored by {admin_id}")
+    return True
 
 def suspend_user_sync(user_id: int, admin_id: str = "admin") -> UserRecord:
     """Suspends a user account."""
@@ -1022,14 +1091,27 @@ def update_user_telegram_id_sync(user_id: int, telegram_user_id: str) -> bool:
     return ok
 
 
-def get_single_saved_report_sync(service_code: str, include_deleted: bool = False) -> Optional[dict]:
+def get_single_saved_report_sync(service_code_or_id: str, include_deleted: bool = False) -> Optional[dict]:
+    """Finds a report by service_code or national_id. Excludes deleted or reports of deleted users."""
     conn = _get_conn()
     cur = conn.cursor()
-    sc = str(service_code).strip()
+    sc = str(service_code_or_id).strip()
     if include_deleted:
-        cur.execute("SELECT * FROM saved_reports WHERE service_code = ?", (sc,))
+        cur.execute(
+            """SELECT sr.* FROM saved_reports sr
+               LEFT JOIN users u ON (sr.user_id = u.id OR (sr.telegram_user_id IS NOT NULL AND sr.telegram_user_id != '0' AND sr.telegram_user_id = u.telegram_user_id))
+               WHERE sr.service_code = ? OR sr.national_id = ?""",
+            (sc, sc)
+        )
     else:
-        cur.execute("SELECT * FROM saved_reports WHERE service_code = ? AND is_deleted = 0", (sc,))
+        cur.execute(
+            """SELECT sr.* FROM saved_reports sr
+               LEFT JOIN users u ON (sr.user_id = u.id OR (sr.telegram_user_id IS NOT NULL AND sr.telegram_user_id != '0' AND sr.telegram_user_id = u.telegram_user_id))
+               WHERE (sr.service_code = ? OR sr.national_id = ?) 
+                 AND sr.is_deleted = 0 
+                 AND (u.is_deleted IS NULL OR u.is_deleted = 0)""",
+            (sc, sc)
+        )
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None

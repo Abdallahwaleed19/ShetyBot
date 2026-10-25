@@ -105,18 +105,54 @@
 
     /* Buttons */
     .btn {
-      padding: 8px 12px;
+      padding: 8px 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 700;
-      transition: all .15s;
+      transition: all .18s;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       font-family: inherit;
       text-decoration: none;
+    }
+    
+    /* Inline Action Icons without frames/borders */
+    .action-icon-btn {
+      background: transparent;
+      border: none;
+      font-size: 18px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .15s ease, background .15s ease;
+      color: #fff;
+    }
+    .action-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      transform: scale(1.18);
+    }
+    .action-icon-btn:active {
+      transform: scale(0.92);
+    }
+    .action-icon-btn.btn-delete-user:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+    .action-icon-btn.btn-restore-user:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+    .actions-inline-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
     }
     .btn:active { transform: scale(0.97); }
     .btn-approve { background: var(--green); color: #fff; }
@@ -156,6 +192,61 @@
       font-size: 14px;
       font-weight: 800;
       letter-spacing: 2px;
+    }
+
+    /* Delete User Button */
+    .btn-delete-user { background: linear-gradient(135deg, #dc2626, #7f1d1d); color: #fff; border: none; }
+    .btn-delete-user:hover { background: linear-gradient(135deg, #b91c1c, #6b1414); }
+
+    /* Vibrant stat cards */
+    .stat-card:nth-child(1) { background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(14,165,233,0.12)); border-color: rgba(59,130,246,0.4); }
+    .stat-card:nth-child(2) { background: linear-gradient(135deg, rgba(16,185,129,0.25), rgba(5,150,105,0.12)); border-color: rgba(16,185,129,0.4); }
+    .stat-card:nth-child(3) { background: linear-gradient(135deg, rgba(52,211,153,0.25), rgba(16,185,129,0.12)); border-color: rgba(52,211,153,0.4); }
+    .stat-card:nth-child(4) { background: linear-gradient(135deg, rgba(245,158,11,0.25), rgba(217,119,6,0.12)); border-color: rgba(245,158,11,0.4); }
+    .stat-card:nth-child(5) { background: linear-gradient(135deg, rgba(56,189,248,0.25), rgba(14,165,233,0.12)); border-color: rgba(56,189,248,0.4); }
+    .stat-card:nth-child(6) { background: linear-gradient(135deg, rgba(239,68,68,0.2), rgba(185,28,28,0.1)); border-color: rgba(239,68,68,0.4); }
+
+    /* Mobile responsive: cards on mobile, table on desktop */
+    @media (max-width: 700px) {
+      .table-wrap table, .table-wrap thead, .table-wrap tbody, .table-wrap th, .table-wrap td, .table-wrap tr {
+        display: block;
+      }
+      .table-wrap thead tr { position: absolute; top: -9999px; left: -9999px; }
+      .table-wrap tr {
+        margin-bottom: 14px;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: rgba(255,255,255,0.05);
+      }
+      .table-wrap td {
+        border: none;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        position: relative;
+        padding: 6px 8px 6px 50%;
+        text-align: right;
+        font-size: 12px;
+      }
+      .table-wrap td:before {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 45%;
+        white-space: nowrap;
+        font-weight: 700;
+        color: #93c5fd;
+        font-size: 11px;
+      }
+      .table-wrap td:nth-of-type(1):before { content: "#"; }
+      .table-wrap td:nth-of-type(2):before { content: "المستخدم"; }
+      .table-wrap td:nth-of-type(3):before { content: "البريد"; }
+      .table-wrap td:nth-of-type(4):before { content: "الحالة"; }
+      .table-wrap td:nth-of-type(5):before { content: "الأيام المتبقية"; }
+      .table-wrap td:nth-of-type(6):before { content: "الكود"; }
+      .table-wrap td:nth-of-type(7):before { content: "الإجراءات"; }
+      /* Make action buttons wrap nicely on mobile */
+      .table-wrap td:last-child { padding-right: 8px; }
+      .table-wrap td div[style*="flex"] { flex-wrap: wrap !important; }
     }
 
     /* Modal */
@@ -306,6 +397,7 @@
         <button type="button" class="btn btn-copy" onclick="filterUserRows('active')" id="btn-u-active">🟢 النشطين فقط (اشتراك ساري)</button>
         <button type="button" class="btn btn-copy" onclick="filterUserRows('expired')" id="btn-u-expired">⚠️ منتهية اشتراكاتهم</button>
         <button type="button" class="btn btn-copy" onclick="filterUserRows('suspended')" id="btn-u-suspended">⏸️ معلقين</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('deleted')" id="btn-u-deleted">🗑️ المحذوفين</button>
       </div>
 
       <div class="table-wrap">
@@ -316,7 +408,7 @@
               <th>المستخدم</th>
               <th>البريد الإلكتروني</th>
               <th>الحالة</th>
-              <th>تاريخ الانتهاء</th>
+              <th>الاشتراك المتبقي (30 يوم)</th>
               <th>🔑 كود الدخول المؤقت (50s)</th>
               <th>الإجراءات</th>
             </tr>
@@ -344,7 +436,26 @@
                   <span class="badge">{{ u.registration_status }}</span>
                 {% endif %}
               </td>
-              <td style="font-size:12px">{{ u.subscription_end[:10] if u.subscription_end else '-' }}</td>
+              <td style="font-size:12.5px;white-space:nowrap">
+                {% if u.registration_status == 'DELETED' or u.is_deleted %}
+                  <span class="badge" style="background:rgba(239,68,68,0.18);color:#f87171;border:1px solid rgba(239,68,68,0.35)">🗑️ محذوف</span>
+                {% elif u.days_remaining > 0 %}
+                  <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.16);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:3px 9px;border-radius:20px;font-weight:700">
+                    <span>⏳</span>
+                    <span>متبقي {{ u.days_remaining }} يوم</span>
+                  </div>
+                  {% if u.subscription_end %}
+                    <div style="font-size:10.5px;opacity:0.6;margin-top:2px">{{ u.subscription_end[:10] }}</div>
+                  {% endif %}
+                {% elif u.subscription_end %}
+                  <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#f87171;padding:3px 8px;border-radius:20px;font-weight:700">
+                    <span>⚠️</span>
+                    <span>منتهي</span>
+                  </div>
+                {% else %}
+                  <span style="opacity:0.4">-</span>
+                {% endif %}
+              </td>
               <td>
                 {% if u.code_valid %}
                   <span class="code-live">{{ u.latest_code }}</span>
@@ -356,16 +467,23 @@
                 {% endif %}
               </td>
               <td>
-                <div style="display:flex;gap:5px;flex-wrap:wrap">
-                  <button class="btn btn-renew" onclick="renewSubscription({{ u.id }})" title="تجديد 30 يوم">🔄 تجديد</button>
-                  <button class="btn btn-otp" onclick="requestVerification({{ u.id }})" title="توليد كود 50 ثانية">🔑 كود</button>
-                  {% if u.registration_status == 'ACTIVE' and u.role != 'admin' %}
-                    <button class="btn btn-suspend" onclick="suspendUser({{ u.id }})" title="تعليق الحساب">⏸️ تعليق</button>
-                  {% elif u.registration_status == 'SUSPENDED' %}
-                    <button class="btn btn-activate" onclick="activateUser({{ u.id }})" title="تنشيط الحساب">▶️ تنشيط</button>
-                  {% endif %}
-                  {% if u.username %}
-                    <button class="btn btn-copy" onclick="copyUserLink('{{ u.username }}')" title="نسخ رابط الدخول">📋 الرابط</button>
+                <div class="actions-inline-row">
+                  {% if u.registration_status == 'DELETED' or u.is_deleted %}
+                    <button class="action-icon-btn btn-restore-user" onclick="restoreUserAccount({{ u.id }}, '{{ u.full_name_ar or u.username }}')" title="استرجاع المستخدم">♻️</button>
+                  {% else %}
+                    <button class="action-icon-btn" onclick="renewSubscription({{ u.id }})" title="تجديد 30 يوم">🔄</button>
+                    <button class="action-icon-btn" onclick="requestVerification({{ u.id }})" title="توليد كود 50 ثانية">🔑</button>
+                    {% if u.registration_status == 'ACTIVE' and u.role != 'admin' %}
+                      <button class="action-icon-btn" onclick="suspendUser({{ u.id }})" title="تعليق الحساب">⏸️</button>
+                    {% elif u.registration_status == 'SUSPENDED' %}
+                      <button class="action-icon-btn" onclick="activateUser({{ u.id }})" title="تنشيط الحساب">▶️</button>
+                    {% endif %}
+                    {% if u.username %}
+                      <button class="action-icon-btn" onclick="copyUserLink('{{ u.username }}')" title="نسخ رابط الدخول">📋</button>
+                    {% endif %}
+                    {% if u.role != 'admin' %}
+                      <button class="action-icon-btn btn-delete-user" onclick="deleteUserAccount({{ u.id }}, '{{ u.full_name_ar or u.username }}')" title="حذف المستخدم">🗑️</button>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
@@ -451,13 +569,15 @@
         const status = row.getAttribute('data-status');
         const days = parseInt(row.getAttribute('data-days') || '0', 10);
         if (filter === 'all') {
-          row.style.display = '';
+          row.style.display = (status !== 'DELETED') ? '' : 'none';
         } else if (filter === 'active') {
           row.style.display = (status === 'ACTIVE' && days > 0) ? '' : 'none';
         } else if (filter === 'expired') {
-          row.style.display = (days <= 0 && status !== 'SUSPENDED') ? '' : 'none';
+          row.style.display = (days <= 0 && status !== 'SUSPENDED' && status !== 'DELETED') ? '' : 'none';
         } else if (filter === 'suspended') {
           row.style.display = (status === 'SUSPENDED') ? '' : 'none';
+        } else if (filter === 'deleted') {
+          row.style.display = (status === 'DELETED') ? '' : 'none';
         }
       });
     }
@@ -690,6 +810,58 @@
       }
     }, 8000);
   
+    // Auto-refresh every 30 seconds
+    setTimeout(() => location.reload(), 30000);
+
+    
+    async function deleteUserAccount(userId, name) {
+      if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم (${name})؟ سيتم حظر حسابه وإخفاء كافة تقاريره تماماً من البوت والمنصة.`)) return;
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      try {
+        const res = await fetch(`/api/admin/delete-user?key=${adminKey}`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.success) {
+          alert(`✅ تم حذف المستخدم (${name}) بنجاح`);
+          location.reload();
+        } else {
+          alert('خطأ: ' + (json.error || 'تعذر حذف المستخدم'));
+        }
+      } catch (e) { alert('فشل الاتصال بالخادم'); }
+    }
+
+    async function restoreUserAccount(userId, name) {
+      if (!confirm(`هل أنت متأكد من استرجاع حساب المستخدم (${name}) وإعادة تفعيل تقاريره؟`)) return;
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      try {
+        const res = await fetch(`/api/admin/restore-user?key=${adminKey}`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.success) {
+          alert(`✅ تم استرجاع حساب المستخدم (${name}) بنجاح`);
+          location.reload();
+        } else {
+          alert('خطأ: ' + (json.error || 'تعذر استرجاع المستخدم'));
+        }
+      } catch (e) { alert('فشل الاتصال بالخادم'); }
+    }
+
+    async function deleteUser(userId, name) {
+      if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم (${name})؟ لن يتمكن من الوصول إلى البوت.`)) return;
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      try {
+        const res = await fetch(`/api/admin/delete-user?key=${adminKey}`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.success) {
+          alert(`✅ تم حذف المستخدم (${name}) بنجاح`);
+          location.reload();
+        } else {
+          alert('خطأ: ' + (json.error || 'تعذر حذف المستخدم'));
+        }
+      } catch (e) { alert('فشل الاتصال بالخادم'); }
+    }
+
     async function showActiveNowUsers() {
       document.getElementById('activeNowModal').classList.add('show');
       const list = document.getElementById('activeNowList');
