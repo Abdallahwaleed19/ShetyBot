@@ -172,29 +172,15 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, rejected_msg, reply_markup=ReplyKeyboardRemove())
         return
 
-    # 5. User with APPROVED status (waiting for 50s OTP)
+    # 5. User with APPROVED status -> immediately activate without waiting
     if user_rec.registration_status == "APPROVED":
-        otp_url = f"{webapp_url}?telegram_user_id={user_tg_id}&u={user_rec.username or user_tg_id}"
-        code_info = get_latest_code_for_user_sync(user_rec.id)
-        if code_info and code_info.get("is_valid"):
-            code_str = code_info.get("code", "")
-            sec_left = code_info.get("seconds_left", 50)
-            approved_msg = (
-                "🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
-                f"🔑 <b>رمز الدخول المؤقت:</b> <code>{code_str}</code>\n"
-                f"⏱️ <b>متبقي من الصلاحية:</b> {sec_left} ثانية!\n\n"
-                "اضغط على الزر أدناه لإدخال الرمز وتفعيل اشتراكك لمدة 30 يوماً فوراً:"
-            )
-        else:
-            approved_msg = (
-                "🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
-                "اضغط على الزر أدناه لإدخال رمز التحقق المؤقت الخاص بك وتفعيل اشتراكك لمدة 30 يوماً:"
-            )
-        inline_otp = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 إدخال رمز التحقق وتفعيل البوت", web_app=WebAppInfo(url=otp_url))]
-        ])
-        await reply_safe(update.message, approved_msg, reply_markup=inline_otp)
-        return
+        from db.database import _get_conn, renew_subscription_sync
+        conn = _get_conn()
+        conn.execute("UPDATE users SET registration_status = 'ACTIVE', is_active = 1 WHERE id = ?", (user_rec.id,))
+        conn.commit()
+        conn.close()
+        renew_subscription_sync(user_rec.id, days=30)
+        user_rec = get_user_by_identifier_sync(str(user_rec.id))
 
     # 6. User with SUSPENDED status
     if user_rec.registration_status == "SUSPENDED" or not user_rec.is_active:
@@ -233,10 +219,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         one_time_keyboard=False,
     )
 
-    active_msg = (
-        "🏥 <b>مرحباً بك مجدداً في نظام الإجازات المرضية (@SehtyBot)</b>\n\n"
-        f"🟢 <b>حالة الاشتراك:</b> نشط (متبقي {sub['days_remaining']} يوم)"
-    )
+    active_msg = "مرحباً بك مجدداً في نظام الإجازات المرضية 🏥"
 
 
     await reply_safe(update.message, active_msg, reply_markup=keyboard)
@@ -504,7 +487,7 @@ async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
 
     # If user wants previous records
     if any(k in txt for k in ["+", "➕", "بيانات", "سابق", "سجل", "سجلات", "تعديل"]):
-        if not is_admin and (not user_rec or user_rec.registration_status != "ACTIVE"):
+        if not is_admin and (not user_rec or user_rec.registration_status not in ("ACTIVE", "APPROVED")):
             msg = (
                 "⚠️ <b>عذراً، لا يمكنك الوصول للبيانات السابقة</b>\n\n"
                 "يتطلب فتح السجلات أن يكون حسابك مسجلاً ومفعلاً بموافقة الإدارة.\n"

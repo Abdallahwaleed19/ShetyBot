@@ -460,7 +460,7 @@ def approve_user_registration_sync(user_id: int, admin_id: str = "admin") -> tup
 
     cur.execute(
         """UPDATE users 
-           SET registration_status = 'APPROVED', approved_at = ?, approved_by = ?,
+           SET registration_status = 'ACTIVE', approved_at = ?, approved_by = ?,
                is_active = 1, rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE id = ?""",
         (now_iso, str(admin_id), user_id)
@@ -468,9 +468,9 @@ def approve_user_registration_sync(user_id: int, admin_id: str = "admin") -> tup
     conn.commit()
     conn.close()
 
-    # Generate 30-second verification code for the user
+    renew_subscription_sync(user_id, days=30)
     otp_code = create_verification_code_sync(user_id, purpose="registration")
-    log_audit(user_id, "REGISTRATION_APPROVED", f"Approved by {admin_id}. 30s OTP generated.")
+    log_audit(user_id, "REGISTRATION_APPROVED", f"Approved by {admin_id}. Activated for 30 days.")
 
     user = get_user_by_identifier_sync(str(user_id))
     return user, otp_code
@@ -954,8 +954,8 @@ def soft_delete_report_sync(service_code: str, user_id: int = 0, is_admin: bool 
                WHERE service_code = ?"""
     params = [now_iso, str(user_id), sc]
     if user_id and not is_admin:
-        query += " AND user_id = ?"
-        params.append(user_id)
+        query += " AND (user_id = ? OR user_id = 0 OR telegram_user_id = ?)"
+        params.extend([user_id, str(user_id)])
 
     cur.execute(query, tuple(params))
     conn.commit()
@@ -978,8 +978,8 @@ def restore_report_sync(service_code: str, user_id: int = 0, is_admin: bool = Fa
                WHERE service_code = ?"""
     params = [sc]
     if user_id and not is_admin:
-        query += " AND user_id = ?"
-        params.append(user_id)
+        query += " AND (user_id = ? OR user_id = 0 OR telegram_user_id = ?)"
+        params.extend([user_id, str(user_id)])
 
     cur.execute(query, tuple(params))
     conn.commit()

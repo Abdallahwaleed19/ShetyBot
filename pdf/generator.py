@@ -89,6 +89,23 @@ def _get_hijri(d_str: Union[str, datetime, None]) -> str:
     return str(d_str)
 
 
+
+def _subset_font_bytes(font_path: Path, chars_str: str) -> bytes:
+    """Dynamically subsets a TTF font to include glyphs for the requested characters."""
+    try:
+        from fontTools import subset
+        opt = subset.Options()
+        font = subset.load_font(str(font_path), opt)
+        s = subset.Subsetter(options=opt)
+        s.populate(text=chars_str)
+        s.subset(font)
+        buf = io.BytesIO()
+        font.save(buf)
+        return buf.getvalue()
+    except Exception as e:
+        with open(font_path, "rb") as f:
+            return f.read()
+
 def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     """
     Generate pixel-perfect Seha Sick Leave Report matching Canva reference 100%.
@@ -102,12 +119,22 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     doc = fitz.open(str(TEMPLATE_PATH))
     page = doc[0]
 
-    # Reuse fonts already embedded in template (F3=Bold, F4=Regular)
+    # Collect all text to dynamically subset Arabic fonts (maintains ~301 KB and 100% crystal clear Arabic)
+    corpus = " ".join([str(v) for v in data.values() if isinstance(v, str)])
+    corpus += " تقرير إجازة مرضية مدة الدخول الخروج إلى يوم طبيب عام نائب استشاري أخصائي ممارس مستشفى وزارة الصحة السعودية 0123456789-/.():,–—•"
+    reshaped_corpus = corpus + " " + arabic_reshaper.reshape(corpus) + " " + get_display(arabic_reshaper.reshape(corpus))
+    chars_str = "".join(set(reshaped_corpus))
+
+    reg_bytes = _subset_font_bytes(FONT_REG_PATH, chars_str)
+    bold_bytes = _subset_font_bytes(FONT_BOLD_PATH, chars_str)
+
+    page.insert_font(fontname="NSA_R", fontbuffer=reg_bytes)
+    page.insert_font(fontname="NSA_B", fontbuffer=bold_bytes)
 
     f_roman = fitz.Font("times-roman")
     f_bold  = fitz.Font("times-bold")
-    f_nsa_r = fitz.Font(fontfile=str(FONT_REG_PATH))
-    f_nsa_b = fitz.Font(fontfile=str(FONT_BOLD_PATH))
+    f_nsa_r = fitz.Font(fontbuffer=reg_bytes)
+    f_nsa_b = fitz.Font(fontbuffer=bold_bytes)
 
     # ── Unpack & Normalize Data ────────────────────────────────────────────────
     leave_id = str(data.get("leave_id") or data.get("service_code") or "").strip()
@@ -187,9 +214,9 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     tot_w = w1 + w2 + w3 + w4 + w5
     sx = 556.78 - tot_w / 2
     page.insert_text(fitz.Point(sx, 309.52), s1, fontname="times-roman", fontsize=13.5, color=C_WHITE)
-    page.insert_text(fitz.Point(sx + w1, 309.52), s2, fontname="F4", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1, 309.52), s2, fontname="NSA_R", fontsize=13.5, color=C_WHITE)
     page.insert_text(fitz.Point(sx + w1 + w2, 309.52), s3, fontname="times-roman", fontsize=13.5, color=C_WHITE)
-    page.insert_text(fitz.Point(sx + w1 + w2 + w3, 309.52), s4, fontname="F4", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1 + w2 + w3, 309.52), s4, fontname="NSA_R", fontsize=13.5, color=C_WHITE)
     page.insert_text(fitz.Point(sx + w1 + w2 + w3 + w4, 309.52), s5, fontname="times-roman", fontsize=13.5, color=C_WHITE)
 
     # Row 2: Admission Date (baseline = 351.01)
@@ -230,7 +257,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if p_name_ar:
         ar_name = ar(p_name_ar)
         w = f_nsa_r.text_length(ar_name, 13.5)
-        page.insert_text(fitz.Point(556.78 - w / 2, 478.84), ar_name, fontname="F4", fontsize=13.5, color=C_DARK_VAL)
+        page.insert_text(fitz.Point(556.78 - w / 2, 478.84), ar_name, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
     # Row 6: National ID / Iqama (Merged Col 1 & 2, center = 437.53, baseline = 521.60)
     if nid:
@@ -244,7 +271,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if nat_ar:
         ar_nat = ar(nat_ar)
         w = f_nsa_r.text_length(ar_nat, 13.5)
-        page.insert_text(fitz.Point(556.78 - w / 2, 564.13), ar_nat, fontname="F4", fontsize=13.5, color=C_DARK_VAL)
+        page.insert_text(fitz.Point(556.78 - w / 2, 564.13), ar_nat, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
     # Row 8: Employer (Strictly separate: Arabic in Col 2 ONLY, English in Col 1 if provided)
     if emp_en:
@@ -253,7 +280,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if emp_ar:
         ar_emp = ar(emp_ar)
         w = f_nsa_r.text_length(ar_emp, 13.5)
-        page.insert_text(fitz.Point(556.78 - w / 2, 606.14), ar_emp, fontname="F4", fontsize=13.5, color=C_DARK_VAL)
+        page.insert_text(fitz.Point(556.78 - w / 2, 606.14), ar_emp, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
     # Row 9: Practitioner Name
     if pr_en:
@@ -272,7 +299,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if pr_ar:
         ar_pr = ar(pr_ar)
         w = f_nsa_r.text_length(ar_pr, 13.5)
-        page.insert_text(fitz.Point(556.78 - w / 2, 648.15), ar_pr, fontname="F4", fontsize=13.5, color=C_DARK_VAL)
+        page.insert_text(fitz.Point(556.78 - w / 2, 648.15), ar_pr, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
     # Row 10: Position (Directly below practitioner name)
     if pos_en:
@@ -281,7 +308,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if pos_ar:
         ar_pos = ar(pos_ar)
         w = f_nsa_r.text_length(ar_pos, 13.5)
-        page.insert_text(fitz.Point(556.78 - w / 2, 690.17), ar_pos, fontname="F4", fontsize=13.5, color=C_DARK_VAL)
+        page.insert_text(fitz.Point(556.78 - w / 2, 690.17), ar_pos, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
     # ── Footer Section ─────────────────────────────────────────────────────────
 
@@ -307,7 +334,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
             logo_h = logo_w * (lh / lw)
             logo_bottom = 844.0
             logo_top = logo_bottom - logo_h
-            target_px = int(logo_w * 2)
+            target_px = int(logo_w * 1.5)
             limg_conv.thumbnail((target_px, target_px * 2), PIL_Image.LANCZOS)
             logo_buf = io.BytesIO()
             limg_conv.save(logo_buf, format="PNG", optimize=True)
@@ -323,7 +350,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     if hosp_ar:
         ar_hosp = ar(hosp_ar)
         w = f_nsa_b.text_length(ar_hosp, 12.75)
-        page.insert_text(fitz.Point(633.13 - w / 2, 857.91), ar_hosp, fontname="F3", fontsize=12.75, color=C_BLACK)
+        page.insert_text(fitz.Point(633.13 - w / 2, 857.91), ar_hosp, fontname="NSA_B", fontsize=12.75, color=C_BLACK)
 
     if hosp_en:
         w = f_bold.text_length(hosp_en, 12.75)
@@ -377,7 +404,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
             from PIL import Image as PIL_Image
             with PIL_Image.open(str(nhic_logo_path)) as nimg:
                 nimg_conv = nimg.convert("RGBA")
-                nimg_conv.thumbnail((306, 145), PIL_Image.LANCZOS)
+                nimg_conv.thumbnail((250, 115), PIL_Image.LANCZOS)
                 nhic_buf = io.BytesIO()
                 nimg_conv.save(nhic_buf, format="PNG", optimize=True)
                 nhic_buf.seek(0)

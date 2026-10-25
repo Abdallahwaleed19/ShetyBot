@@ -210,17 +210,18 @@
       line-height: 1.3;
     }
     .patient-leave-date {
-      font-size: 12.5px;
+      font-size: 11.5px;
       color: #38bdf8;
       font-weight: 700;
       margin-top: 3px;
       white-space: nowrap !important;
       overflow-x: auto;
       overflow-y: hidden;
-      display: flex !important;
+      display: inline-flex !important;
       flex-direction: row !important;
       align-items: center !important;
-      gap: 5px !important;
+      gap: 4px !important;
+      max-width: 100%;
       scrollbar-width: none;
     }
     .patient-leave-date::-webkit-scrollbar {
@@ -230,14 +231,15 @@
     .patient-leave-date .leave-date-text {
       white-space: nowrap !important;
       flex-shrink: 0 !important;
+      display: inline-block !important;
     }
     .leave-date-text {
       color: #ffffff;
-      font-size: 12.5px;
+      font-size: 11.5px;
       font-weight: 700;
       white-space: nowrap !important;
-      direction: ltr;
-      unicode-bidi: isolate;
+      direction: ltr !important;
+      unicode-bidi: isolate !important;
     }
     .patient-subtitle {
       font-size: 12px;
@@ -463,16 +465,21 @@ function editPersonData(code) {
 // Soft delete record (moves to trash)
 async function trashPersonData(code) {
   if (!confirm(`هل تريد نقل هذا السجل (${code}) إلى سلة المحذوفات؟`)) return;
+  const urlParams = new URLSearchParams(window.location.search);
+  const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
+  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
+  if (uid && uid !== '0') localStorage.setItem('sehty_telegram_user_id', uid);
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
   const fd = new FormData();
   fd.append('service_code', code);
+  if (uid && uid !== '0') fd.append('telegram_user_id', uid);
 
   try {
-    const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+    const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
       method: 'POST',
       body: fd,
-      headers: { 'x-auth-token': token, 'x-username': username }
+      headers: { 'x-auth-token': token, 'x-username': username, 'x-telegram-user-id': uid }
     });
     const json = await res.json();
     if (json.success) {
@@ -488,21 +495,27 @@ async function trashPersonData(code) {
 
 // Restore record from trash
 async function restorePersonData(code) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
+  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
+  if (uid && uid !== '0') localStorage.setItem('sehty_telegram_user_id', uid);
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
   const fd = new FormData();
   fd.append('service_code', code);
+  if (uid && uid !== '0') fd.append('telegram_user_id', uid);
 
   try {
-    const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+    const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
       method: 'POST',
       body: fd,
-      headers: { 'x-auth-token': token, 'x-username': username }
+      headers: { 'x-auth-token': token, 'x-username': username, 'x-telegram-user-id': uid }
     });
     const json = await res.json();
     if (json.success) {
       showToast('♻️ تم استرجاع السجل بنجاح');
       await loadAllData();
+      switchTab('active');
     } else {
       alert('خطأ: ' + (json.error || 'تعذر استرجاع السجل'));
     }

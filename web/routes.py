@@ -883,7 +883,18 @@ async def api_auth_status(
             "message": "حساب الأدمن الرئيسي نشط بصلاحيات كاملة",
         })
 
-    sub = check_subscription_sync(user_rec.id)
+    status = user_rec.registration_status
+    if status == "APPROVED":
+        status = "ACTIVE"
+        from db.database import _get_conn, renew_subscription_sync
+        conn = _get_conn()
+        conn.execute("UPDATE users SET registration_status = 'ACTIVE', is_active = 1 WHERE id = ?", (user_rec.id,))
+        conn.commit()
+        conn.close()
+        renew_subscription_sync(user_rec.id, days=30)
+        sub = {"active": True, "days_remaining": 30, "message": "اشتراك نشط"}
+    else:
+        sub = check_subscription_sync(user_rec.id)
 
     return JSONResponse({
         "success": True,
@@ -892,9 +903,10 @@ async def api_auth_status(
         "username": user_rec.username,
         "email": user_rec.email,
         "full_name_ar": user_rec.full_name_ar,
-        "status": user_rec.registration_status,
+        "status": status,
         "is_admin": False,
         "active": sub["active"],
+        "token": _make_token(user_rec.id),
         "days_remaining": sub["days_remaining"],
         "message": sub["message"],
     })

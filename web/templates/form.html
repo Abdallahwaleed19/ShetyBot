@@ -387,8 +387,8 @@
     <label>🌍 الجنسية — عربي</label>
     <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.18);border-radius:10px;color:#fff;font-size:14.5px;margin-bottom:8px">
       <option value="">- اختر الجنسية -</option>
-      <option value="السعودية|Saudi" selected>🇸🇦 السعودية</option>
-      <option value="سعودي|Saudi">🇸🇦 سعودي</option>
+      <option value="السعودية|Saudi" selected>السعودية</option>
+      <option value="سعودي|Saudi">سعودي</option>
       <option value="مصري|Egyptian">🇪🇬 مصري</option>
       <option value="سوري|Syrian">🇸🇾 سوري</option>
       <option value="أردني|Jordanian">🇯🇴 أردني</option>
@@ -1170,23 +1170,15 @@ function sendToTelegramAndClose() {
 
     <!-- Tab 2: User Registration Form -->
     <div id="auth-step-register" style="display:none;text-align:right">
-      <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">الاسم الكامل (عربي) *</label>
-        <input type="text" id="reg-name-ar" placeholder="الاسم الثلاثي أو الرباعي" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      <div style="margin-bottom:12px">
+        <label style="font-size:13px;color:#93c5fd;font-weight:700;display:block;margin-bottom:6px">الاسم الكامل (عربي) *</label>
+        <input type="text" id="reg-name-ar" placeholder="الاسم الثلاثي أو الرباعي" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14.5px;outline:none;">
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">Full Name (English)</label>
-        <input type="text" id="reg-name-en" placeholder="Full English Name" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;color:#93c5fd;font-weight:700;display:block;margin-bottom:6px">البريد الإلكتروني (لتلقي الرمز) *</label>
+        <input type="email" id="reg-email" placeholder="example@gmail.com" dir="ltr" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14.5px;outline:none;">
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">البريد الإلكتروني (لتلقي الرمز) *</label>
-        <input type="email" id="reg-email" placeholder="example@gmail.com" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
-      </div>
-      <div style="margin-bottom:14px">
-        <label style="font-size:12px;color:#93c5fd;font-weight:700;display:block;margin-bottom:4px">اسم مستخدم تلغرام (اختياري)</label>
-        <input type="text" id="reg-username" placeholder="@username" dir="ltr" style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;outline:none;">
-      </div>
-      <button type="button" class="btn btn-submit" onclick="submitRegistration()" style="width:100%;padding:12px;font-size:14.5px;margin-bottom:10px;">📤 إرسال طلب التسجيل للأدمن</button>
+      <button type="button" class="btn btn-submit" onclick="submitRegistration()" style="width:100%;padding:13px;font-size:15px;margin-bottom:12px;">📤 إرسال طلب التسجيل للأدمن</button>
       <div style="text-align:center;font-size:13px">
         <a href="javascript:void(0)" onclick="switchAuthMode('login')" style="color:#93c5fd;text-decoration:none">← العودة لتسجيل الدخول</a>
       </div>
@@ -1288,22 +1280,20 @@ function renderSubscriptionBanner(data) {
 async function submitRegistration() {
   clearAuthErr();
   const nameAr = document.getElementById('reg-name-ar').value.trim();
-  const nameEn = document.getElementById('reg-name-en').value.trim();
   const email = document.getElementById('reg-email').value.trim();
-  let username = document.getElementById('reg-username').value.trim();
   const regParams = new URLSearchParams(window.location.search);
   const regQTgId = regParams.get('telegram_user_id') || regParams.get('tg_id') || '';
   const tgUser = tg?.initDataUnsafe?.user;
   const tgId = (tgUser?.id ? String(tgUser.id) : '') || regQTgId || localStorage.getItem('sehty_telegram_user_id') || '0';
   if (tgId && tgId !== '0') localStorage.setItem('sehty_telegram_user_id', tgId);
-  if (!username && tgUser?.username) username = tgUser.username;
+  const username = tgUser?.username || '';
 
   if (!nameAr) return showAuthErr('⚠️ يرجى إدخال الاسم الكامل بالعربية');
   if (!email || !email.includes('@')) return showAuthErr('⚠️ يرجى إدخال بريد إلكتروني صحيح');
 
   const fd = new FormData();
   fd.append('full_name_ar', nameAr);
-  fd.append('full_name_en', nameEn);
+  fd.append('full_name_en', '');
   fd.append('email', email);
   fd.append('telegram_user_id', String(tgId));
   fd.append('username', username);
@@ -1450,16 +1440,11 @@ async function checkUserStatusOnDemand() {
     const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}&username=${encodeURIComponent(username || email)}`);
     const json = await res.json();
     if (json.success) {
-      if (json.is_admin || json.status === 'ACTIVE') {
+      if (json.is_admin || json.status === 'ACTIVE' || json.status === 'APPROVED' || json.active) {
         document.getElementById('auth-modal').style.display = 'none';
-        renderSubscriptionBanner({ days_remaining: json.days_remaining, username: json.username || 'مستخدم' });
-        return;
-      }
-      if (json.status === 'APPROVED') {
-        document.getElementById('auth-username').value = json.username || json.email;
-        switchAuthMode('otp');
-        document.getElementById('auth-modal').style.display = 'flex';
-        startOtpTimer(50);
+        localStorage.removeItem('sehty_registered_email');
+        if (json.token) localStorage.setItem('sehty_token', json.token);
+        renderSubscriptionBanner({ days_remaining: json.days_remaining || 30, username: json.full_name_ar || json.username || 'مستخدم' });
         return;
       }
       if (json.status === 'PENDING_APPROVAL') {
@@ -1536,16 +1521,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Check if Telegram user is admin or active via API
+  // 1. Check if Telegram user is admin or active/approved via API
   if (tgId || tgUsername) {
     try {
       const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}&username=${encodeURIComponent(tgUsername)}`);
       const json = await res.json();
-      if (json.success && (json.is_admin || (json.registered && json.status === 'ACTIVE' && json.active))) {
+      if (json.success && (json.is_admin || json.status === 'ACTIVE' || json.status === 'APPROVED' || json.active)) {
         document.getElementById('auth-modal').style.display = 'none';
+        localStorage.removeItem('sehty_registered_email');
+        if (json.token) localStorage.setItem('sehty_token', json.token);
+        if (json.username) localStorage.setItem('sehty_username', json.username);
         renderSubscriptionBanner({
-          days_remaining: json.days_remaining || 3650,
-          username: json.is_admin ? '👑 الأدمن @RE_i1i' : (json.username || tgUser?.first_name || 'مستخدم'),
+          days_remaining: json.days_remaining || 30,
+          username: json.is_admin ? '👑 الأدمن @RE_i1i' : (json.full_name_ar || json.username || tgUser?.first_name || 'مستخدم'),
           active: true,
           is_admin: json.is_admin
         });
@@ -1558,12 +1546,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (json.status === 'PENDING_APPROVAL') {
           switchAuthMode('pending');
           document.getElementById('auth-modal').style.display = 'flex';
-          return;
-        } else if (json.status === 'APPROVED') {
-          document.getElementById('auth-username').value = json.username || json.email || '';
-          switchAuthMode('otp');
-          document.getElementById('auth-modal').style.display = 'flex';
-          startOtpTimer(50);
           return;
         }
       }
@@ -1589,13 +1571,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
   }
 
-  // If user previously registered and is waiting
-  const savedRegEmail = localStorage.getItem('sehty_registered_email');
-  if (savedRegEmail) {
-    switchAuthMode('pending');
-  } else {
-    switchAuthMode('login');
-  }
+  // Default to login if not authenticated
+  switchAuthMode('login');
   document.getElementById('auth-modal').style.display = 'flex';
 });
 </script>
