@@ -1,6 +1,7 @@
 """
 services/email_service.py — Email notification service for registrations & OTPs.
 """
+import os
 import asyncio
 import logging
 import smtplib

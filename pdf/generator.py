@@ -106,6 +106,33 @@ def _subset_font_bytes(font_path: Path, chars_str: str) -> bytes:
         with open(font_path, "rb") as f:
             return f.read()
 
+def _format_and_split_en_name(name_raw: str, max_width: float = 195.0, font=None, fontsize: float = 13.5) -> list[str]:
+    """
+    Cleans, uppercases, and splits an English name into 1 or 2 lines
+    so it matches official Seha reports and never overflows column borders.
+    """
+    clean = " ".join((name_raw or "").strip().upper().split())
+    if not clean:
+        return []
+    parts = clean.split()
+    total_w = font.text_length(clean, fontsize) if font else len(clean) * 7.5
+    if len(parts) <= 2 and total_w <= max_width:
+        return [clean]
+    if len(parts) >= 4:
+        l1 = " ".join(parts[:3])
+        l2 = " ".join(parts[3:])
+        if font and font.text_length(l1, fontsize) > max_width:
+            l1 = " ".join(parts[:2])
+            l2 = " ".join(parts[2:])
+        return [l1, l2]
+    elif len(parts) == 3:
+        l1 = " ".join(parts[:2])
+        l2 = parts[2]
+        return [l1, l2]
+    else:
+        return [parts[0], parts[1]]
+
+
 def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     """
     Generate pixel-perfect Seha Sick Leave Report matching Canva reference 100%.
@@ -242,17 +269,15 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
 
     # Row 5: Patient Name
     if p_name_en:
-        parts_n = p_name_en.split()
-        if len(parts_n) > 3:
-            nl1 = " ".join(parts_n[:3])
-            nl2 = " ".join(parts_n[3:])
-            w1 = f_roman.text_length(nl1, 13.5)
-            w2 = f_roman.text_length(nl2, 13.5)
-            page.insert_text(fitz.Point(318.27 - w1 / 2, 470.56), nl1, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
-            page.insert_text(fitz.Point(318.27 - w2 / 2, 486.08), nl2, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
-        else:
-            w = f_roman.text_length(p_name_en, 13.5)
-            page.insert_text(fitz.Point(318.27 - w / 2, 478.84), p_name_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        lines_n = _format_and_split_en_name(p_name_en, max_width=195.0, font=f_roman, fontsize=13.5)
+        if len(lines_n) == 2:
+            w1 = f_roman.text_length(lines_n[0], 13.5)
+            w2 = f_roman.text_length(lines_n[1], 13.5)
+            page.insert_text(fitz.Point(318.27 - w1 / 2, 470.56), lines_n[0], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+            page.insert_text(fitz.Point(318.27 - w2 / 2, 486.08), lines_n[1], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        elif len(lines_n) == 1:
+            w = f_roman.text_length(lines_n[0], 13.5)
+            page.insert_text(fitz.Point(318.27 - w / 2, 478.84), lines_n[0], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
     if p_name_ar:
         ar_name = ar(p_name_ar)
@@ -284,17 +309,15 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
 
     # Row 9: Practitioner Name
     if pr_en:
-        parts_p = pr_en.split()
-        if len(parts_p) > 3:
-            pl1 = " ".join(parts_p[:3])
-            pl2 = " ".join(parts_p[3:])
-            w1 = f_roman.text_length(pl1, 13.5)
-            w2 = f_roman.text_length(pl2, 13.5)
-            page.insert_text(fitz.Point(318.27 - w1 / 2, 642.00), pl1, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
-            page.insert_text(fitz.Point(318.27 - w2 / 2, 656.50), pl2, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
-        else:
-            w = f_roman.text_length(pr_en, 13.5)
-            page.insert_text(fitz.Point(318.27 - w / 2, 647.64), pr_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        lines_p = _format_and_split_en_name(pr_en, max_width=195.0, font=f_roman, fontsize=13.5)
+        if len(lines_p) == 2:
+            w1 = f_roman.text_length(lines_p[0], 13.5)
+            w2 = f_roman.text_length(lines_p[1], 13.5)
+            page.insert_text(fitz.Point(318.27 - w1 / 2, 642.00), lines_p[0], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+            page.insert_text(fitz.Point(318.27 - w2 / 2, 656.50), lines_p[1], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        elif len(lines_p) == 1:
+            w = f_roman.text_length(lines_p[0], 13.5)
+            page.insert_text(fitz.Point(318.27 - w / 2, 647.64), lines_p[0], fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
     if pr_ar:
         ar_pr = ar(pr_ar)

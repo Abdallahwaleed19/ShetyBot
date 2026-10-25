@@ -375,7 +375,7 @@
     </div>
     <div class="header-badges">
       <span class="badge-pill" id="rec-count">0 تقرير</span>
-      <a href="/admin?key=admin123" target="_blank" class="admin-pill" id="admin-dash-link">👑 الإدارة</a>
+      <a href="/admin?key=admin123" target="_blank" class="admin-pill" id="admin-dash-link" style="display:none;">👑 الإدارة</a>
     </div>
   </div>
 
@@ -657,13 +657,18 @@ async function loadAllData() {
   const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || '0';
   const uname = (tg?.initDataUnsafe?.user?.username || '') || username;
 
-  if (qRole === 'admin' || uid === '8733335095' || uname.toLowerCase() === 're_i1i' || uname.toLowerCase() === 'as1_oi') {
-    isAdmin = true;
-    const adminLink = document.getElementById('admin-dash-link');
-    if (adminLink) adminLink.style.display = 'inline-flex';
+  const qKey = urlParams.get('key') || '';
+  const isSuperAdmin = (qRole === 'admin' || uid === '8733335095' || uname.toLowerCase() === 're_i1i' || uname.toLowerCase() === 'as1_oi' || qKey === 'admin123');
+  isAdmin = isSuperAdmin;
+  const adminLink = document.getElementById('admin-dash-link');
+  if (adminLink) {
+    adminLink.style.display = isSuperAdmin ? 'inline-flex' : 'none';
   }
 
-  const authParams = `token=${encodeURIComponent(token)}&u=${encodeURIComponent(uname)}&telegram_user_id=${uid}&role=${qRole}&key=admin123`;
+  let authParams = `token=${encodeURIComponent(token)}&u=${encodeURIComponent(uname)}&telegram_user_id=${uid}&role=${qRole}`;
+  if (qKey) {
+    authParams += `&key=${encodeURIComponent(qKey)}`;
+  }
   const headers = { 'x-auth-token': token, 'x-username': uname };
 
   // 1. Fetch active safely
@@ -673,10 +678,12 @@ async function loadAllData() {
     if (jsonActive.success && Array.isArray(jsonActive.data)) {
       activeRecords = jsonActive.data;
       activeRecords.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-      if (jsonActive.is_admin) {
+      if (jsonActive.is_admin && isSuperAdmin) {
         isAdmin = true;
-        const adminLink = document.getElementById('admin-dash-link');
         if (adminLink) adminLink.style.display = 'inline-flex';
+      } else if (!isSuperAdmin) {
+        isAdmin = false;
+        if (adminLink) adminLink.style.display = 'none';
       }
     } else {
       activeRecords = [];
