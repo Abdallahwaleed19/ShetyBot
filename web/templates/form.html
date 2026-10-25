@@ -1081,10 +1081,7 @@ async function submitForm() {
       if (portalBtn) portalBtn.href = `https://seha-8xj.pages.dev/inquiries?q=${encodeURIComponent(sCode)}`;
       document.getElementById('success-modal').style.display = 'flex';
 
-      // Safely attempt background download without throwing into submitForm catch block
-      setTimeout(() => {
-        try { downloadPdfFromModal(); } catch (_) {}
-      }, 300);
+// PDF is delivered directly to Telegram chat
     } else {
       showErr('e3', '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً'));
     }
