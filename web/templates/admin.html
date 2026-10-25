@@ -270,10 +270,10 @@
                 <td><code>{{ req.telegram_user_id }}</code></td>
                 <td>{{ '@' + req.username if req.username else '-' }}</td>
                 <td style="font-size:12px;opacity:0.8">{{ req.created_at[:16] if req.created_at else '-' }}</td>
-                <td>
+                <td id="action-cell-{{ req.id }}">
                   <div style="display:flex;gap:6px">
                     <button class="btn btn-approve" onclick="approveRegistration({{ req.id }}, '{{ req.full_name_ar }}')">
-                      ✅ موافقة وتوليد كود (30s)
+                      ✅ موافقة وتوليد كود (50s)
                     </button>
                     <button class="btn btn-reject" onclick="rejectRegistration({{ req.id }}, '{{ req.full_name_ar }}')">
                       ❌ رفض
@@ -317,7 +317,7 @@
               <th>البريد الإلكتروني</th>
               <th>الحالة</th>
               <th>تاريخ الانتهاء</th>
-              <th>🔑 كود الدخول المؤقت (30s)</th>
+              <th>🔑 كود الدخول المؤقت (50s)</th>
               <th>الإجراءات</th>
             </tr>
           </thead>
@@ -358,7 +358,7 @@
               <td>
                 <div style="display:flex;gap:5px;flex-wrap:wrap">
                   <button class="btn btn-renew" onclick="renewSubscription({{ u.id }})" title="تجديد 30 يوم">🔄 تجديد</button>
-                  <button class="btn btn-otp" onclick="requestVerification({{ u.id }})" title="توليد كود 30 ثانية">🔑 كود</button>
+                  <button class="btn btn-otp" onclick="requestVerification({{ u.id }})" title="توليد كود 50 ثانية">🔑 كود</button>
                   {% if u.registration_status == 'ACTIVE' and u.role != 'admin' %}
                     <button class="btn btn-suspend" onclick="suspendUser({{ u.id }})" title="تعليق الحساب">⏸️ تعليق</button>
                   {% elif u.registration_status == 'SUSPENDED' %}
@@ -427,7 +427,7 @@
       <h3 style="font-size:19px;margin-bottom:12px">🔑 رمز التحقق المؤقت (30 ثانية)</h3>
       <p style="font-size:13.5px;opacity:0.85">تم إنشاء الرمز لصديقك/المستخدم. أرسله له لإدخاله فوراً:</p>
       <div id="verifyCode" style="font-size:38px;font-weight:800;letter-spacing:8px;margin:18px 0;color:#10b981;background:rgba(0,0,0,0.3);padding:14px;border-radius:14px"></div>
-      <p style="font-size:13px;color:#f59e0b">⏱️ الرمز صالح لمدة 30 ثانية فقط!</p>
+      <p style="font-size:13px;color:#f59e0b">⏱️ الرمز صالح لمدة 50 ثانية فقط!</p>
       <div style="margin-top:20px">
         <button class="btn btn-copy" style="width:100%;padding:10px;justify-content:center" onclick="closeModal()">إغلاق النافذة</button>
       </div>
@@ -462,9 +462,31 @@
       });
     }
 
-    async function approveRegistration(userId, name) {
-      if (!confirm(`هل تريد قبول طلب التسجيل للمستخدم (${name}) وإرسال رمز التحقق المؤقت (30 ثانية) له؟`)) return;
+    function copyInputVal(inputId, btn) {
+      const el = document.getElementById(inputId);
+      if (!el) return;
+      el.select();
+      navigator.clipboard.writeText(el.value).then(() => {
+        if (btn) {
+          const old = btn.textContent;
+          btn.textContent = '✓ تم النسخ';
+          setTimeout(() => { btn.textContent = old; }, 1500);
+        }
+      });
+    }
 
+    function copyDirectVal(val, btn) {
+      navigator.clipboard.writeText(val).then(() => {
+        if (btn) {
+          const old = btn.textContent;
+          btn.textContent = '✓ تم النسخ';
+          setTimeout(() => { btn.textContent = old; }, 1500);
+        }
+      });
+    }
+
+    async function approveRegistration(userId, name) {
+      const cell = document.getElementById('action-cell-' + userId);
       const fd = new FormData();
       fd.append('user_id', userId);
 
@@ -472,8 +494,44 @@
         const res = await fetch(`/api/admin/approve-registration?key=${adminKey}`, { method: 'POST', body: fd });
         const json = await res.json();
         if (json.success) {
-          document.getElementById('verifyCode').textContent = json.code;
-          document.getElementById('verifyModal').classList.add('show');
+          if (cell) {
+            cell.innerHTML = `
+              <div style="background:rgba(16,185,129,0.15);border:1.5px solid #10b981;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-width:280px;text-align:right">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="color:#34d399;font-weight:bold;font-size:12px">✅ تمت الموافقة</span>
+                  <span style="color:#f59e0b;font-weight:bold;font-size:11px" id="timer-${userId}">⏳ 50 ثانية</span>
+                </div>
+                <div>
+                  <div style="font-size:11px;opacity:0.8;margin-bottom:2px">🔗 رابط الدخول للمستخدم:</div>
+                  <div style="display:flex;gap:4px">
+                    <input type="text" readonly value="${json.user_link}" id="link-${userId}" style="width:100%;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#93c5fd;font-size:11px;direction:ltr">
+                    <button type="button" class="btn btn-copy" onclick="copyInputVal('link-${userId}', this)" style="padding:4px 8px;font-size:11px">📋 نسخ</button>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-size:11px;opacity:0.8;margin-bottom:2px">🔑 الرمز المؤقت:</div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:22px;font-weight:800;letter-spacing:4px;color:#10b981;background:rgba(0,0,0,0.4);padding:2px 8px;border-radius:6px">${json.code}</span>
+                    <button type="button" class="btn btn-copy" onclick="copyDirectVal('${json.code}', this)" style="padding:4px 8px;font-size:11px">📋 نسخ الرمز</button>
+                  </div>
+                </div>
+              </div>
+            `;
+            let left = json.expires_in || 50;
+            const timerEl = document.getElementById('timer-' + userId);
+            const interval = setInterval(() => {
+              left--;
+              if (left > 0) {
+                if (timerEl) timerEl.textContent = `⏳ ${left} ثانية`;
+              } else {
+                clearInterval(interval);
+                if (timerEl) {
+                  timerEl.textContent = '❌ منتهي';
+                  timerEl.style.color = '#ef4444';
+                }
+              }
+            }, 1000);
+          }
         } else {
           alert('خطأ: ' + (json.error || 'تعذر قبول الطلب'));
         }
@@ -494,8 +552,14 @@
         const res = await fetch(`/api/admin/reject-registration?key=${adminKey}`, { method: 'POST', body: fd });
         const json = await res.json();
         if (json.success) {
-          alert('✅ ' + json.message);
-          location.reload();
+          const cell = document.getElementById('action-cell-' + userId);
+          if (cell) {
+            cell.innerHTML = `
+              <div style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;border-radius:8px;padding:6px 10px;font-size:12px;color:#fca5a5;text-align:right">
+                ❌ <b>تم الرفض</b>: ${reason || 'مرفوض'}
+              </div>
+            `;
+          }
         } else {
           alert('خطأ: ' + (json.error || 'تعذر رفض الطلب'));
         }

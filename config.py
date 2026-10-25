@@ -17,10 +17,10 @@ BOT_TOKEN: str = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN_HERE")
 PROXY_URL:  str = os.getenv("PROXY_URL", "").strip()
 
 # ── Admin Account & Credentials ──────────────────────────────────────────────
-ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "ME_ii0").lstrip("@").strip()
+ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "RE_i1i").lstrip("@").strip()
 ADMIN_USERNAMES: list[str] = [
     u.lstrip("@").strip().lower() 
-    for u in os.getenv("ADMIN_USERNAMES", "ME_ii0,As1_oi").split(",") 
+    for u in os.getenv("ADMIN_USERNAMES", "RE_i1i,As1_oi").split(",") 
     if u.strip()
 ]
 ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "ramo.711.vip@gmail.com").strip().lower()
@@ -32,7 +32,7 @@ BOT_BIO_DESCRIPTION: str = "بوت الإجازات المرضية _ لتفعي�
 
 # ── OTP & Activity Security ──────────────────────────────────────────────────
 # Central setting for verification code lifetime: exactly 30 seconds
-OTP_TTL_SECONDS: int = int(os.getenv("OTP_TTL_SECONDS", "30"))
+OTP_TTL_SECONDS: int = int(os.getenv("OTP_TTL_SECONDS", "50"))
 # Inactivity threshold in minutes to consider a user "currently active"
 ACTIVE_USER_MINUTES: int = int(os.getenv("ACTIVE_USER_MINUTES", "15"))
 

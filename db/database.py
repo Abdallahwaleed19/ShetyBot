@@ -203,7 +203,7 @@ def init_db_sync() -> None:
         except Exception:
             pass
 
-    # Ensure Admin accounts (@ME_ii0 and @As1_oi) have admin privileges in DB
+    # Ensure Admin accounts (@RE_i1i and @As1_oi) have admin privileges in DB
     now_iso = datetime.now(timezone.utc).isoformat()
     future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
     try:

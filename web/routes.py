@@ -819,7 +819,7 @@ async def api_request_code(username: str = Form(...)):
         if user.registration_status == "PENDING_APPROVAL":
             return JSONResponse({
                 "success": False,
-                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@ME_ii0). ستصلك رسالة فور الموافقة على الحساب.",
+                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@RE_i1i). ستصلك رسالة فور الموافقة على الحساب.",
                 "status": "PENDING_APPROVAL"
             })
         if user.registration_status == "REJECTED":
@@ -1113,7 +1113,7 @@ async def api_update_record(
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request, current_user: User = Depends(get_current_user)):
-    """Admin dashboard accessible by @ME_ii0 / 8733335095 / ramo.711.vip@gmail.com or admin key."""
+    """Admin dashboard accessible by @RE_i1i / 8733335095 / ramo.711.vip@gmail.com or admin key."""
     if not is_admin_request(current_user, request):
         raise HTTPException(403, "Access denied: Admin authorization required")
 
@@ -1201,7 +1201,7 @@ async def api_admin_approve_registration(
         user_tg_msg = (
             f"🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
             f"🔑 <b>رمز الدخول المؤقت:</b> <code>{otp_code}</code>\n"
-            f"⏱️ <b>صلاحية الرمز:</b> 30 ثانية فقط!\n\n"
+            f"⏱️ <b>صلاحية الرمز:</b> 50 ثانية فقط!\n\n"
             f"تم إرسال الرمز أيضاً إلى بريدك الإلكتروني (<code>{user_rec.email or ''}</code>).\n"
             f"أدخل الرمز الآن في نموذج التسجيل لتفعيل اشتراكك لمدة 30 يوماً."
         )
@@ -1209,10 +1209,16 @@ async def api_admin_approve_registration(
 
     log_audit(user_id, "ADMIN_APPROVE", f"Admin approved registration for user {user_rec.username or user_id}")
 
+    webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
+    u_param = user_rec.username or user_rec.telegram_user_id
+    user_link = f"{webapp_base}/form?telegram_user_id={user_rec.telegram_user_id}&u={u_param}"
+
     return JSONResponse({
         "success": True,
-        "message": f"تمت الموافقة بنجاح وإرسال رمز التحقق (30 ثانية: {otp_code}) إلى بريد وتلغرام المستخدم.",
+        "message": f"تمت الموافقة بنجاح! الرمز المؤقت: {otp_code} (صالح لمدة {OTP_TTL_SECONDS} ثانية)",
         "code": otp_code,
+        "user_id": user_id,
+        "user_link": user_link,
         "expires_in": OTP_TTL_SECONDS
     })
 
@@ -1242,7 +1248,7 @@ async def api_admin_reject_registration(
         asyncio.create_task(send_telegram_message_safe(user_rec.telegram_user_id, msg))
 
     log_audit(user_id, "ADMIN_REJECT", f"Admin rejected user {user_id}: {reason}")
-    return JSONResponse({"success": True, "message": "تم رفض طلب التسجيل"})
+    return JSONResponse({"success": True, "message": "تم رفض طلب التسجيل", "user_id": user_id, "reason": reason.strip() or "البيانات المقدمة غير كافية"})
 
 
 @router.post("/api/admin/suspend-user")

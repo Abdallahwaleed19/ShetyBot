@@ -242,7 +242,7 @@
 <div id="admin-header-bar" style="display:none;background:#0d3683;border-bottom:1.5px solid #3b9eff;padding:10px 14px;align-items:center;justify-content:space-between;margin-bottom:6px">
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:16px">👑</span>
-    <span style="font-size:13px;font-weight:800;color:#93c5fd">حساب مدير النظام (@ME_ii0)</span>
+    <span style="font-size:13px;font-weight:800;color:#93c5fd">حساب مدير النظام (@RE_i1i)</span>
   </div>
   <div style="display:flex;gap:8px">
     <a href="/admin?key=admin123" target="_blank" style="background:#3b9eff;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">⚙️ لوحة الإدارة</a>
@@ -296,14 +296,14 @@
         <div onclick="selectReportType('GSL')" style="padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
           <div>
             <div style="color:#38bdf8;font-size:15px;font-weight:800">GSL</div>
-            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">إجازة مرضية حكومية (Government Sick Leave)</div>
+            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">Government Sick Leave</div>
           </div>
           <span id="chk-gsl" style="color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
         <div onclick="selectReportType('PSL')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
           <div>
             <div style="color:#38bdf8;font-size:15px;font-weight:800">PSL</div>
-            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">إجازة مرضية خاصة (Private Sick Leave)</div>
+            <div style="font-size:12px;opacity:0.8;color:#cbd5e1">Private Sick Leave</div>
           </div>
           <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
@@ -496,12 +496,12 @@
 
   <!-- ── إضافة الباركود (Optional barcode) ─── -->
   <div class="field" style="margin-top:16px;text-align:center">
-    <div class="barcode-toggle" id="barcode_toggle" onclick="toggleBarcode()">
-      <label class="toggle-switch" onclick="event.stopPropagation()">
+    <div class="barcode-toggle" id="barcode_toggle" style="cursor:default">
+      <label class="toggle-switch" style="cursor:pointer">
         <input type="checkbox" id="include_barcode" onchange="syncBarcodeState()">
-        <span class="toggle-slider" onclick="toggleBarcode(); event.stopPropagation();"></span>
+        <span class="toggle-slider"></span>
       </label>
-      <span class="barcode-label">إضافة الباركود (QR)</span>
+      <span class="barcode-label" style="user-select:none;cursor:default">إضافة الباركود (QR)</span>
       <span style="font-size:18px">📷</span>
     </div>
     <div id="barcode_note" style="font-size:11px;color:#93c5fd;margin-top:6px;display:none">
@@ -1170,7 +1170,7 @@ function sendToTelegramAndClose() {
     <div id="auth-step-login">
       <div style="text-align:right;margin-bottom:6px;font-size:13px;color:#93c5fd;font-weight:600">اسم المستخدم أو البريد المسجل:</div>
       <input type="text" id="auth-username" placeholder="مثلاً: ahmed أو البريد الإلكتروني" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:15px;text-align:center;margin-bottom:14px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
-      <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">📩 طلب رمز التحقق المؤقت (30 ثانية)</button>
+      <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">📩 طلب رمز التحقق المؤقت (50 ثانية)</button>
       <div style="margin-top:12px;font-size:13px">
         <span style="opacity:0.8">ليس لديك حساب؟</span>
         <a href="javascript:void(0)" onclick="switchAuthMode('register')" style="color:#38bdf8;font-weight:700;text-decoration:none;margin-right:6px">تقديم طلب تسجيل جديد 📝</a>
@@ -1214,7 +1214,7 @@ function sendToTelegramAndClose() {
             👑 <b>الإدارة:</b> <a href="https://t.me/RE_i1i" target="_blank" style="color:#38bdf8;text-decoration:none">@RE_i1i</a><br>
             🛡️ <b>المشرف:</b> <a href="https://t.me/WS2030W" target="_blank" style="color:#34d399;text-decoration:none">@WS2030W</a>
           </div>
-          بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني.
+          بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 50 ثانية) على بريدك الإلكتروني.
         </div>
       </div>
       <a href="https://t.me/RE_i1i" target="_blank" class="btn btn-submit" style="display:block;text-align:center;text-decoration:none;padding:11px;font-size:14px;margin-bottom:8px;background:linear-gradient(135deg,#3b9eff,#2563eb);">💬 تواصل مع الإدارة (@RE_i1i)</a>
@@ -1226,11 +1226,11 @@ function sendToTelegramAndClose() {
     <div id="auth-step-otp" style="display:none;">
       <div style="background:rgba(16,185,129,0.15);border:1.5px solid rgba(16,185,129,0.4);border-radius:14px;padding:14px;margin-bottom:16px;font-size:13px;color:#a7f3d0;">
         🔑 أدخل رمز التحقق المكون من 5 أرقام المرسل لبريدك الإلكتروني:<br>
-        <div id="otp-timer" style="font-size:24px;font-weight:800;color:#10b981;margin-top:6px;letter-spacing:1px">30 ثانية متبقية</div>
+        <div id="otp-timer" style="font-size:24px;font-weight:800;color:#10b981;margin-top:6px;letter-spacing:1px">50 ثانية متبقية</div>
       </div>
       <input type="text" id="auth-code" maxlength="5" inputmode="numeric" placeholder="•••••" style="width:100%;padding:14px;border-radius:12px;border:2px solid #38bdf8;background:rgba(0,0,0,0.4);color:#fff;font-size:28px;text-align:center;letter-spacing:14px;font-weight:bold;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') verifyOtpCode()">
       <button type="button" class="btn btn-submit" id="btn-verify-otp" onclick="verifyOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">✅ تأكيد ودخول (30 يوم)</button>
-      <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد (30 ثانية)</button>
+      <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد (50 ثانية)</button>
     </div>
 
     <div id="auth-err" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;border-radius:10px;color:#fca5a5;font-size:13px;line-height:1.5;"></div>
@@ -1329,6 +1329,48 @@ async function submitRegistration() {
   }
 }
 
+function startOtpTimer(seconds = 50) {
+  const codeInput = document.getElementById('auth-code');
+  if (codeInput) {
+    codeInput.value = '';
+    codeInput.disabled = false;
+    codeInput.focus();
+  }
+  const btn = document.getElementById('btn-verify-otp');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+  let left = seconds;
+  const timerEl = document.getElementById('otp-timer');
+  if (timerEl) {
+    timerEl.textContent = `${left} ثانية متبقية`;
+    timerEl.style.color = '#10b981';
+  }
+  if (otpInterval) clearInterval(otpInterval);
+  otpInterval = setInterval(() => {
+    left--;
+    if (left > 0) {
+      if (timerEl) {
+        timerEl.textContent = `${left} ثانية متبقية`;
+        if (left <= 5) timerEl.style.color = '#ef4444';
+      }
+    } else {
+      clearInterval(otpInterval);
+      if (timerEl) {
+        timerEl.textContent = '❌ انتهت مهلة الـ 50 ثانية! اطلب رمزاً جديداً';
+        timerEl.style.color = '#ef4444';
+      }
+      if (codeInput) codeInput.disabled = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+      }
+      showAuthErr('انتهت مهلة الـ 50 ثانية الخاصة بالرمز. اضغط على زر "طلب رمز جديد" للحصول على رمز جديد.');
+    }
+  }, 1000);
+}
+
 async function requestOtpCode() {
   clearAuthErr();
   const username = document.getElementById('auth-username').value.trim();
@@ -1353,27 +1395,7 @@ async function requestOtpCode() {
       document.getElementById('btn-verify-otp').style.opacity = '1';
       codeInput.focus();
 
-      let left = json.expires_in || 30;
-      const timerEl = document.getElementById('otp-timer');
-      timerEl.textContent = `${left} ثانية متبقية`;
-      timerEl.style.color = '#10b981';
-
-      if (otpInterval) clearInterval(otpInterval);
-      otpInterval = setInterval(() => {
-        left--;
-        if (left > 0) {
-          timerEl.textContent = `${left} ثانية متبقية`;
-          if (left <= 5) timerEl.style.color = '#ef4444';
-        } else {
-          clearInterval(otpInterval);
-          timerEl.textContent = '❌ انتهت مهلة الـ 30 ثانية! اطلب رمزاً جديداً';
-          timerEl.style.color = '#ef4444';
-          codeInput.disabled = true;
-          document.getElementById('btn-verify-otp').disabled = true;
-          document.getElementById('btn-verify-otp').style.opacity = '0.5';
-          showAuthErr('انتهت مهلة الـ 30 ثانية الخاصة بالرمز. اضغط على زر "طلب رمز جديد" لإرسال رمز جديد إلى بريدك.');
-        }
-      }, 1000);
+      startOtpTimer(json.expires_in || 50);
     } else {
       showAuthErr('❌ ' + (json.error || 'فشل إرسال الرمز'));
     }
@@ -1407,7 +1429,7 @@ async function verifyOtpCode() {
       document.getElementById('auth-modal').style.display = 'none';
       renderSubscriptionBanner(json);
     } else {
-      showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته (30 ثانية)'));
+      showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته (50 ثانية)'));
     }
   } catch (e) {
     showAuthErr('❌ تعذر الاتصال بالخادم');
@@ -1432,7 +1454,9 @@ async function checkUserStatusOnDemand() {
       }
       if (json.status === 'APPROVED') {
         document.getElementById('auth-username').value = json.username || json.email;
-        requestOtpCode();
+        switchAuthMode('otp');
+        document.getElementById('auth-modal').style.display = 'flex';
+        startOtpTimer(50);
         return;
       }
       if (json.status === 'PENDING_APPROVAL') {
@@ -1469,7 +1493,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const tgUsername = (tgUser?.username || '') || qUser;
 
   const ADMIN_TG_ID = '8733335095';
-  const ADMIN_UNAME = 'me_ii0';
+  const ADMIN_UNAME = 're_i1i';
 
   // ── Bulletproof Admin Bypass ──────────────────────────────────────────────
   const isDirectAdmin = (
@@ -1484,7 +1508,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     localStorage.removeItem('sehty_registered_email');
     renderSubscriptionBanner({
       days_remaining: 3650,
-      username: '👑 الأدمن @ME_ii0',
+      username: '👑 الأدمن @RE_i1i',
       active: true,
       is_admin: true
     });
@@ -1503,7 +1527,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('auth-modal').style.display = 'none';
         renderSubscriptionBanner({
           days_remaining: json.days_remaining || 3650,
-          username: json.is_admin ? '👑 الأدمن @ME_ii0' : (json.username || tgUser?.first_name || 'مستخدم'),
+          username: json.is_admin ? '👑 الأدمن @RE_i1i' : (json.username || tgUser?.first_name || 'مستخدم'),
           active: true,
           is_admin: json.is_admin
         });
@@ -1521,7 +1545,7 @@ window.addEventListener('DOMContentLoaded', async () => {
           document.getElementById('auth-username').value = json.username || json.email || '';
           switchAuthMode('otp');
           document.getElementById('auth-modal').style.display = 'flex';
-          requestOtpCode();
+          startOtpTimer(50);
           return;
         }
       }

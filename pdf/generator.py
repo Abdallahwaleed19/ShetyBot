@@ -343,7 +343,7 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
             img = qr.make_image(fill_color="black", back_color="white")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            page.insert_image(fitz.Rect(56.0, 724.13, 168.5, 836.63), stream=buf.getvalue())
+            page.insert_image(fitz.Rect(170.38, 724.13, 282.88, 836.63), stream=buf.getvalue())
         except Exception:
             pass
 
