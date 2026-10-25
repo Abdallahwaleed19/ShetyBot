@@ -197,7 +197,7 @@ def init_db_sync() -> None:
         except Exception:
             pass
 
-    # Ensure Admin account (@As1_oi) has admin privileges in DB
+    # Ensure Admin account (@ME_ii0) has admin privileges in DB
     try:
         now_iso = datetime.now(timezone.utc).isoformat()
         future_iso = (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()
@@ -561,6 +561,8 @@ async def check_subscription(session=None, user_id: int = 0) -> Dict[str, Any]:
 
 
 def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
+    if days > 30:
+        days = 30
     conn = _get_conn()
     cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -986,7 +988,10 @@ def get_system_stats_sync() -> dict:
     cur.execute("SELECT count(*) FROM users WHERE registration_status = 'REJECTED'")
     rejected_users = cur.fetchone()[0]
 
-    cur.execute("SELECT count(*) FROM users WHERE is_active = 1 AND registration_status = 'ACTIVE'")
+    cur.execute(
+        "SELECT count(*) FROM users WHERE is_active = 1 AND registration_status = 'ACTIVE'"
+        " AND subscription_end IS NOT NULL AND subscription_end > datetime('now')"
+    )
     active_users = cur.fetchone()[0]
 
     cur.execute("SELECT count(*) FROM users WHERE is_active = 0 OR registration_status = 'SUSPENDED'")

@@ -17,7 +17,7 @@ BOT_TOKEN: str = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN_HERE")
 PROXY_URL:  str = os.getenv("PROXY_URL", "").strip()
 
 # ── Admin Account & Credentials ──────────────────────────────────────────────
-ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "As1_oi").lstrip("@").strip()
+ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "ME_ii0").lstrip("@").strip()
 ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "ramo.711.vip@gmail.com").strip().lower()
 ADMIN_TELEGRAM_ID: str = os.getenv("ADMIN_TELEGRAM_ID", "8733335095").strip()
 ADMIN_KEY: str = os.getenv("ADMIN_KEY", "admin123").strip()

@@ -55,3 +55,9 @@ reference_doc.pdf
 *.pptx
 scratch/
 
+# Temporary test outputs in root
+*.png
+*.pdf
+!pdf/assets/sickleaves_template.pdf
+!pdf/assets/*.png
+

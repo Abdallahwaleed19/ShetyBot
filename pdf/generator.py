@@ -1,676 +1,377 @@
 """
-pdf/generator.py — Seha Sick Leave Report
-Pixel-matched to the official reference (B5: 842×1190pt ≈ 297×420mm).
-
-Reference analysis (from DOC-20260703-WA0005.pdf):
-  Page       : 842.25 × 1190.25 pt  (B5 landscape-long)
-  Margin L/R : ~36 pt (≈1.27cm)
-  Header imgs: xref91=mesh(top-right 543-806, 36-143), xref92=seha(36-186,36-102),
-               xref90=ksa_calligraphy(288-551,36-160)
-  Titles     : "Kingdom of Saudi Arabia" y=104, sz=17.2, color=#000000
-               "تقرير إجازة مرضية" y=150, sz=22.5, bold, color=#306db5
-               "Sick Leave Report"  y=194, sz=19.7, bold, color=#2e3f7b
-  Table      : xref89, y=235-709  ← entire table is an image in original
-               EN labels bold #366fb5 sz=13.5; AR labels bold #366fb5 sz=13.5
-               Values #2c3e77 sz=13.5; Leave Duration row: white text on #2c3e77 bg
-  Footer     : QR xref127 (170-283, 719-832)
-               Ministry logo xref96 (563-685, 733-844)
-               NHIC logo xref95 (655-806, 934-1006)
-               verify text y≈831-909; time y=945; date y=982
-  Colors     : Label blue #366fb5, value blue #2c3e77, dark row #2c3e77, link #153bc2
+pdf/generator.py — Seha Sick Leave Report Generator
+Hybrid High-Precision Engine based on PyMuPDF (fitz) and the official Seha template.
+Produces 100% pixel-perfect match to the official Seha reference.
 """
 from __future__ import annotations
 
 import io
 import os
 import sys
-from io import BytesIO
+from datetime import datetime
 from pathlib import Path
+from typing import Optional, Union
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from PIL import Image as PILImage
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import B5          # 499×709pt — WRONG, we need landscape-long B5
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import cm, mm
-pt = 1.0   # 1 point = 1 ReportLab unit
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (
-    Image as RLImage,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-    HRFlowable,
-)
-
+import fitz
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-# ── Page size — B5 portrait as in reference: 842.25 × 1190.25 pt ───────────────
-# reportlab B5 = (498.9, 708.7) — that's standard B5
-# Reference is ISO B5 = 176×250mm but the extracted is 297×420mm = A3!
-# Actually 842.25pt = 842.25/72*25.4 = 297.1mm, 1190.25pt = 419.9mm → this is A3!
-# Wait — let me re-check: A3 = 297×420mm ✓
-PAGE_W = 842.25 * pt   # ≈ 297mm  (A3 width)
-PAGE_H = 1190.25 * pt  # ≈ 420mm  (A3 height)
+# ── Paths & Assets ─────────────────────────────────────────────────────────────
+_BASE_DIR = Path(__file__).resolve().parent
+_ASSETS_DIR = _BASE_DIR / "assets"
+_FONTS_DIR = _BASE_DIR / "fonts"
 
-# Reference measurements (in points, y from TOP since PDF y=0 is bottom)
-# We'll work top-down: y_from_top = PAGE_H - y_pdf
-MAR_L = 36 * pt    # left margin
-MAR_R = 36 * pt    # right margin  
-MAR_T = 62 * pt    # top margin (matches Canva reference: 75px on 1448h)
-MAR_B = 36 * pt    # bottom margin
+TEMPLATE_PATH = _ASSETS_DIR / "sickleaves_template.pdf"
+FONT_BOLD_PATH = _FONTS_DIR / "NotoSansArabic-Bold.ttf"
+FONT_REG_PATH = _FONTS_DIR / "NotoSansArabic-Regular.ttf"
+MOH_LOGO_PATH = _ASSETS_DIR / "moh_logo.png"
 
-USABLE_W = PAGE_W - MAR_L - MAR_R   # ≈ 770pt
+# Color constants
+C_DARK_VAL = (0.17255, 0.24314, 0.46667)    # #2c3e77
+C_WHITE    = (1.0, 1.0, 1.0)
+C_BLACK    = (0.0, 0.0, 0.0)
+C_NAVY_URL = (0.08235, 0.23137, 0.76078)    # Vivid Dark Blue for link
 
-# ── Static assets ───────────────────────────────────────────────────────────────
-_ASSETS          = Path(__file__).parent / "assets"
-_KSA_CALLIGRAPHY = _ASSETS / "ksa_calligraphy.png"
-_GEOMETRIC_MESH  = _ASSETS / "geometric_mesh.png"
-_SEHA_LOGO       = _ASSETS / "seha_logo.png"
-_MOH_LOGO        = _ASSETS / "moh_logo.png"
-_NHIC_LOGO       = _ASSETS / "nhic_logo.png"
-
-# ── Fonts ────────────────────────────────────────────────────────────────────────
-_FONTS_DIR = Path(__file__).parent / "fonts"
-_FONTS_DIR.mkdir(exist_ok=True)
+_AR_FONT = "NSA_R"
+_EN_FONT = "times-roman"
 
 
-def _try_register(name: str, *candidates) -> str:
-    for path in candidates:
-        p = Path(str(path))
-        if p.exists():
-            try:
-                pdfmetrics.registerFont(TTFont(name, str(p)))
-                return name
-            except Exception:
-                pass
-    return "Helvetica"
+def has_ar(text: str) -> bool:
+    """Check if string contains Arabic characters."""
+    return any("\u0600" <= c <= "\u06ff" for c in str(text or ""))
 
 
-_AR = _try_register(
-    "AR",
-    _FONTS_DIR / "NotoNaskhArabic-Regular.ttf",
-    _FONTS_DIR / "Amiri-Regular.ttf",
-    _FONTS_DIR / "Arabic.ttf",
-    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
-    r"C:\Windows\Fonts\tahoma.ttf",
-    r"C:\Windows\Fonts\arial.ttf",
-)
-_ARB = _try_register(
-    "ARB",
-    _FONTS_DIR / "NotoNaskhArabic-Bold.ttf",
-    _FONTS_DIR / "Amiri-Bold.ttf",
-    _FONTS_DIR / "Tahoma-Bold.ttf",
-    r"C:\Windows\Fonts\tahomabd.ttf",
-    _FONTS_DIR / "Arial-Bold.ttf",
-    r"C:\Windows\Fonts\arialbd.ttf",
-)
-_EN = _try_register(
-    "EN",
-    _FONTS_DIR / "Times.ttf",
-    r"C:\Windows\Fonts\times.ttf",
-    r"C:\Windows\Fonts\calibri.ttf",
-    r"C:\Windows\Fonts\arial.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-)
-_ENB = _try_register(
-    "ENB",
-    _FONTS_DIR / "Times-Bold.ttf",
-    r"C:\Windows\Fonts\timesbd.ttf",
-    _FONTS_DIR / "Arial-Bold.ttf",
-    r"C:\Windows\Fonts\arialbd.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-)
-_SERIF_B = _try_register(
-    "SERIF_B",
-    _FONTS_DIR / "Times-Bold.ttf",
-    r"C:\Windows\Fonts\timesbd.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-    r"C:\Windows\Fonts\arialbd.ttf",
-)
-
-# ── Exact colors from reference ──────────────────────────────────────────────────
-C_LABEL   = colors.HexColor("#366fb3")   # EN/AR label text (bold blue)
-C_VALUE   = colors.HexColor("#2a3c76")   # cell values (dark blue)
-C_DARK    = colors.HexColor("#2c3e77")   # Leave Duration row bg  
-C_TITLE   = colors.HexColor("#2e6cb3")   # Arabic title
-C_TITLE_EN= colors.HexColor("#2d3e7a")   # English title
-C_LINK    = colors.HexColor("#153bc2")   # URL link
-C_GREY    = colors.HexColor("#555555")   # verify text
-C_LBLBG   = colors.HexColor("#ffffff")   # label column background
-C_ALTBG   = colors.HexColor("#f7f7f7")   # alt row background (soft grey in original)
-C_BORDER  = colors.HexColor("#dedede")   # table border (crisp light grey)
-C_DIVIDER = colors.HexColor("#c8c8c8")   # vertical divider in footer
-WHITE     = colors.white
-BLACK     = colors.black
-
-
-# ── Arabic helpers ───────────────────────────────────────────────────────────────
 def ar(text: str) -> str:
+    """Format Arabic text for display with reshaping and bidi ordering."""
     if not text:
         return ""
-    try:
-        return get_display(arabic_reshaper.reshape(str(text)))
-    except Exception:
-        return str(text)
+    return get_display(arabic_reshaper.reshape(str(text).strip()))
 
 
-def has_ar(text) -> bool:
-    return any("\u0600" <= c <= "\u06FF" for c in str(text or ""))
+def _format_date(d_str: Union[str, datetime, None]) -> str:
+    """Normalize date to DD-MM-YYYY."""
+    if not d_str:
+        return ""
+    if isinstance(d_str, datetime):
+        return d_str.strftime("%d-%m-%Y")
+    s = str(d_str).strip().replace("/", "-")
+    parts = [p.strip() for p in s.split("-") if p.strip()]
+    if len(parts) == 3:
+        if len(parts[0]) == 4:  # YYYY-MM-DD -> DD-MM-YYYY
+            return f"{parts[2].zfill(2)}-{parts[1].zfill(2)}-{parts[0]}"
+        elif len(parts[2]) == 4:  # DD-MM-YYYY
+            return f"{parts[0].zfill(2)}-{parts[1].zfill(2)}-{parts[2]}"
+    return s
 
 
-def _p(text, font, sz, color=BLACK, align=TA_LEFT, lh=1.2) -> Paragraph:
-    return Paragraph(
-        str(text or ""),
-        ParagraphStyle(
-            "x",
-            fontName=font,
-            fontSize=sz,
-            textColor=color,
-            alignment=align,
-            leading=sz * lh,
-            spaceBefore=0,
-            spaceAfter=0,
-            wordWrap="LTR" if align == TA_LEFT else "RTL",
-        ),
-    )
-
-
-def en(text, sz=9.5, color=BLACK, align=TA_LEFT, lh=1.15):
-    return Paragraph(
-        str(text or ""),
-        ParagraphStyle(
-            "en_p",
-            fontName=_EN,
-            fontSize=sz,
-            textColor=color,
-            alignment=align,
-            leading=sz * lh,
-            spaceBefore=0,
-            spaceAfter=0,
-            wordWrap="LTR",
-        ),
-    )
-
-
-def enb(text, sz=9.5, color=BLACK, align=TA_LEFT, lh=1.15):
-    return Paragraph(
-        str(text or ""),
-        ParagraphStyle(
-            "enb_p",
-            fontName=_ENB if _ENB else _EN,
-            fontSize=sz,
-            textColor=color,
-            alignment=align,
-            leading=sz * lh,
-            spaceBefore=0,
-            spaceAfter=0,
-            wordWrap="LTR",
-        ),
-    )
-
-
-def arabic(text, sz=9.5, color=BLACK, align=TA_RIGHT, lh=1.2):
-    return Paragraph(
-        ar(text),
-        ParagraphStyle(
-            "ar_p",
-            fontName=_AR,
-            fontSize=sz,
-            textColor=color,
-            alignment=align,
-            leading=sz * lh,
-            spaceBefore=0,
-            spaceAfter=0,
-            wordWrap="RTL",
-        ),
-    )
-
-
-def arb(text, sz=9.5, color=BLACK, align=TA_RIGHT, lh=1.2):
-    return Paragraph(
-        ar(text),
-        ParagraphStyle(
-            "arb_p",
-            fontName=_ARB if _ARB else _AR,
-            fontSize=sz,
-            textColor=color,
-            alignment=align,
-            leading=sz * lh,
-            spaceBefore=0,
-            spaceAfter=0,
-            wordWrap="RTL",
-        ),
-    )
-
-
-# ── Image helpers ────────────────────────────────────────────────────────────────
-def _crop_content(im: PILImage.Image, alpha_thr: int = 15) -> PILImage.Image:
-    im = im.convert("RGBA")
-    px = im.load()
-    w, h = im.size
-    xs, ys = [], []
-    for y in range(h):
-        for x in range(w):
-            if px[x, y][3] > alpha_thr:
-                xs.append(x); ys.append(y)
-    if not xs:
-        return im
-    pad = 3
-    return im.crop((max(0,min(xs)-pad), max(0,min(ys)-pad),
-                    min(w,max(xs)+pad+1), min(h,max(ys)+pad+1)))
-
-
-def _reader(path) -> ImageReader | None:
-    p = Path(str(path or ""))
-    if not p.exists():
-        return None
-    try:
-        im = _crop_content(PILImage.open(p))
-        buf = BytesIO()
-        im.save(buf, format="PNG")
-        buf.seek(0)
-        return ImageReader(buf)
-    except Exception:
-        return None
-
-
-def _fit(path, max_w, max_h) -> RLImage | None:
-    """Return RLImage fitted proportionally into max_w × max_h box."""
-    p = Path(str(path or ""))
-    if not p.exists():
-        return None
-    try:
-        im = _crop_content(PILImage.open(p))
-        iw, ih = im.size
-        if iw <= 0 or ih <= 0:
-            return None
-        scale = min(max_w / iw, max_h / ih)
-        buf = BytesIO()
-        im.save(buf, format="PNG")
-        buf.seek(0)
-        img = RLImage(buf, width=iw * scale, height=ih * scale)
-        img.hAlign = "CENTER"
-        return img
-    except Exception:
-        return None
-
-
-def _draw_img(c, reader, x, y, max_w, max_h, anchor="sw"):
-    """Draw image onto canvas, fitted in max_w×max_h. anchor: sw|ne|se|n|c"""
-    if reader is None:
-        return 0, 0
-    iw, ih = reader.getSize()
-    if iw <= 0 or ih <= 0:
-        return 0, 0
-    scale = min(max_w / iw, max_h / ih)
-    w, h = iw * scale, ih * scale
-    if anchor == "ne":
-        x, y = x - w, y - h
-    elif anchor == "se":
-        x, y = x - w, y
-    elif anchor == "n":
-        x, y = x - w / 2, y - h
-    elif anchor == "c":
-        x, y = x - w / 2, y - h / 2
-    elif anchor == "nw":
-        y = y - h
-    c.drawImage(reader, x, y, width=w, height=h, mask="auto")
-    return w, h
-
-
-# ══════════════════════════════════════════════════════════════════════════════════
-def generate_pdf(data: dict, output_path) -> Path:
-    output_path = Path(output_path)
-
-    # ── Unpack data ────────────────────────────────────────────────────────────
-    def _norm(d):
-        if not d:
-            return ""
-        return str(d).strip().replace("/", "-")
-
-    ad_g      = _norm(data.get("admission_date_gregorian", ""))
-    ad_h      = _norm(data.get("admission_date_hijri", ""))
-    dd_g      = _norm(data.get("discharge_date_gregorian", ""))
-    dd_h      = _norm(data.get("discharge_date_hijri", ""))
-    iss_g     = _norm(data.get("issue_date_gregorian", ""))
-    iss_long  = data.get("issue_date_long", iss_g)    # "Saturday, 24 October 2026"
-    if iss_long:
-        iss_long = str(iss_long).replace("،", ",").replace(" ,", ",").replace(", ", ", ").replace("  ", " ")
-    iss_t     = data.get("issue_time", "")             # "6:46 PM"
-    dur       = str(data.get("leave_duration_days", ""))
-    h_en      = (data.get("hospital_name_en", "") or "").strip()
-    h_ar      = (data.get("hospital_name_ar", "") or "").strip()
-    p_en      = data.get("practitioner_name_en", "")
-    p_ar      = data.get("practitioner_name_ar", "")
-    pos_en    = data.get("practitioner_position_en", "")
-    pos_ar    = data.get("practitioner_position_ar", "")
-    nat_ar    = data.get("nationality", "")
-    nat_en    = data.get("nationality_en", "")
-    emp_ar    = data.get("employer", "")
-    emp_en    = data.get("employer_en", "")
-    nid       = data.get("national_id", "")
-    name_en   = data.get("patient_name_en", "")
-    name_ar   = data.get("patient_name_ar", "")
-    leave_id  = data.get("leave_id", "")
-    hosp_logo = data.get("hospital_logo_path", "")
-    with_qr   = data.get("include_barcode", False)
-
-    def _to_ymd(d_str):
-        if not d_str:
-            return ""
-        parts = [p.strip() for p in str(d_str).replace("/", "-").split("-") if p.strip()]
-        if len(parts) == 3:
-            if len(parts[0]) == 4:
-                return f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
-            elif len(parts[2]) == 4:
-                return f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
-        return str(d_str)
-
-    # Duration display strings — match Canva reference: "1 day ( 06-10-2026 to 06-10-2026 )"
-    day_word = "day" if dur == "1" else "days"
-    dur_en   = f"{dur} {day_word} ( {ad_g} to {dd_g} )"
-    dur_ar   = f"{dur} يوم ( {_to_ymd(ad_h)} الى {_to_ymd(dd_h)} )"
-
-    # ── Load images ─────────────────────────────────────────────────────────────
-    seha_r = _reader(_SEHA_LOGO)
-    ksa_r  = _reader(_KSA_CALLIGRAPHY)
-    mesh_r = _reader(_GEOMETRIC_MESH)
-    nhic_r = _reader(_NHIC_LOGO)
-    logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
-    logo_r   = _reader(logo_src)
-
-    # ── Canvas callback: header + bottom elements (fixed positions) ──────────────
-    def on_page(c, doc):
-        c.saveState()
-        H = PAGE_H  # total page height in points
-
-        # ── GEOMETRIC MESH — top-right corner (fills top-right space nicely) ──
-        _draw_img(c, mesh_r,
-                  PAGE_W - MAR_R, H - MAR_T,
-                  245 * pt, 110 * pt,
-                  anchor="ne")
-
-        # ── SEHA LOGO — top-left ───────────────────────────────────────────────
-        _draw_img(c, seha_r,
-                  MAR_L + 6, H - MAR_T - 4,
-                  150 * pt, 66 * pt,
-                  anchor="nw")
-
-        # ── KSA CALLIGRAPHY — center top (compact, matching Canva reference) ────
-        w_ksa, h_ksa = _draw_img(
-            c, ksa_r,
-            PAGE_W / 2, H - MAR_T - 14,
-            195 * pt, 55 * pt,
-            anchor="n"
-        )
-        ksa_bottom_y = H - MAR_T - 14 - h_ksa
-
-        # "Kingdom of Saudi Arabia" — directly under calligraphy with no big gap
-        c.setFillColor(BLACK)
-        c.setFont(_SERIF_B, 11)
-        c.drawCentredString(PAGE_W / 2, ksa_bottom_y - 10, "Kingdom of Saudi Arabia")
-
-        c.restoreState()
-
-    # ── Build story (flowable content) ──────────────────────────────────────────
-    # Top margin covers header area (~200pt). Footer fully in story → small bottom margin.
-    doc = SimpleDocTemplate(
-        str(output_path),
-        pagesize=(PAGE_W, PAGE_H),
-        leftMargin=MAR_L,
-        rightMargin=MAR_R,
-        topMargin=170 * pt,
-        bottomMargin=36 * pt,   # minimal — all footer content is in the story
-    )
-
-    story = []
-    BODY_W = USABLE_W  # 770pt
-
-    # ── TITLES ─────────────────────────────────────────────────────────────────
-    story.append(arb("تقرير إجازة مرضية", 23, C_TITLE, TA_CENTER))
-    story.append(Spacer(1, 4 * pt))
-    story.append(enb("Sick Leave Report", 19.5, C_TITLE_EN, TA_CENTER))
-    story.append(Spacer(1, 24 * pt))
-
-    # ── DATA TABLE ──────────────────────────────────────────────────────────────
-    CL_EN = BODY_W * 0.225
-    CV    = BODY_W * 0.298
-    CV2   = BODY_W * 0.297
-    CL_AR = BODY_W * 0.180
-
-    LSZ_EN = 13.5   # English label font size (Times-Bold)
-    LSZ_AR = 13.5   # Arabic label font size (Noto Naskh Bold)
-    VSZ    = 12.5   # Value font size (Times-Roman / Noto Naskh Regular)
-    NSZ    = 12.0   # For names (allows natural 2-line wrap on long names)
-
-    def lbl_e(t, sz=LSZ_EN):
-        return enb(t, sz, C_LABEL, TA_CENTER)
-
-    def lbl_a(t, sz=LSZ_AR):
-        return arb(t, sz, C_LABEL, TA_CENTER)
-
-    def val_e(t, sz=VSZ):
-        return en(str(t or ""), sz, C_VALUE, TA_CENTER)
-
-    def val_a(t, sz=VSZ):
-        return arabic(str(t or ""), sz, C_VALUE, TA_CENTER)
-
-    ROW_H = 39.5 * pt
-
-    # Employer row: if only Arabic or English is provided, span across middle columns centered
-    if emp_en and emp_ar and emp_en.strip() != emp_ar.strip():
-        emp_row = (lbl_e("Employer"), val_e(emp_en, VSZ), val_a(emp_ar, VSZ), lbl_a("جهة العمل"), False, False)
+def _get_hijri(d_str: Union[str, datetime, None]) -> str:
+    """Convert Gregorian date to Hijri DD-MM-YYYY if possible."""
+    if not d_str:
+        return ""
+    dt = None
+    if isinstance(d_str, datetime):
+        dt = d_str
     else:
-        emp_val = emp_ar or emp_en
-        emp_widget = val_a(emp_val, VSZ) if has_ar(emp_val) else val_e(emp_val, VSZ)
-        emp_row = (lbl_e("Employer"), emp_widget, "", lbl_a("جهة العمل"), True, False)
+        norm = _format_date(d_str)
+        try:
+            parts = [int(p) for p in norm.split("-")]
+            if len(parts) == 3:
+                dt = datetime(parts[2], parts[1], parts[0])
+        except Exception:
+            pass
+    if dt:
+        try:
+            from hijri_converter import convert
+            h = convert.Gregorian(dt.year, dt.month, dt.day).to_hijri()
+            return f"{h.day:02d}-{h.month:02d}-{h.year}"
+        except Exception:
+            pass
+    return str(d_str)
 
-    rows = [
-        (lbl_e("Leave ID"),            val_e(leave_id),       "",                     lbl_a("رمز الإجازة"),           True,  False),
-        (enb("Leave Duration", LSZ_EN, WHITE, TA_CENTER),
-                                       en(dur_en, 12.0, WHITE, TA_CENTER),
-                                                              arabic(dur_ar, 12.0, WHITE, TA_CENTER),
-                                                                                      arb("مدة الإجازة", LSZ_AR, WHITE, TA_CENTER),
-                                                                                                      False, True),
-        (lbl_e("Admission Date"),      val_e(ad_g),            val_a(ad_h),            lbl_a("تاريخ الدخول"),          False, False),
-        (lbl_e("Discharge Date"),      val_e(dd_g),            val_a(dd_h),            lbl_a("تاريخ الخروج"),          False, False),
-        (lbl_e("Issue Date"),          val_e(iss_g),           "",                     lbl_a("تاريخ إصدار التقرير", 13.0), True,  False),
-        (lbl_e("Name"),                val_e(name_en, NSZ),    val_a(name_ar, VSZ),    lbl_a("الاسم"),                 False, False),
-        (lbl_e("National ID / Iqama", 12.5), val_e(nid),       "",                     lbl_a("رقم الهوية / الإقامة", 13.0),
-                                                                                                      True,  False),
-        (lbl_e("Nationality"),         val_e(nat_en),          val_a(nat_ar),          lbl_a("الجنسية"),               False, False),
-        emp_row,
-        (lbl_e("Practitioner Name", 12.5), val_e(p_en, NSZ),   val_a(p_ar, VSZ),       lbl_a("اسم الممارس"),           False, False),
-        (lbl_e("Position"),            val_e(pos_en),          val_a(pos_ar),          lbl_a("المسمى الوظيفى"),        False, False),
-    ]
 
-    tdata  = []
-    extras = []
-    alt_rows = {3, 5, 7, 9}
+def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
+    """
+    Generate pixel-perfect Seha Sick Leave Report matching Canva reference 100%.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    for i, (le, ve, va, la, span, dark) in enumerate(rows):
-        tdata.append([le, ve, va, la])
-        if span:
-            extras += [
-                ("SPAN",  (1, i), (2, i)),
-                ("ALIGN", (1, i), (2, i), "CENTER"),
-            ]
-        if dark:
-            extras += [
-                ("BACKGROUND",    (0, i), (-1, i), C_DARK),
-                ("TOPPADDING",    (0, i), (-1, i), 10),
-                ("BOTTOMPADDING", (0, i), (-1, i), 10),
-            ]
-        elif i in alt_rows:
-            extras.append(("BACKGROUND", (0, i), (-1, i), C_ALTBG))
+    if not TEMPLATE_PATH.exists():
+        raise FileNotFoundError(f"Template not found at: {TEMPLATE_PATH}")
+
+    doc = fitz.open(str(TEMPLATE_PATH))
+    page = doc[0]
+
+    # Register fonts
+    page.insert_font(fontname="NSA_B", fontfile=str(FONT_BOLD_PATH))
+    page.insert_font(fontname="NSA_R", fontfile=str(FONT_REG_PATH))
+
+    f_roman = fitz.Font("times-roman")
+    f_bold  = fitz.Font("times-bold")
+    f_nsa_r = fitz.Font(fontfile=str(FONT_REG_PATH))
+    f_nsa_b = fitz.Font(fontfile=str(FONT_BOLD_PATH))
+
+    # ── Unpack & Normalize Data ────────────────────────────────────────────────
+    leave_id = str(data.get("leave_id") or data.get("service_code") or "").strip()
+    dur_str  = str(data.get("leave_duration_days") or "1").strip()
+    unit     = "day" if dur_str == "1" else "days"
+
+    ad_g = _format_date(data.get("admission_date_gregorian") or data.get("admission_date"))
+    dd_g = _format_date(data.get("discharge_date_gregorian") or data.get("discharge_date"))
+    iss_g = _format_date(data.get("issue_date_gregorian") or data.get("issue_date") or ad_g)
+
+    ad_h = _format_date(data.get("admission_date_hijri")) or _get_hijri(ad_g)
+    dd_h = _format_date(data.get("discharge_date_hijri")) or _get_hijri(dd_g)
+
+    p_name_en = str(data.get("patient_name_en") or "").strip()
+    p_name_ar = str(data.get("patient_name_ar") or "").strip()
+    nid       = str(data.get("national_id") or "").strip()
+    nat_en    = str(data.get("nationality_en") or "").strip()
+    nat_ar    = str(data.get("nationality") or "").strip()
+    emp_en    = str(data.get("employer_en") or "").strip()
+    emp_ar    = str(data.get("employer") or "").strip()
+
+    pr_en = str(data.get("practitioner_name_en") or "").strip()
+    pr_ar = str(data.get("practitioner_name_ar") or "").strip()
+    pos_en = str(data.get("practitioner_position_en") or data.get("job_title_en") or "").strip()
+    pos_ar = str(data.get("practitioner_position_ar") or data.get("job_title_ar") or "").strip()
+
+    hosp_en = str(data.get("hospital_name_en") or "").strip()
+    hosp_ar = str(data.get("hospital_name_ar") or "").strip()
+    hosp_type = str(data.get("hospital_type") or "").strip().lower()
+    report_type = str(data.get("report_type") or "").strip().upper()
+
+    iss_time = str(data.get("issue_time") or data.get("report_time") or "").strip()
+    if not iss_time:
+        iss_time = datetime.now().strftime("%I:%M %p").lstrip("0")
+
+    iss_long = str(data.get("issue_date_long") or "").strip()
+    if not iss_long and iss_g:
+        try:
+            parts = [int(p) for p in iss_g.split("-")]
+            dt = datetime(parts[2], parts[1], parts[0])
+            iss_long = f"{dt.strftime('%A')} ,{dt.day} {dt.strftime('%B %Y')}"
+        except Exception:
+            iss_long = iss_g
+    if iss_long:
+        import re
+        iss_long = re.sub(r"([A-Za-z]+)\s*[,،]\s*(\d+)", r"\1 ,\2", iss_long)
+
+    with_qr = data.get("include_barcode", False)
+    if isinstance(with_qr, str):
+        with_qr = with_qr.lower() in ("true", "1", "yes")
+
+    # ── Table Insertions ────────────────────────────────────────────────────────
+
+    # Row 0: Leave ID (Merged Col 1 & 2, center = 437.53, baseline = 266.24)
+    if leave_id:
+        w = f_roman.text_length(leave_id, 13.5)
+        page.insert_text(fitz.Point(437.53 - w / 2, 266.24), leave_id, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+
+    # Row 1: Duration (White text on dark blue background)
+    # English Col 1 (center = 318.27, baseline = 309.00)
+    dur_en = f"{dur_str} {unit} ( {ad_g} to {dd_g} )"
+    w = f_roman.text_length(dur_en, 13.5)
+    page.insert_text(fitz.Point(318.27 - w / 2, 309.00), dur_en, fontname="times-roman", fontsize=13.5, color=C_WHITE)
+
+    # Arabic Col 2 (center = 556.78, baseline = 309.52)
+    s1 = f"({dd_h} "
+    w1 = f_roman.text_length(s1, 13.5)
+    s2 = ar("الى")
+    w2 = f_nsa_r.text_length(s2, 13.5)
+    s3 = f" {ad_h})"
+    w3 = f_roman.text_length(s3, 13.5)
+    s4 = " " + ar("يوم")
+    w4 = f_nsa_r.text_length(s4, 13.5)
+    s5 = f" {dur_str}"
+    w5 = f_roman.text_length(s5, 13.5)
+
+    tot_w = w1 + w2 + w3 + w4 + w5
+    sx = 556.78 - tot_w / 2
+    page.insert_text(fitz.Point(sx, 309.52), s1, fontname="times-roman", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1, 309.52), s2, fontname="NSA_R", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1 + w2, 309.52), s3, fontname="times-roman", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1 + w2 + w3, 309.52), s4, fontname="NSA_R", fontsize=13.5, color=C_WHITE)
+    page.insert_text(fitz.Point(sx + w1 + w2 + w3 + w4, 309.52), s5, fontname="times-roman", fontsize=13.5, color=C_WHITE)
+
+    # Row 2: Admission Date (baseline = 351.01)
+    if ad_g:
+        w = f_roman.text_length(ad_g, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 351.01), ad_g, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+    if ad_h:
+        w = f_roman.text_length(ad_h, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 351.01), ad_h, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+
+    # Row 3: Discharge Date (baseline = 393.03)
+    if dd_g:
+        w = f_roman.text_length(dd_g, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 393.03), dd_g, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+    if dd_h:
+        w = f_roman.text_length(dd_h, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 393.03), dd_h, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+
+    # Row 4: Issue Date (Merged Col 1 & 2, center = 437.53, baseline = 435.04)
+    if iss_g:
+        w = f_roman.text_length(iss_g, 13.5)
+        page.insert_text(fitz.Point(437.53 - w / 2, 435.04), iss_g, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+
+    # Row 5: Patient Name
+    if p_name_en:
+        parts_n = p_name_en.split()
+        if len(parts_n) > 3:
+            nl1 = " ".join(parts_n[:3])
+            nl2 = " ".join(parts_n[3:])
+            w1 = f_roman.text_length(nl1, 13.5)
+            w2 = f_roman.text_length(nl2, 13.5)
+            page.insert_text(fitz.Point(318.27 - w1 / 2, 470.56), nl1, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+            page.insert_text(fitz.Point(318.27 - w2 / 2, 486.08), nl2, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
         else:
-            extras.append(("BACKGROUND", (0, i), (-1, i), WHITE))
+            w = f_roman.text_length(p_name_en, 13.5)
+            page.insert_text(fitz.Point(318.27 - w / 2, 478.84), p_name_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
-    tbl = Table(tdata, colWidths=[CL_EN, CV, CV2, CL_AR], rowHeights=[ROW_H] * len(rows))
-    tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID",          (0, 0), (-1, -1), 0.6, C_BORDER),
-        ("BOX",           (0, 0), (-1, -1), 1.0, C_BORDER),
-    ] + extras))
+    if p_name_ar:
+        ar_name = ar(p_name_ar)
+        w = f_nsa_r.text_length(ar_name, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 478.84), ar_name, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
-    story.append(tbl)
-    story.append(Spacer(1, 30 * pt))
+    # Row 6: National ID / Iqama (Merged Col 1 & 2, center = 437.53, baseline = 521.60)
+    if nid:
+        w = f_roman.text_length(nid, 13.5)
+        page.insert_text(fitz.Point(437.53 - w / 2, 521.60), nid, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # FOOTER — 2-row table (exact match to original reference):
-    #
-    #  Row 1:  QR + verify text  (left) | hospital logo + name (right)
-    #  Row 2:  time + date       (left) | NHIC logo + text (right)
-    # ══════════════════════════════════════════════════════════════════════════
+    # Row 7: Nationality
+    if nat_en:
+        w = f_roman.text_length(nat_en, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 563.61), nat_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+    if nat_ar:
+        ar_nat = ar(nat_ar)
+        w = f_nsa_r.text_length(ar_nat, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 564.13), ar_nat, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
-    verify_ar       = "للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة الرسمي"
-    verify_en       = "To check the report please visit Seha's offical website"
-    verify_url_text = "www.seha.sa/#/inquiries/slenquiry"
-    verify_url_href = "https://seha-8xj.pages.dev/"
+    # Row 8: Employer (Strictly separate: Arabic in Col 2 ONLY, English in Col 1 if provided)
+    if emp_en:
+        w = f_roman.text_length(emp_en, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 605.62), emp_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+    if emp_ar:
+        ar_emp = ar(emp_ar)
+        w = f_nsa_r.text_length(ar_emp, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 606.14), ar_emp, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 
-    url_para = Paragraph(
-        f'<link href="{verify_url_href}"><u>{verify_url_text}</u></link>',
-        ParagraphStyle("url", fontName=_ENB if _ENB else _EN,
-                       fontSize=9.5, textColor=C_LINK,
-                       alignment=TA_CENTER, leading=12),
-    )
+    # Row 9: Practitioner Name
+    if pr_en:
+        parts_p = pr_en.split()
+        if len(parts_p) > 3:
+            pl1 = " ".join(parts_p[:3])
+            pl2 = " ".join(parts_p[3:])
+            w1 = f_roman.text_length(pl1, 13.5)
+            w2 = f_roman.text_length(pl2, 13.5)
+            page.insert_text(fitz.Point(318.27 - w1 / 2, 642.00), pl1, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+            page.insert_text(fitz.Point(318.27 - w2 / 2, 656.50), pl2, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        else:
+            w = f_roman.text_length(pr_en, 13.5)
+            page.insert_text(fitz.Point(318.27 - w / 2, 647.64), pr_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
-    # ── QR code ────────────────────────────────────────────────────────────────
-    qr_size = 110 * pt  # Exact reference size
-    qr_flowable = None
+    if pr_ar:
+        ar_pr = ar(pr_ar)
+        w = f_nsa_r.text_length(ar_pr, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 648.15), ar_pr, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
+
+    # Row 10: Position (Directly below practitioner name)
+    if pos_en:
+        w = f_roman.text_length(pos_en, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 689.65), pos_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+    if pos_ar:
+        ar_pos = ar(pos_ar)
+        w = f_nsa_r.text_length(ar_pos, 13.5)
+        page.insert_text(fitz.Point(556.78 - w / 2, 690.17), ar_pos, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
+
+    # ── Footer Section ─────────────────────────────────────────────────────────
+
+    # 1. Hospital Logo & Names
+    # Logo selection: custom upload > MOH logo for gov/GSL
+    logo_file = None
+    custom_logo = data.get("hospital_logo_path")
+    is_gov = (hosp_type == "government" or report_type == "GSL" or leave_id.startswith("GSL"))
+
+    if custom_logo and Path(str(custom_logo)).exists():
+        logo_file = str(custom_logo)
+    elif is_gov and MOH_LOGO_PATH.exists():
+        logo_file = str(MOH_LOGO_PATH)
+
+    # Logo positioned lower, ending at logo_bottom = 844.0, sticking right to the names below
+    if logo_file:
+        try:
+            from PIL import Image as PIL_Image
+            with PIL_Image.open(logo_file) as limg:
+                lw, lh = limg.size
+            logo_w = 110.0
+            logo_h = logo_w * (lh / lw)
+            logo_bottom = 844.0
+            logo_top = logo_bottom - logo_h
+            page.insert_image(
+                fitz.Rect(633.13 - logo_w / 2, logo_top, 633.13 + logo_w / 2, logo_bottom),
+                filename=logo_file,
+            )
+        except Exception:
+            page.insert_image(fitz.Rect(576.88, 740.0, 689.38, 844.0), filename=logo_file)
+
+    # Hospital names directly underneath
+    if hosp_ar:
+        ar_hosp = ar(hosp_ar)
+        w = f_nsa_b.text_length(ar_hosp, 12.75)
+        page.insert_text(fitz.Point(633.13 - w / 2, 857.91), ar_hosp, fontname="NSA_B", fontsize=12.75, color=C_BLACK)
+
+    if hosp_en:
+        w = f_bold.text_length(hosp_en, 12.75)
+        page.insert_text(fitz.Point(633.13 - w / 2, 878.22), hosp_en, fontname="times-bold", fontsize=12.75, color=C_BLACK)
+
+    # 2. QR Code (Reserved space stays blank if not enabled)
     if with_qr:
         try:
-            import qrcode as qr_lib
-            # QR code opens the exact inquiry portal link shown underneath
-            target = "https://seha-8xj.pages.dev/"
-            qr_obj = qr_lib.QRCode(version=3,
-                                   error_correction=qr_lib.constants.ERROR_CORRECT_M,
-                                   box_size=8, border=2)
-            qr_obj.add_data(target)
-            qr_obj.make(fit=True)
-            qr_img = qr_obj.make_image(fill_color="black", back_color="white")
-            buf = BytesIO()
-            qr_img.save(buf, "PNG")
-            buf.seek(0)
-            qr_flowable = RLImage(buf, width=qr_size, height=qr_size)
-            qr_flowable.hAlign = "CENTER"
-        except ImportError:
+            import qrcode
+            qr_target = data.get("qr_data") or data.get("qr_url")
+            if not qr_target:
+                qr_target = f"https://seha-sea.com/#/inquiries/slenquiry?id={leave_id}"
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=10,
+                border=1,
+            )
+            qr.add_data(qr_target)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            page.insert_image(fitz.Rect(56.0, 724.13, 168.5, 836.63), stream=buf.getvalue())
+        except Exception:
             pass
 
-    # Row 1 LEFT: QR + verify text (centered under QR, 2 lines bold Arabic)
-    r1_left = []
-    if qr_flowable:
-        r1_left.append(qr_flowable)
-        r1_left.append(Spacer(1, 8 * pt))
-    else:
-        # Keep the exact same reserved space empty when QR is disabled
-        r1_left.append(Spacer(1, qr_size + 8 * pt))
-    r1_left += [
-        arb("للتحقق من بيانات التقرير يرجى التأكد من زيارة موقع منصة صحة", 12.0, BLACK, TA_CENTER),
-        Spacer(1, 2 * pt),
-        arb("الرسمي", 12.0, BLACK, TA_CENTER),
-        Spacer(1, 5 * pt),
-        enb(verify_en, 10.5, BLACK, TA_CENTER),
-        Spacer(1, 4 * pt),
-        url_para,
-    ]
+    # 3. Verification Link: displayed text www.seha.sa/#/inquiries/slenquiry with bright blue color and underline, clickable link opens seha-sea.com
+    C_BLUE_LINK = (0.0, 0.0, 1.0)  # Bright blue #0000ff
+    url_text = "www.seha.sa/#/inquiries/slenquiry"
+    w = f_bold.text_length(url_text, 11.25)
+    ux = 226.63 - w / 2
+    uy = 930.50
+    page.insert_text(fitz.Point(ux, uy), url_text, fontname="times-bold", fontsize=11.25, color=C_BLUE_LINK)
+    # Underline
+    page.draw_line(fitz.Point(ux, uy + 1.5), fitz.Point(ux + w, uy + 1.5), color=C_BLUE_LINK, width=0.85)
+    page.insert_link({
+        "kind": fitz.LINK_URI,
+        "from": fitz.Rect(ux - 2, 918.0, ux + w + 2, 935.0),
+        "uri": "https://seha-sea.com",
+    })
 
-    # Row 1 RIGHT: hospital logo + name (very bold, matching crop)
-    logo_src = hosp_logo if hosp_logo and Path(str(hosp_logo)).exists() else str(_MOH_LOGO)
-    logo_fit = _fit(logo_src, 135 * pt, 115 * pt)
-    r1_right = []
-    if logo_fit:
-        logo_fit.hAlign = "CENTER"
-        r1_right.append(logo_fit)
-        r1_right.append(Spacer(1, 8 * pt))
-    if h_ar:
-        r1_right.append(arb(h_ar, 14.0, BLACK, TA_CENTER))
-    if h_en:
-        r1_right.append(Spacer(1, 3 * pt))
-        r1_right.append(enb(h_en, 12.5, BLACK, TA_CENTER))
-    if not r1_right:
-        r1_right = [en("", 9)]
+    # 4. Time & Date (exact original spacing and layout: Tuesday ,20 October 2026)
+    page.insert_text(fitz.Point(38.25, 962.88), iss_time, fontname="times-bold", fontsize=12.75, color=C_BLACK)
+    page.insert_text(fitz.Point(38.25, 990.29), iss_long, fontname="times-bold", fontsize=12.75, color=C_BLACK)
 
-    # Row 2 LEFT: time + date (heavy bold serif, matching crop exactly)
-    def _time_para(text, sz=14.0):
-        return Paragraph(
-            f"<b>{text}</b>",
-            ParagraphStyle("time_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
-                           alignment=TA_LEFT, leading=sz + 4)
-        )
+    # 5. National Health Information Center (NHIC) Logo (المركز الوطني للمعلومات الصحية) in bottom right corner
+    nhic_logo_path = _ASSETS_DIR / "nhic_logo_clean.png"
+    if nhic_logo_path.exists():
+        page.insert_image(fitz.Rect(667.0, 948.0, 820.0, 1020.66), filename=str(nhic_logo_path))
 
-    def _date_para(text, sz=13.0):
-        return Paragraph(
-            f"<b>{text}</b>",
-            ParagraphStyle("date_b", fontName=_SERIF_B, fontSize=sz, textColor=BLACK,
-                           alignment=TA_LEFT, leading=sz + 4)
-        )
-
-    r2_left = [
-        Spacer(1, 15 * pt),
-        _time_para(str(iss_t or ""), 14.0),
-        Spacer(1, 4 * pt),
-        _date_para(str(iss_long or ""), 13.0),
-    ]
-
-    # Row 2 RIGHT: NHIC logo (single image that already contains the text)
-    nhic_fit = _fit(_NHIC_LOGO, 195 * pt, 90 * pt)
-
-    r2_right = []
-    if nhic_fit:
-        r2_right.append(Spacer(1, 10 * pt))
-        nhic_fit.hAlign = "RIGHT"
-        r2_right.append(nhic_fit)
-
-    if not r2_right:
-        r2_right = [en("", 9)]
-
-    FW_L = BODY_W * 0.50
-    FW_R = BODY_W * 0.50
-
-    footer_tbl = Table(
-        [
-            [r1_left,  r1_right],   # Row 1: QR+verify | hospital logo+name
-            [r2_left,  r2_right],   # Row 2: time+date | NHIC logo
-        ],
-        colWidths=[FW_L, FW_R],
-    )
-    footer_tbl.setStyle(TableStyle([
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("ALIGN",         (0, 0), (0, 0),   "CENTER"),
-        ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING",   (0, 0), (0, -1),  4),
-        ("RIGHTPADDING",  (0, 0), (0, -1),  10),
-        ("LEFTPADDING",   (1, 0), (1, -1),  10),
-        ("RIGHTPADDING",  (1, 0), (1, -1),  4),
-        # Vertical divider between columns on Row 1 only
-        ("LINEAFTER",     (0, 0), (0, 0),   1.0, C_DIVIDER),
-        # Row 2: Left column left-aligned, right column right-aligned
-        ("VALIGN",        (0, 1), (-1, 1),  "TOP"),
-        ("ALIGN",         (0, 1), (0, 1),   "LEFT"),
-        ("ALIGN",         (1, 1), (1, 1),   "RIGHT"),
-    ]))
-    story.append(footer_tbl)
-
-    # Add whitespace at bottom to match reference
-    story.append(Spacer(1, 35 * pt))
-
-    # ── Build PDF ────────────────────────────────────────────────────────────────
-    doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
+    # Save to destination
+    doc.save(str(output_path))
+    doc.close()
     return output_path

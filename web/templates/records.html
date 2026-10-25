@@ -545,12 +545,15 @@ function renderRecords(records) {
     return;
   }
 
-  container.innerHTML = records.map(r => `
+  container.innerHTML = records.map((r, idx) => `
     <div class="record-card ${currentTab === 'trash' ? 'trashed' : ''}">
       <div class="card-head">
         <div>
-          <div class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</div>
-          ${r.patient_name_en ? `<div class="patient-name-en">${r.patient_name_en}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:rgba(59,158,255,0.2);color:#93c5fd;border:1px solid rgba(59,158,255,0.3);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">#${idx + 1}</span>
+            <div class="patient-name">${r.patient_name_ar || 'مريض غير مسمى'}</div>
+          </div>
+          ${r.patient_name_en ? `<div class="patient-name-en" style="margin-right:32px;">${r.patient_name_en}</div>` : ''}
         </div>
         <div class="head-badges">
           <span class="badge-type">${r.report_type || 'GSL'}</span>
@@ -657,7 +660,7 @@ async function loadAllData() {
   const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || '0';
   const uname = (tg?.initDataUnsafe?.user?.username || '') || username;
 
-  if (qRole === 'admin' || uid === '8733335095' || uname.toLowerCase() === 'as1_oi') {
+  if (qRole === 'admin' || uid === '8733335095' || uname.toLowerCase() === 'me_ii0') {
     isAdmin = true;
     const adminLink = document.getElementById('admin-dash-link');
     if (adminLink) adminLink.style.display = 'inline-flex';
@@ -672,6 +675,7 @@ async function loadAllData() {
     const jsonActive = await resActive.json();
     if (jsonActive.success && Array.isArray(jsonActive.data)) {
       activeRecords = jsonActive.data;
+      activeRecords.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       if (jsonActive.is_admin) {
         isAdmin = true;
         const adminLink = document.getElementById('admin-dash-link');
@@ -686,6 +690,7 @@ async function loadAllData() {
     const jsonTrash = await resTrash.json();
     if (jsonTrash.success && Array.isArray(jsonTrash.data)) {
       trashRecords = jsonTrash.data;
+      trashRecords.sort((a, b) => (b.deleted_at || b.created_at || '').localeCompare(a.deleted_at || a.created_at || ''));
     } else {
       trashRecords = [];
     }

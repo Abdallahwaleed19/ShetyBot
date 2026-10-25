@@ -242,7 +242,7 @@
 <div id="admin-header-bar" style="display:none;background:#0d3683;border-bottom:1.5px solid #3b9eff;padding:10px 14px;align-items:center;justify-content:space-between;margin-bottom:6px">
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:16px">👑</span>
-    <span style="font-size:13px;font-weight:800;color:#93c5fd">حساب مدير النظام (@As1_oi)</span>
+    <span style="font-size:13px;font-weight:800;color:#93c5fd">حساب مدير النظام (@ME_ii0)</span>
   </div>
   <div style="display:flex;gap:8px">
     <a href="/admin?key=admin123" target="_blank" style="background:#3b9eff;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">⚙️ لوحة الإدارة</a>
@@ -400,13 +400,8 @@
   </div>
 
   <div class="field">
-    <label>🏢 جهة العمل — عربي</label>
-    <input type="text" id="employer" placeholder="اسم جهة العمل بالعربية">
-  </div>
-
-  <div class="field ltr-field">
-    <label>Employer — English</label>
-    <input type="text" id="employer_en" placeholder="Employer Name in English" dir="ltr">
+    <label>🏢 جهة العمل</label>
+    <input type="text" id="employer" placeholder="اسم جهة العمل">
   </div>
 
   <div class="err" id="e2"></div>
@@ -564,7 +559,6 @@ if(tg){ tg.ready(); tg.expand(); }
     if (d.nationality)          document.getElementById('nationality').value = d.nationality;
     if (d.nationality_en)       document.getElementById('nationality_en').value = d.nationality_en;
     if (d.employer)             document.getElementById('employer').value = d.employer;
-    if (d.employer_en)          document.getElementById('employer_en').value = d.employer_en;
 
     // Page 3
     if (d.practitioner_name_ar) document.getElementById('practitioner_name_ar').value = d.practitioner_name_ar;
@@ -955,7 +949,7 @@ async function submitForm() {
   fd.append('nationality',          document.getElementById('nationality').value);
   fd.append('nationality_en',       document.getElementById('nationality_en').value);
   fd.append('employer',             document.getElementById('employer').value);
-  fd.append('employer_en',          document.getElementById('employer_en').value);
+  fd.append('employer_en',          '');
 
   // Page 3 fields
   fd.append('practitioner_name_ar', document.getElementById('practitioner_name_ar').value);
@@ -1152,7 +1146,7 @@ function sendToTelegramAndClose() {
         <div style="font-size:32px;margin-bottom:8px">⏳</div>
         <div style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:6px">طلبك قيد المراجعة لدى الأدمن</div>
         <div style="font-size:13px;color:#cbd5e1;line-height:1.6">
-          تم إشعار إدارة البوت (@As1_oi) بطلب التسجيل الخاص بك.<br>
+          تم إشعار إدارة البوت (@ME_ii0) بطلب التسجيل الخاص بك.<br>
           بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 30 ثانية) على بريدك الإلكتروني.
         </div>
       </div>
@@ -1407,7 +1401,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const tgUsername = (tgUser?.username || '') || qUser;
 
   const ADMIN_TG_ID = '8733335095';
-  const ADMIN_UNAME = 'as1_oi';
+  const ADMIN_UNAME = 'me_ii0';
 
   // ── Bulletproof Admin Bypass ──────────────────────────────────────────────
   const isDirectAdmin = (
@@ -1422,7 +1416,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     localStorage.removeItem('sehty_registered_email');
     renderSubscriptionBanner({
       days_remaining: 3650,
-      username: '👑 الأدمن @As1_oi',
+      username: '👑 الأدمن @ME_ii0',
       active: true,
       is_admin: true
     });
@@ -1441,7 +1435,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('auth-modal').style.display = 'none';
         renderSubscriptionBanner({
           days_remaining: json.days_remaining || 3650,
-          username: json.is_admin ? '👑 الأدمن @As1_oi' : (json.username || tgUser?.first_name || 'مستخدم'),
+          username: json.is_admin ? '👑 الأدمن @ME_ii0' : (json.username || tgUser?.first_name || 'مستخدم'),
           active: true,
           is_admin: json.is_admin
         });

@@ -61,34 +61,34 @@
     .stat-card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 18px 20px;
+      border-radius: 14px;
+      padding: 12px 16px;
       position: relative;
       overflow: hidden;
     }
-    .stat-label { font-size: 13px; color: #93c5fd; margin-bottom: 6px; font-weight: 600; }
-    .stat-val { font-size: 28px; font-weight: 800; color: #fff; }
-    .stat-icon { position: absolute; left: 16px; top: 18px; font-size: 28px; opacity: 0.35; }
+    .stat-label { font-size: 12px; color: #93c5fd; margin-bottom: 4px; font-weight: 600; }
+    .stat-val { font-size: 24px; font-weight: 800; color: #fff; }
+    .stat-icon { position: absolute; left: 14px; top: 14px; font-size: 24px; opacity: 0.35; }
 
     /* Cards */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 22px;
-      margin-bottom: 28px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 22px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
     }
     .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 12px;
+      padding-bottom: 10px;
     }
     .card-title {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 800;
       color: #38bdf8;
       display: flex;
@@ -97,9 +97,9 @@
     }
 
     /* Tables */
-    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
-    table { width: 100%; border-collapse: collapse; background: rgba(0, 0, 0, 0.2); font-size: 13.5px; }
-    th, td { padding: 13px 15px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; background: rgba(0, 0, 0, 0.2); font-size: 13px; }
+    th, td { padding: 9px 12px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
     th { background: rgba(59, 158, 255, 0.14); color: #93c5fd; font-weight: 700; white-space: nowrap; }
     tr:hover { background: rgba(255, 255, 255, 0.03); }
 
@@ -295,6 +295,14 @@
         </form>
       </div>
 
+      <!-- User Filters -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('all')" id="btn-u-all" style="background:#3b9eff">الكل ({{ users|length }})</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('active')" id="btn-u-active">🟢 النشطين فقط (اشتراك ساري)</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('expired')" id="btn-u-expired">⚠️ منتهية اشتراكاتهم</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('suspended')" id="btn-u-suspended">⏸️ معلقين</button>
+      </div>
+
       <div class="table-wrap">
         <table>
           <thead>
@@ -311,7 +319,7 @@
           </thead>
           <tbody>
             {% for u in users %}
-            <tr>
+            <tr class="user-row" data-status="{{ u.registration_status }}" data-days="{{ u.days_remaining }}">
               <td>{{ u.id }}</td>
               <td>
                 <strong>{{ u.full_name_ar or u.username or u.telegram_user_id }}</strong>
@@ -420,6 +428,26 @@
 
     function closeModal() {
       document.getElementById('verifyModal').classList.remove('show');
+    }
+
+    function filterUserRows(filter) {
+      document.querySelectorAll('[id^="btn-u-"]').forEach(b => b.style.background = 'rgba(255,255,255,0.12)');
+      const selBtn = document.getElementById(`btn-u-${filter}`);
+      if (selBtn) selBtn.style.background = '#3b9eff';
+
+      document.querySelectorAll('.user-row').forEach(row => {
+        const status = row.getAttribute('data-status');
+        const days = parseInt(row.getAttribute('data-days') || '0', 10);
+        if (filter === 'all') {
+          row.style.display = '';
+        } else if (filter === 'active') {
+          row.style.display = (status === 'ACTIVE' && days > 0) ? '' : 'none';
+        } else if (filter === 'expired') {
+          row.style.display = (days <= 0 && status !== 'SUSPENDED') ? '' : 'none';
+        } else if (filter === 'suspended') {
+          row.style.display = (status === 'SUSPENDED') ? '' : 'none';
+        }
+      });
     }
 
     async function approveRegistration(userId, name) {

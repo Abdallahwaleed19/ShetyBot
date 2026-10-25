@@ -801,7 +801,7 @@ async def api_request_code(username: str = Form(...)):
         if user.registration_status == "PENDING_APPROVAL":
             return JSONResponse({
                 "success": False,
-                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@As1_oi). ستصلك رسالة فور الموافقة على الحساب.",
+                "error": "طلب تسجيلك قيد المراجعة حالياً لدى الإدارة (@ME_ii0). ستصلك رسالة فور الموافقة على الحساب.",
                 "status": "PENDING_APPROVAL"
             })
         if user.registration_status == "REJECTED":
@@ -1095,7 +1095,7 @@ async def api_update_record(
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request, current_user: User = Depends(get_current_user)):
-    """Admin dashboard accessible by @As1_oi / 8733335095 / ramo.711.vip@gmail.com or admin key."""
+    """Admin dashboard accessible by @ME_ii0 / 8733335095 / ramo.711.vip@gmail.com or admin key."""
     if not is_admin_request(current_user, request):
         raise HTTPException(403, "Access denied: Admin authorization required")
 
@@ -1268,9 +1268,12 @@ async def renew_subscription_api(
     days:    int = Form(30),
     current_user: User = Depends(get_current_user)
 ):
-    """Renew user subscription for specified days (admin only)."""
+    """Renew user subscription for specified days (admin only). Maximum renewal is 30 days at a time."""
     if not is_admin_request(current_user, request):
         raise HTTPException(403, "Access denied: Admin authorization required")
+
+    if days > 30:
+        return JSONResponse({"success": False, "error": "الحد الأقصى للتجديد 30 يوم في المرة الواحدة"})
 
     user = renew_subscription_sync(user_id, days=days)
     log_audit(user_id, "ADMIN_RENEW", f"Admin renewed subscription for {days} days")
