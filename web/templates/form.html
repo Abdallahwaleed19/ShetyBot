@@ -1042,6 +1042,9 @@ async function submitForm() {
   const logo = document.getElementById('logo_file').files[0];
   if (logo) fd.append('logo', logo);
 
+  let submitSucceeded = false;
+  clearErr('e3');
+
   try {
     const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`;
     const res = await fetch(url, {
@@ -1066,21 +1069,31 @@ async function submitForm() {
     document.getElementById('loading').classList.remove('show');
 
     if (json && json.success) {
+      submitSucceeded = true;
+      clearErr('e3');
       const sCode = json.service_code;
 
       // Set up Success Modal
       document.getElementById('res-service-code').textContent = sCode;
-      document.getElementById('btn-download-pdf').href = `/api/download/${sCode}`;
-      document.getElementById('btn-verify-portal').href = `https://seha-8xj.pages.dev/inquiries?q=${encodeURIComponent(sCode)}`;
+      const dlBtn = document.getElementById('btn-download-pdf');
+      if (dlBtn) dlBtn.href = `/api/download/${sCode}`;
+      const portalBtn = document.getElementById('btn-verify-portal');
+      if (portalBtn) portalBtn.href = `https://seha-8xj.pages.dev/inquiries?q=${encodeURIComponent(sCode)}`;
       document.getElementById('success-modal').style.display = 'flex';
 
-      // Automatically trigger download via robust helper
-      downloadPdfFromModal();
+      // Safely attempt background download without throwing into submitForm catch block
+      setTimeout(() => {
+        try { downloadPdfFromModal(); } catch (_) {}
+      }, 300);
     } else {
       showErr('e3', '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً'));
     }
   } catch (ex) {
     document.getElementById('loading').classList.remove('show');
+    // If the submission actually succeeded, completely suppress any navigation/network cancellation error
+    if (submitSucceeded) return;
+    if (ex && (ex.name === 'AbortError' || String(ex).includes('aborted'))) return;
+
     showErr('e3', '❌ تعذر الاتصال بالخادم، حاول ثانية');
     console.error(ex);
   }
