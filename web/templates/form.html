@@ -8,51 +8,57 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --bg1:#0B2763;--bg2:#0d3a8e;
-      --card:rgba(255,255,255,0.08);
-      --input:rgba(255,255,255,0.11);
-      --input-focus:rgba(255,255,255,0.18);
-      --border:rgba(255,255,255,0.15);
-      --accent:#3b9eff;
-      --green:#4caf50;
-      --red:#f44336;
-      --orange:#ff9800;
+      --bg:#f8fafc;
+      --card:#ffffff;
+      --input:#ffffff;
+      --input-focus:#ffffff;
+      --border:#cbd5e1;
+      --border-subtle:#e2e8f0;
+      --text-main:#0f172a;
+      --text-muted:#334155;
+      --text-sub:#64748b;
+      --accent:#0284c7;
+      --accent-hover:#0369a1;
+      --green:#10b981;
+      --red:#ef4444;
+      --orange:#f59e0b;
     }
-    html,body{min-height:100vh;background:linear-gradient(170deg,var(--bg1) 0%,var(--bg2) 100%);color:#fff;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl}
+    html,body{min-height:100vh;background:#f8fafc;color:var(--text-main);font-family:'Segoe UI',Tahoma,-apple-system,BlinkMacSystemFont,Arial,sans-serif;direction:rtl}
 
     /* ── Progress Bar ────────────────────────────────── */
-    .progress-wrap{position:sticky;top:0;z-index:50;background:rgba(11,39,99,0.95);padding:12px 20px;backdrop-filter:blur(8px)}
+    .progress-wrap{position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.96);padding:12px 20px;backdrop-filter:blur(8px);border-bottom:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.02)}
     .progress-steps{display:flex;gap:6px;justify-content:center;margin-bottom:6px}
-    .step-dot{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,0.2);transition:all .3s}
-    .step-dot.done{background:#4caf50}
+    .step-dot{flex:1;height:5px;border-radius:3px;background:#e2e8f0;transition:all .3s}
+    .step-dot.done{background:#10b981}
     .step-dot.active{background:var(--accent)}
-    .progress-label{text-align:center;font-size:12px;opacity:.7}
+    .progress-label{text-align:center;font-size:12.5px;color:var(--text-sub);font-weight:700}
 
     /* ── Page ────────────────────────────────────────── */
-    .page{display:none;padding:16px 16px 8px;animation:slidein .3s ease}
+    .page{display:none;padding:18px 16px 12px;animation:slidein .3s ease}
     .page.active{display:block}
     @keyframes slidein{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
-    .page-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:18px;opacity:.9;letter-spacing:.3px}
+    .page-title{font-size:16px;font-weight:800;text-align:center;margin-bottom:18px;color:var(--text-main);letter-spacing:.3px}
 
     /* ── Field ───────────────────────────────────────── */
     .field{margin-bottom:14px}
-    .field label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;opacity:.85}
+    .field label{display:block;font-size:13.5px;font-weight:700;margin-bottom:6px;color:var(--text-muted)}
     .field input,.field select{
       width:100%;padding:13px 14px;
-      background:var(--input);border:1.5px solid var(--border);border-radius:12px;
-      color:#fff;font-size:14.5px;font-family:inherit;direction:rtl;outline:none;
-      transition:border-color .2s,background .2s;
+      background:#ffffff;border:1.5px solid var(--border);border-radius:12px;
+      color:var(--text-main);font-size:14.5px;font-family:inherit;direction:rtl;outline:none;
+      transition:border-color .2s,box-shadow .2s;
+      box-shadow:0 1px 2px rgba(0,0,0,0.03);
       -webkit-appearance:none;appearance:none
     }
     .field input[dir=ltr],.field select[dir=ltr]{direction:ltr;text-align:left}
-    .field input:focus,.field select:focus{border-color:var(--accent);background:var(--input-focus)}
-    .field input[readonly]{opacity:.65;cursor:default;background:rgba(255,255,255,0.06)}
-    .field input::placeholder{color:rgba(255,255,255,0.38)}
-    .field select option{background:#0d3a8e;color:#fff}
-        .field input[type=date],.field input[type=time]{color-scheme:dark;direction:ltr;text-align:center}
+    .field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(2,132,199,0.15);background:#ffffff}
+    .field input[readonly]{color:var(--text-sub);cursor:default;background:#f1f5f9}
+    .field input::placeholder{color:#94a3b8}
+    .field select option{background:#ffffff;color:var(--text-main)}
+    .field input[type=date],.field input[type=time]{color-scheme:light;direction:ltr;text-align:center}
     /* Clean date inputs - centered calendar icon only, completely remove mm/dd/yyyy */
     .field input[type=date], .field input[type=time] {
-      color-scheme: dark;
+      color-scheme: light;
       direction: ltr;
       text-align: center;
       position: relative;
@@ -60,7 +66,7 @@
     }
     .field input[type=date]:not(.has-value) {
       color: transparent !important;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E") !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E") !important;
       background-repeat: no-repeat !important;
       background-position: center center !important;
       background-size: 20px 20px !important;
@@ -90,7 +96,7 @@
     }
     .field input[type=date].has-value {
       background-image: none !important;
-      color: #ffffff !important;
+      color: var(--text-main) !important;
       font-weight: 700;
       letter-spacing: 0.5px;
     }
@@ -100,7 +106,7 @@
       visibility: visible !important;
       opacity: 1 !important;
       font-size: 15px !important;
-      color: #ffffff !important;
+      color: var(--text-main) !important;
     }
     .field input[type=date].has-value::-webkit-calendar-picker-indicator {
       position: absolute !important;
@@ -110,9 +116,9 @@
       transform: translateY(-50%) !important;
       width: 18px !important;
       height: 18px !important;
-      opacity: 0.75 !important;
+      opacity: 0.65 !important;
       cursor: pointer !important;
-      filter: invert(1) !important;
+      filter: none !important;
     }
 
     /* ── Row (2 cols) ─────────────────────────────────── */
@@ -124,60 +130,63 @@
     .ampm-group{display:flex;flex-direction:column;gap:4px}
     .ampm-btn{
       padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;
-      background:var(--input);color:#fff;font-size:12px;font-weight:700;
+      background:#ffffff;color:var(--text-muted);font-size:12px;font-weight:700;
       cursor:pointer;text-align:center;transition:all .2s;white-space:nowrap
     }
-    .ampm-btn.sel{background:var(--accent);border-color:var(--accent)}
+    .ampm-btn.sel{background:var(--accent);border-color:var(--accent);color:#ffffff}
 
     /* ── Duration display ────────────────────────────── */
     .duration-display{
-      background:rgba(59,158,255,0.10);border:1.5px solid rgba(59,158,255,0.3);
+      background:rgba(2,132,199,0.07);border:1.5px solid rgba(2,132,199,0.25);
       border-radius:12px;padding:13px 14px;font-size:14.5px;
-      color:#fff;text-align:center;font-weight:700;letter-spacing:.3px
+      color:var(--accent);text-align:center;font-weight:800;letter-spacing:.3px
     }
-    .duration-display.invalid{border-color:rgba(244,67,54,0.5);color:rgba(244,67,54,0.9);background:rgba(244,67,54,0.08)}
+    .duration-display.invalid{border-color:rgba(239,68,68,0.4);color:#dc2626;background:rgba(239,68,68,0.08)}
 
     /* ── Toggle buttons ──────────────────────────────── */
     .toggle-group{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .tog{
       padding:12px 8px;border:1.5px solid var(--border);border-radius:12px;
-      background:var(--input);color:#fff;font-size:14px;font-weight:600;
-      cursor:pointer;text-align:center;transition:all .2s;user-select:none
+      background:#ffffff;color:var(--text-muted);font-size:14px;font-weight:600;
+      cursor:pointer;text-align:center;transition:all .2s;user-select:none;
+      box-shadow:0 1px 2px rgba(0,0,0,0.03)
     }
-    .tog.sel{background:var(--accent);border-color:var(--accent)}
+    .tog.sel{background:var(--accent);border-color:var(--accent);color:#ffffff}
 
     /* ── Logo Upload ──────────────────────────────────── */
     .logo-box{
-      border:2px dashed rgba(255,255,255,0.28);border-radius:14px;
-      padding:20px;text-align:center;cursor:pointer;transition:border-color .2s
+      border:2px dashed var(--border);border-radius:14px;background:#ffffff;
+      padding:20px;text-align:center;cursor:pointer;transition:all .2s
     }
-    .logo-box:hover{border-color:rgba(255,255,255,.55)}
+    .logo-box:hover{border-color:var(--accent);background:#f8fafc}
     .logo-box input{display:none}
-    .logo-preview{width:72px;height:72px;border-radius:10px;object-fit:contain;background:#fff;display:none;margin:0 auto 8px}
-    .logo-hint{font-size:12px;opacity:.6}
+    .logo-preview{width:72px;height:72px;border-radius:10px;object-fit:contain;background:#fff;display:none;margin:0 auto 8px;border:1px solid var(--border)}
+    .logo-hint{font-size:12.5px;color:var(--text-sub)}
 
     /* ── Barcode toggle (Compact + checkmark slider) ── */
     .barcode-toggle{
       display:inline-flex;align-items:center;gap:10px;
-      background:var(--input);border:1.5px solid var(--border);border-radius:10px;
+      background:#ffffff;border:1.5px solid var(--border);border-radius:10px;
       padding:8px 14px;cursor:pointer;transition:all .2s;
-      max-width:240px;margin:0 auto;
+      max-width:240px;margin:0 auto;color:var(--text-main);
+      box-shadow:0 1px 2px rgba(0,0,0,0.03)
     }
     .barcode-toggle:hover{border-color:var(--accent)}
-    .barcode-toggle.enabled{border-color:#10b981;background:rgba(16,185,129,0.12)}
+    .barcode-toggle.enabled{border-color:#10b981;background:rgba(16,185,129,0.08)}
     .toggle-switch{
       position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer
     }
     .toggle-switch input{opacity:0;width:0;height:0}
     .toggle-slider{
-      position:absolute;inset:0;background:rgba(255,255,255,0.2);
+      position:absolute;inset:0;background:#e2e8f0;
       border-radius:24px;cursor:pointer;transition:.25s
     }
     .toggle-slider:before{
       content:'';position:absolute;height:18px;width:18px;
       left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.25s;
       display:flex;align-items:center;justify-content:center;
-      font-size:11px;font-weight:900;color:#10b981;line-height:18px;text-align:center
+      font-size:11px;font-weight:900;color:#10b981;line-height:18px;text-align:center;
+      box-shadow:0 1px 3px rgba(0,0,0,0.15)
     }
     input:checked + .toggle-slider{background:#10b981}
     input:checked + .toggle-slider:before{
@@ -194,34 +203,35 @@
       transition:opacity .15s,transform .1s
     }
     .btn:active{transform:scale(.97);opacity:.88}
-    .btn-next{background:var(--accent);color:#fff}
-    .btn-prev{background:var(--input);color:#fff;border:1.5px solid var(--border)}
-    .btn-submit{background:var(--green);color:#fff}
+    .btn-next{background:var(--accent);color:#fff;box-shadow:0 4px 12px rgba(2,132,199,0.22)}
+    .btn-prev{background:#ffffff;color:var(--text-muted);border:1.5px solid var(--border)}
+    .btn-submit{background:var(--green);color:#fff;box-shadow:0 4px 14px rgba(16,185,129,0.28)}
 
     /* ── Error ───────────────────────────────────────── */
     .err{
-      background:rgba(244,67,54,.18);border:1px solid rgba(244,67,54,.45);
-      border-radius:9px;padding:10px 13px;font-size:13px;
+      background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+      border-radius:9px;padding:10px 13px;font-size:13px;color:#dc2626;
       margin-bottom:10px;display:none
     }
     .err.show{display:block}
 
     /* ── Edit mode notice ─────────────────────────────── */
     .edit-notice{
-      background:rgba(255,152,0,0.15);border:1px solid rgba(255,152,0,0.4);
-      border-radius:10px;padding:10px 14px;font-size:13px;
+      background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);
+      border-radius:10px;padding:10px 14px;font-size:13px;color:#b45309;
       text-align:center;margin:8px 16px 0;
     }
 
     /* ── Loading ─────────────────────────────────────── */
     #loading{
       display:none;position:fixed;inset:0;
-      background:rgba(11,39,99,.92);z-index:200;
-      align-items:center;justify-content:center;flex-direction:column;gap:16px
+      background:rgba(255,255,255,0.94);z-index:200;
+      align-items:center;justify-content:center;flex-direction:column;gap:16px;
+      color:var(--text-main);font-weight:700;backdrop-filter:blur(6px)
     }
     #loading.show{display:flex}
     .spin{
-      width:46px;height:46px;border:4px solid rgba(255,255,255,.25);
+      width:46px;height:46px;border:4px solid #e2e8f0;
       border-top-color:var(--accent);border-radius:50%;
       animation:spin .75s linear infinite
     }
@@ -230,8 +240,8 @@
     /* ── Nationality LTR inside RTL layout ───────────── */
     .ltr-field input{direction:ltr;text-align:left}
     .section-divider{
-      font-size:11px;opacity:.5;text-align:center;
-      padding:4px 0;border-top:1px solid rgba(255,255,255,0.1);
+      font-size:11px;color:var(--text-sub);text-align:center;
+      padding:4px 0;border-top:1px solid var(--border-subtle);
       margin-bottom:12px
     }
   </style>
@@ -239,14 +249,14 @@
 <body>
 
 <!-- ── Admin & Navigation Header Bar ────────────────── -->
-<div id="admin-header-bar" style="display:none;background:#0d3683;border-bottom:1.5px solid #3b9eff;padding:10px 14px;align-items:center;justify-content:space-between;margin-bottom:6px">
+<div id="admin-header-bar" style="display:none;background:#ffffff;border-bottom:1.5px solid #e2e8f0;padding:10px 14px;align-items:center;justify-content:space-between;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:16px">👑</span>
-    <span style="font-size:13px;font-weight:800;color:#93c5fd">حساب مدير النظام (@RE_i1i)</span>
+    <span style="font-size:13px;font-weight:800;color:#0284c7">حساب مدير النظام (@RE_i1i)</span>
   </div>
   <div style="display:flex;gap:8px">
-    <a href="/admin?key=admin123" target="_blank" style="background:#3b9eff;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">⚙️ لوحة الإدارة</a>
-    <a href="/records" style="background:rgba(255,255,255,0.15);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;text-decoration:none">📂 السجلات</a>
+    <a href="/admin?key=admin123" target="_blank" style="background:#0284c7;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">⚙️ لوحة الإدارة</a>
+    <a href="/records" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;padding:6px 10px;border-radius:8px;font-size:12px;text-decoration:none;font-weight:600">📂 السجلات</a>
   </div>
 </div>
 
@@ -258,7 +268,7 @@
     <div class="step-dot" id="d3"></div>
   </div>
   <div class="progress-label" id="progress-lbl">الصفحة 1 من 3 — تفاصيل الإجازة</div>
-  <div class="subscription-status" id="subscription_status" style="font-size:11px;opacity:.8;text-align:center;margin-top:4px"></div>
+  <div class="subscription-status" id="subscription_status" style="font-size:11px;color:#64748b;text-align:center;margin-top:4px"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -268,12 +278,12 @@
   <p class="page-title">📋 تفاصيل الإجازة</p>
 
   <!-- Subscription Duration Banner -->
-  <div id="sub-banner" style="background:rgba(59,158,255,0.14);border:1.5px solid rgba(59,158,255,0.35);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+  <div id="sub-banner" style="background:rgba(2,132,199,0.06);border:1.5px solid rgba(2,132,199,0.22);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,0.02)">
     <div style="display:flex;align-items:center;gap:10px">
       <span id="sub-dot" style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;box-shadow:0 0 8px #10b981"></span>
-      <span id="sub-text" style="font-size:14px;font-weight:700;color:#fff">متبقي على انتهاء الاشتراك 30 يوم</span>
+      <span id="sub-text" style="font-size:14px;font-weight:700;color:#0369a1">متبقي على انتهاء الاشتراك 30 يوم</span>
     </div>
-    <div id="sub-user-pill" style="font-size:12px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-weight:600">
+    <div id="sub-user-pill" style="font-size:12px;background:#ffffff;border:1px solid #cbd5e1;color:#0f172a;padding:4px 10px;border-radius:20px;font-weight:600">
       👤 <span id="sub-username">مستخدم</span>
     </div>
   </div>
@@ -283,21 +293,28 @@
     <label>نوع التقرير</label>
     <div style="position:relative">
       <button type="button" id="btn-report-type-menu" onclick="toggleReportTypeMenu(event)"
-              style="width:100%;padding:13px 16px;background:var(--input);border:1.5px solid var(--border);border-radius:12px;color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .2s;font-family:inherit">
+              style="width:100%;padding:13px 16px;background:#ffffff;border:1.5px solid #cbd5e1;border-radius:12px;color:#0f172a;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .2s;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
         <span style="display:flex;align-items:center;gap:10px">
           <span style="font-size:18px">📄</span>
           <span>نوع التقرير:</span>
-          <span id="selected-report-badge" style="background:#3b9eff;color:#fff;padding:3px 12px;border-radius:8px;font-size:14px;letter-spacing:1px;font-weight:800">GSL</span>
+          <span id="selected-report-badge" style="background:#0284c7;color:#fff;padding:3px 12px;border-radius:8px;font-size:14px;letter-spacing:1px;font-weight:800">GSL</span>
         </span>
-        <span id="report-type-arrow" style="font-size:14px;color:#93c5fd;transition:transform .2s">▾</span>
+        <span id="report-type-arrow" style="font-size:14px;color:#0284c7;transition:transform .2s">▾</span>
       </button>
 
-      <div id="report-type-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#0d3683;border:1.5px solid #3b9eff;border-radius:12px;overflow:hidden;z-index:90;box-shadow:0 12px 30px rgba(0,0,0,0.6)">
-        <div onclick="selectReportType('GSL')" style="padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
-          <div style="color:#38bdf8;font-size:16px;font-weight:800">GSL</div>
+      <div id="report-type-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:#ffffff;border:1.5px solid #cbd5e1;border-radius:12px;overflow:hidden;z-index:90;box-shadow:0 12px 30px rgba(0,0,0,0.1)">
+        <div onclick="selectReportType('GSL')" style="padding:13px 16px;cursor:pointer;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+          <div style="color:#0284c7;font-size:16px;font-weight:800">GSL</div>
           <span id="chk-gsl" style="color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
-        <div onclick="selectReportType('PSL')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='rgba(59,158,255,0.2)'" onmouseout="this.style.background='transparent'">
+        <div onclick="selectReportType('PSL')" style="padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+          <div style="color:#0284c7;font-size:16px;font-weight:800">PSL</div>
+          <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" id="report_type" value="GSL">
+  </div>
           <div style="color:#38bdf8;font-size:16px;font-weight:800">PSL</div>
           <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
         </div>
@@ -360,11 +377,11 @@
     <label>🔑 رمز الخدمة / الإجازة (يمكنك تعديله)</label>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="text" id="service_code" placeholder="مثال: GSL26080311625 أو PSL26102005781" required
-             style="flex:1;font-weight:700;font-family:monospace;letter-spacing:1px;font-size:15px"
+             style="flex:1;font-weight:700;font-family:monospace;letter-spacing:1px;font-size:15px;color:#0284c7;background:#f8fafc"
              oninput="onServiceCodeManualEdit()">
-      <button type="button" class="btn" style="padding:10px 14px;background:rgba(255,255,255,0.15);border-radius:10px;font-size:12px;white-space:nowrap" onclick="regenerateServiceCode(true)">🔄 توليد</button>
+      <button type="button" class="btn" style="padding:10px 14px;background:#f1f5f9;border:1.5px solid #cbd5e1;color:#334155;border-radius:10px;font-size:12px;white-space:nowrap" onclick="regenerateServiceCode(true)">🔄 توليد</button>
     </div>
-    <div style="font-size:11px;opacity:.7;margin-top:4px">يتحدد تلقائيًا بناءً على نوع التقرير المختار (GSL / PSL)، ويمكنك تعديله وكتابته يدويًا</div>
+    <div style="font-size:11px;color:#64748b;margin-top:4px">يتحدد تلقائيًا بناءً على نوع التقرير المختار (GSL / PSL)، ويمكنك تعديله وكتابته يدويًا</div>
   </div>
 
   <div class="field">
@@ -385,7 +402,7 @@
 
   <div class="field">
     <label>🌍 الجنسية — عربي</label>
-    <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.18);border-radius:10px;color:#fff;font-size:14.5px;margin-bottom:8px">
+    <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:13px 14px;background:#ffffff;border:1.5px solid #cbd5e1;border-radius:10px;color:#0f172a;font-size:14.5px;margin-bottom:8px">
       <option value="">- اختر الجنسية -</option>
       <option value="السعودية|Saudi" selected>🇸🇦 السعودية</option>
       <option value="مصري|Egyptian">🇪🇬 مصري</option>
@@ -517,7 +534,14 @@
 <script>
 // ── Telegram WebApp ─────────────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
-if(tg){ tg.ready(); tg.expand(); }
+if(tg){
+  tg.ready();
+  tg.expand();
+  try {
+    if (tg.setHeaderColor) tg.setHeaderColor('#ffffff');
+    if (tg.setBackgroundColor) tg.setBackgroundColor('#f8fafc');
+  } catch(e) {}
+}
 
 // ── Check Subscription Status ───────────────────────────────────────────────
 (async function(){
@@ -1251,99 +1275,117 @@ function sendToTelegramAndClose() {
 </script>
 
 
-<!-- ── Success Modal (Matches Image 2 Pixel-Perfect) ── -->
-<div id="success-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(14px);z-index:99999;display:none;align-items:center;justify-content:center;padding:18px;">
-  <div style="background:#0e3683;border:1.5px solid rgba(56,189,248,0.4);border-radius:24px;padding:30px 20px;max-width:380px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
-    <div style="font-size:52px;margin-bottom:12px;line-height:1">✅</div>
-    <h2 style="font-size:22px;margin-bottom:14px;color:#fff;font-weight:800;letter-spacing:-0.3px">تم إصدار التقرير بنجاح !</h2>
+<!-- ── Success Screen (Matches Image Pixel-Perfect) ── -->
+<div id="success-modal" style="position:fixed;inset:0;background:radial-gradient(circle at center 35%, #252a35 0%, #161820 100%);z-index:99999;display:none;align-items:center;justify-content:center;padding:24px;flex-direction:column;text-align:center;">
+  <div style="max-width:390px;width:100%;margin:0 auto;display:flex;flex-direction:column;align-items:center;">
     
-    <div style="background:rgba(255,255,255,0.08);border:1px dashed rgba(56,189,248,0.5);border-radius:12px;padding:9px 12px;margin-bottom:18px;font-size:13.5px;color:#93c5fd;">
-      رمز الخدمة: <strong id="res-service-code-badge" style="color:#fff;font-family:monospace;font-size:15.5px;"></strong>
+    <!-- Circular Checkmark Badge with Lime Green Ring (Exact match to screenshot) -->
+    <div style="width:88px;height:88px;border-radius:50%;border:4.5px solid #84cc16;display:flex;align-items:center;justify-content:center;margin-bottom:26px;box-shadow:0 0 32px rgba(132, 204, 22, 0.35);background:rgba(22,24,32,0.7);">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#84cc16" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
     </div>
-    <span id="res-service-code" style="display:none"></span>
 
-    <!-- Navigation Buttons -->
-    <div style="display:flex;flex-direction:column;gap:11px;">
-      <a id="btn-download-pdf" href="#" target="_blank" onclick="downloadPdfFromModal(event)" class="btn" style="background:#10b981;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);font-family:inherit;width:100%;">
+    <!-- Title -->
+    <h1 style="font-size:27px;font-weight:800;color:#ffffff;margin-bottom:10px;letter-spacing:-0.3px;">تم بنجاح!</h1>
+    
+    <!-- Subtitle -->
+    <p style="font-size:15px;color:#cbd5e1;font-weight:500;margin-bottom:34px;line-height:1.6;">تم إصدار التقرير وإرساله إليك في المحادثة.</p>
+
+    <!-- Two Buttons Side-by-Side (Matches Screenshot) -->
+    <div style="display:flex;gap:12px;width:100%;align-items:center;justify-content:center;">
+      <!-- إغلاق التطبيق (Mint Green Pastel Button) -->
+      <button type="button" onclick="closeToBot()" style="flex:1.2;background:#6ee7b7;color:#064e3b;font-size:15px;font-weight:800;padding:14px 18px;border-radius:14px;border:none;cursor:pointer;transition:transform .15s;box-shadow:0 4px 14px rgba(110,231,183,0.35);font-family:inherit;">
+        إغلاق التطبيق
+      </button>
+
+      <!-- العودة للرئيسية -->
+      <button type="button" onclick="resetFormForNewReport()" style="flex:1;background:transparent;border:none;color:#ffffff;font-size:15px;font-weight:700;padding:14px 16px;cursor:pointer;font-family:inherit;text-align:center;">
+        العودة للرئيسية
+      </button>
+    </div>
+
+    <!-- Direct Download & Service Code -->
+    <div style="margin-top:28px;text-align:center;">
+      <a id="btn-download-pdf" href="#" target="_blank" onclick="downloadPdfFromModal(event)" style="display:inline-flex;align-items:center;gap:6px;color:#38bdf8;font-size:13.5px;font-weight:600;text-decoration:none;padding:9px 18px;border-radius:10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);">
         ⬇️ استخراج وتحميل التقرير (PDF)
       </a>
-      <button type="button" class="btn" onclick="closeToBot()" style="background:#0284c7;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(2,132,199,0.35);font-family:inherit;width:100%;">
-        🤖 العودة للبوت
-      </button>
-      <button type="button" class="btn" onclick="returnToReportPage()" style="background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.2);color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;width:100%;">
-        📄 تقديم تقرير جديد
-      </button>
+      <div style="font-size:12.5px;color:#94a3b8;margin-top:10px;">
+        رمز الخدمة: <strong id="res-service-code-badge" style="color:#ffffff;font-family:monospace;font-size:14.5px;"></strong>
+      </div>
+      <span id="res-service-code" style="display:none"></span>
     </div>
+
   </div>
 </div>
 
 <!-- ── Auth & Registration Modal ────────────────────────────────────── -->
-<div id="auth-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(12px);z-index:99998;display:none;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#0e3683;border:1.5px solid rgba(255,255,255,0.22);border-radius:24px;padding:30px 22px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+<div id="auth-modal" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(8px);z-index:99998;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;padding:32px 22px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.15);color:#0f172a;">
     <div style="font-size:42px;margin-bottom:8px;">🔐</div>
-    <h2 id="auth-modal-title" style="font-size:20px;margin-bottom:6px;color:#fff;font-weight:800">بوابة الدخول والتسجيل</h2>
-    <p id="auth-modal-sub" style="font-size:13px;opacity:0.85;margin-bottom:18px;color:#cbd5e1;">التحقق من الاشتراك وصلاحية الاستخدام</p>
+    <h2 id="auth-modal-title" style="font-size:20px;margin-bottom:6px;color:#0f172a;font-weight:800">بوابة الدخول والتسجيل</h2>
+    <p id="auth-modal-sub" style="font-size:13px;color:#64748b;margin-bottom:18px;">التحقق من الاشتراك وصلاحية الاستخدام</p>
 
     <!-- Tab 1: Direct Login / OTP Request -->
     <div id="auth-step-login">
-      <div style="text-align:right;margin-bottom:6px;font-size:13px;color:#93c5fd;font-weight:600">اسم المستخدم أو البريد المسجل:</div>
-      <input type="text" id="auth-username" placeholder="مثلاً: ahmed أو البريد الإلكتروني" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:15px;text-align:center;margin-bottom:14px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
+      <div style="text-align:right;margin-bottom:6px;font-size:13px;color:#334155;font-weight:700">اسم المستخدم أو البريد المسجل:</div>
+      <input type="text" id="auth-username" placeholder="مثلاً: ahmed أو البريد الإلكتروني" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-size:15px;text-align:center;margin-bottom:14px;outline:none;" onkeypress="if(event.key==='Enter') requestOtpCode()">
       <button type="button" class="btn btn-next" onclick="requestOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">📩 طلب رمز التحقق المؤقت (50 ثانية)</button>
       <div style="margin-top:12px;font-size:13px">
-        <span style="opacity:0.8">ليس لديك حساب؟</span>
-        <a href="javascript:void(0)" onclick="switchAuthMode('register')" style="color:#38bdf8;font-weight:700;text-decoration:none;margin-right:6px">تقديم طلب تسجيل جديد 📝</a>
+        <span style="color:#64748b">ليس لديك حساب؟</span>
+        <a href="javascript:void(0)" onclick="switchAuthMode('register')" style="color:#0284c7;font-weight:700;text-decoration:none;margin-right:6px">تقديم طلب تسجيل جديد 📝</a>
       </div>
     </div>
 
     <!-- Tab 2: User Registration Form -->
     <div id="auth-step-register" style="display:none;text-align:right">
       <div style="margin-bottom:12px">
-        <label style="font-size:13px;color:#93c5fd;font-weight:700;display:block;margin-bottom:6px">الاسم الكامل (عربي) *</label>
-        <input type="text" id="reg-name-ar" placeholder="الاسم الثلاثي أو الرباعي" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14.5px;outline:none;">
+        <label style="font-size:13px;color:#334155;font-weight:700;display:block;margin-bottom:6px">الاسم الكامل (عربي) *</label>
+        <input type="text" id="reg-name-ar" placeholder="الاسم الثلاثي أو الرباعي" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-size:14.5px;outline:none;">
       </div>
       <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#93c5fd;font-weight:700;display:block;margin-bottom:6px">البريد الإلكتروني (لتلقي الرمز) *</label>
-        <input type="email" id="reg-email" placeholder="example@gmail.com" dir="ltr" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:14.5px;outline:none;">
+        <label style="font-size:13px;color:#334155;font-weight:700;display:block;margin-bottom:6px">البريد الإلكتروني (لتلقي الرمز) *</label>
+        <input type="email" id="reg-email" placeholder="example@gmail.com" dir="ltr" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-size:14.5px;outline:none;">
       </div>
       <button type="button" class="btn btn-submit" onclick="submitRegistration()" style="width:100%;padding:13px;font-size:15px;margin-bottom:12px;">📤 إرسال طلب التسجيل للأدمن</button>
       <div style="text-align:center;font-size:13px">
-        <a href="javascript:void(0)" onclick="switchAuthMode('login')" style="color:#93c5fd;text-decoration:none">← العودة لتسجيل الدخول</a>
+        <a href="javascript:void(0)" onclick="switchAuthMode('login')" style="color:#0284c7;text-decoration:none;font-weight:600">← العودة لتسجيل الدخول</a>
       </div>
     </div>
 
     <!-- Tab 3: Pending Approval Notice -->
     <div id="auth-step-pending" style="display:none;">
-      <div style="background:rgba(245,158,11,0.15);border:1.5px solid rgba(245,158,11,0.4);border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">
+      <div style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.3);border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">
         <div style="font-size:32px;margin-bottom:8px">⏳</div>
-        <div style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:6px">تم استلام طلب تسجيلك بنجاح!</div>
-        <div style="font-size:13px;color:#cbd5e1;line-height:1.6">
+        <div style="font-size:15px;font-weight:800;color:#b45309;margin-bottom:6px">تم استلام طلب تسجيلك بنجاح!</div>
+        <div style="font-size:13px;color:#475569;line-height:1.6">
           طلبك قيد المراجعة والتدقيق حالياً.<br>
-          <div style="margin:10px 0;background:rgba(0,0,0,0.3);padding:10px;border-radius:10px;text-align:right;font-size:13px">
-            <span style="color:#fbbf24;font-weight:bold">🔴 إذا كنت ترغب في الاشتراك وتفعيل الحساب:</span><br>
+          <div style="margin:10px 0;background:#f8fafc;border:1px solid #e2e8f0;padding:10px;border-radius:10px;text-align:right;font-size:13px">
+            <span style="color:#b45309;font-weight:bold">🔴 إذا كنت ترغب في الاشتراك وتفعيل الحساب:</span><br>
             يرجى التواصل مع الإدارة أو المشرف لشحن الرصيد:<br>
-            👑 <b>الإدارة:</b> <a href="https://t.me/RE_i1i" target="_blank" style="color:#38bdf8;text-decoration:none">@RE_i1i</a><br>
-            🛡️ <b>المشرف:</b> <a href="https://t.me/WS2030W" target="_blank" style="color:#34d399;text-decoration:none">@WS2030W</a>
+            👑 <b>الإدارة:</b> <a href="https://t.me/RE_i1i" target="_blank" style="color:#0284c7;text-decoration:none">@RE_i1i</a><br>
+            🛡️ <b>المشرف:</b> <a href="https://t.me/WS2030W" target="_blank" style="color:#10b981;text-decoration:none">@WS2030W</a>
           </div>
           بمجرد قبول الطلب، سيصلك رمز التحقق المؤقت (صالح لمدة 50 ثانية) على بريدك الإلكتروني.
         </div>
       </div>
-      <a href="https://t.me/RE_i1i" target="_blank" class="btn btn-submit" style="display:block;text-align:center;text-decoration:none;padding:11px;font-size:14px;margin-bottom:8px;background:linear-gradient(135deg,#3b9eff,#2563eb);">💬 تواصل مع الإدارة (@RE_i1i)</a>
+      <a href="https://t.me/RE_i1i" target="_blank" class="btn btn-submit" style="display:block;text-align:center;text-decoration:none;padding:11px;font-size:14px;margin-bottom:8px;background:#0284c7;">💬 تواصل مع الإدارة (@RE_i1i)</a>
       <button type="button" class="btn btn-next" onclick="checkUserStatusOnDemand()" style="width:100%;padding:11px;font-size:13.5px;margin-bottom:8px;">🔄 التحقق من حالة الموافقة الآن</button>
       <button type="button" class="btn btn-prev" onclick="switchAuthMode('login')" style="width:100%;padding:9px;font-size:12.5px;">تغيير الحساب</button>
     </div>
 
     <!-- Tab 4: 5-digit OTP with 30s countdown -->
     <div id="auth-step-otp" style="display:none;">
-      <div style="background:rgba(16,185,129,0.15);border:1.5px solid rgba(16,185,129,0.4);border-radius:14px;padding:14px;margin-bottom:16px;font-size:13px;color:#a7f3d0;">
+      <div style="background:rgba(16,185,129,0.08);border:1.5px solid rgba(16,185,129,0.3);border-radius:14px;padding:14px;margin-bottom:16px;font-size:13px;color:#065f46;">
         🔑 أدخل رمز التحقق المكون من 5 أرقام المرسل لبريدك الإلكتروني:<br>
         <div id="otp-timer" style="font-size:24px;font-weight:800;color:#10b981;margin-top:6px;letter-spacing:1px">50 ثانية متبقية</div>
       </div>
-      <input type="text" id="auth-code" maxlength="5" inputmode="numeric" placeholder="•••••" style="width:100%;padding:14px;border-radius:12px;border:2px solid #38bdf8;background:rgba(0,0,0,0.4);color:#fff;font-size:28px;text-align:center;letter-spacing:14px;font-weight:bold;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') verifyOtpCode()">
+      <input type="text" id="auth-code" maxlength="5" inputmode="numeric" placeholder="•••••" style="width:100%;padding:14px;border-radius:12px;border:2px solid #0284c7;background:#f8fafc;color:#0f172a;font-size:28px;text-align:center;letter-spacing:14px;font-weight:bold;margin-bottom:16px;outline:none;" onkeypress="if(event.key==='Enter') verifyOtpCode()">
       <button type="button" class="btn btn-submit" id="btn-verify-otp" onclick="verifyOtpCode()" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">✅ تأكيد ودخول (30 يوم)</button>
       <button type="button" class="btn btn-prev" onclick="requestOtpCode()" style="width:100%;padding:10px;font-size:13px;">🔄 طلب رمز جديد (50 ثانية)</button>
     </div>
 
-    <div id="auth-err" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;border-radius:10px;color:#fca5a5;font-size:13px;line-height:1.5;"></div>
+    <div id="auth-err" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#dc2626;font-size:13px;line-height:1.5;"></div>
   </div>
 </div>
 
