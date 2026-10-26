@@ -24,13 +24,7 @@ _FONTS_DIR = _BASE_DIR / "fonts"
 TEMPLATE_PATH = _ASSETS_DIR / "sickleaves_template.pdf"
 FONT_BOLD_PATH = _FONTS_DIR / "NotoSansArabic-Bold.ttf"
 FONT_REG_PATH = _FONTS_DIR / "NotoSansArabic-Regular.ttf"
-FONT_REG_MINI_PATH = _FONTS_DIR / "NotoSansArabic-Regular-Mini.ttf"
-FONT_BOLD_MINI_PATH = _FONTS_DIR / "NotoSansArabic-Bold-Mini.ttf"
 MOH_LOGO_PATH = _ASSETS_DIR / "moh_logo.png"
-
-# Pre-cache ultra-fast pre-subsetted font bytes (<10ms instant generation)
-_CACHED_REG_BYTES: Optional[bytes] = FONT_REG_MINI_PATH.read_bytes() if FONT_REG_MINI_PATH.exists() else None
-_CACHED_BOLD_BYTES: Optional[bytes] = FONT_BOLD_MINI_PATH.read_bytes() if FONT_BOLD_MINI_PATH.exists() else None
 
 # Color constants
 C_DARK_VAL = (0.17255, 0.24314, 0.46667)    # #2c3e77
@@ -152,23 +146,14 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     doc = fitz.open(str(TEMPLATE_PATH))
     page = doc[0]
 
-    # Ultra-fast font loading: use cached pre-subsetted fonts (<10ms) or fallback
-    global _CACHED_REG_BYTES, _CACHED_BOLD_BYTES
-    if not _CACHED_REG_BYTES and FONT_REG_MINI_PATH.exists():
-        _CACHED_REG_BYTES = FONT_REG_MINI_PATH.read_bytes()
-    if not _CACHED_BOLD_BYTES and FONT_BOLD_MINI_PATH.exists():
-        _CACHED_BOLD_BYTES = FONT_BOLD_MINI_PATH.read_bytes()
+    # Collect all text to dynamically subset Arabic fonts (maintains ~301 KB and 100% crystal clear Arabic)
+    corpus = " ".join([str(v) for v in data.values() if isinstance(v, str)])
+    corpus += " تقرير إجازة مرضية مدة الدخول الخروج إلى يوم طبيب عام نائب استشاري أخصائي ممارس مستشفى وزارة الصحة السعودية 0123456789-/.():,–—•"
+    reshaped_corpus = corpus + " " + arabic_reshaper.reshape(corpus) + " " + get_display(arabic_reshaper.reshape(corpus))
+    chars_str = "".join(set(reshaped_corpus))
 
-    if _CACHED_REG_BYTES and _CACHED_BOLD_BYTES:
-        reg_bytes = _CACHED_REG_BYTES
-        bold_bytes = _CACHED_BOLD_BYTES
-    else:
-        corpus = " ".join([str(v) for v in data.values() if isinstance(v, str)])
-        corpus += " تقرير إجازة مرضية مدة الدخول الخروج إلى يوم طبيب عام نائب استشاري أخصائي ممارس مستشفى وزارة الصحة السعودية 0123456789-/.():,–—•"
-        reshaped_corpus = corpus + " " + arabic_reshaper.reshape(corpus) + " " + get_display(arabic_reshaper.reshape(corpus))
-        chars_str = "".join(set(reshaped_corpus))
-        reg_bytes = _subset_font_bytes(FONT_REG_PATH, chars_str)
-        bold_bytes = _subset_font_bytes(FONT_BOLD_PATH, chars_str)
+    reg_bytes = _subset_font_bytes(FONT_REG_PATH, chars_str)
+    bold_bytes = _subset_font_bytes(FONT_BOLD_PATH, chars_str)
 
     page.insert_font(fontname="NSA_R", fontbuffer=reg_bytes)
     page.insert_font(fontname="NSA_B", fontbuffer=bold_bytes)
