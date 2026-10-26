@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Request, Query, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 logger = logging.getLogger(__name__)
@@ -450,10 +450,11 @@ async def submit_report(
             "include_barcode":           with_barcode,
         }
 
-        # Generate PDF (fast & isolated thread)
-        from pdf.generator import generate_pdf
+        # Generate PDF asynchronously in memory buffer & persist to reports
+        from pdf.generator import generate_pdf_bytes
+        pdf_bytes = await asyncio.to_thread(generate_pdf_bytes, pdf_data)
         pdf_path = REPORTS_DIR / f"{service_code}.pdf"
-        await asyncio.to_thread(generate_pdf, pdf_data, pdf_path)
+        pdf_path.write_bytes(pdf_bytes)
 
         # Deliver PDF directly to user's Telegram chat so it appears immediately
         target_chat = str(telegram_user_id or "").strip()
@@ -708,12 +709,12 @@ async def download_pdf(service_code: str):
     """Download PDF directly for the report creator"""
     pdf = REPORTS_DIR / f"{service_code}.pdf"
     if not pdf.exists():
-        # Attempt to regenerate if data is available
+        # Attempt to regenerate if data is available (non-blocking in thread)
         rec = get_single_saved_report_sync(service_code)
         if rec:
             try:
                 from pdf.generator import generate_pdf
-                generate_pdf(rec, pdf)
+                await asyncio.to_thread(generate_pdf, rec, pdf)
             except Exception as e:
                 logger.error(f"Failed to regenerate PDF: {e}")
 
@@ -724,7 +725,128 @@ async def download_pdf(service_code: str):
         str(pdf),
         media_type="application/pdf",
         filename=f"SickLeave_{service_code}.pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="SickLeave_{service_code}.pdf"',
+            "Cache-Control": "public, max-age=3600"
+        }
     )
+
+
+@router.post("/api/generate-pdf-stream", summary="Generate and stream PDF directly")
+async def generate_pdf_stream(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service_code:         str = Form(...),
+    report_type:          str = Form("GSL"),
+    admission_date:       str = Form(...),
+    discharge_date:       str = Form(...),
+    leave_duration_days:  str = Form("1"),
+    issue_date:           str = Form(""),
+    report_time:          str = Form(""),
+    include_barcode:      str = Form("0"),
+    national_id:          str = Form(...),
+    patient_name_ar:      str = Form(...),
+    patient_name_en:      str = Form(""),
+    nationality:          str = Form("السعودية"),
+    nationality_en:       str = Form("Saudi"),
+    employer:             str = Form(""),
+    employer_en:          str = Form(""),
+    practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
+    practitioner_name_en: str = Form("MOHAMMED ABDULLAH AL-SHARARI"),
+    job_title_ar:         str = Form("طبيب عام"),
+    job_title_en:         str = Form("General"),
+    hospital_name_ar:     str = Form(""),
+    hospital_name_en:     str = Form(""),
+    hospital_type:        str = Form("government"),
+    logo: Optional[UploadFile] = File(None),
+    telegram_user_id:     str = Form("0"),
+    username:             str = Form(""),
+):
+    """Directly stream PDF buffer without waiting for file writing or external callbacks."""
+    try:
+        from pdf.generator import generate_pdf_bytes
+
+        def pd(s):
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                try:
+                    return datetime.strptime(s.strip(), fmt).date()
+                except Exception:
+                    pass
+            return None
+
+        adm = pd(admission_date) or datetime.now().date()
+        dis = pd(discharge_date) or adm
+        iss = pd(issue_date) if issue_date.strip() else datetime.now().date()
+
+        rt = None
+        if report_time.strip():
+            try:
+                rt = datetime.strptime(report_time.strip(), "%H:%M").time()
+            except Exception:
+                pass
+        if rt is None:
+            rt = datetime.now().time().replace(second=0, microsecond=0)
+
+        dur = inclusive_duration(adm, dis)
+
+        def _hijri(d):
+            try:
+                from hijri_converter import convert
+                h = convert.Gregorian(d.year, d.month, d.day).to_hijri()
+                return f"{h.day:02d}-{h.month:02d}-{h.year}"
+            except Exception:
+                return str(d)
+
+        def _fmt(d):
+            return d.strftime("%d-%m-%Y") if d else ""
+
+        pdf_data = {
+            "leave_id":                  service_code,
+            "national_id":               national_id,
+            "patient_name_ar":           patient_name_ar,
+            "patient_name_en":           patient_name_en,
+            "nationality":               nationality or "السعودية",
+            "nationality_en":            nationality_en or "Saudi",
+            "employer":                  employer,
+            "employer_en":               employer_en,
+            "report_type":               report_type,
+            "admission_date_gregorian":  _fmt(adm),
+            "admission_date_hijri":      _hijri(adm),
+            "discharge_date_gregorian":  _fmt(dis),
+            "discharge_date_hijri":      _hijri(dis),
+            "leave_duration_days":       dur,
+            "issue_date_gregorian":      _fmt(iss),
+            "issue_date_hijri":          _hijri(iss),
+            "issue_date_long":           f"{iss.strftime('%A')} ,{iss.day} {iss.strftime('%B %Y')}",
+            "issue_time":                rt.strftime("%I:%M %p").lstrip("0"),
+            "practitioner_name_ar":      practitioner_name_ar or "محمد عبدالله الشراري",
+            "practitioner_name_en":      practitioner_name_en or "MOHAMMED ABDULLAH AL-SHARARI",
+            "practitioner_position_ar":  job_title_ar or "طبيب عام",
+            "practitioner_position_en":  job_title_en or "General",
+            "hospital_name_ar":          hospital_name_ar,
+            "hospital_name_en":          hospital_name_en,
+            "hospital_type":             hospital_type,
+            "include_barcode":           (include_barcode.strip() == "1"),
+        }
+
+        pdf_bytes = await asyncio.to_thread(generate_pdf_bytes, pdf_data)
+
+        # Cache file to REPORTS_DIR in background
+        pdf_path = REPORTS_DIR / f"{service_code}.pdf"
+        asyncio.create_task(asyncio.to_thread(pdf_path.write_bytes, pdf_bytes))
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="SickLeave_{service_code}.pdf"',
+                "Content-Length": str(len(pdf_bytes)),
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Stream generation error: {e}")
+        raise HTTPException(500, f"Error generating PDF: {str(e)}")
 
 
 # ── Auth & Registration APIs ──────────────────────────────────────────────────

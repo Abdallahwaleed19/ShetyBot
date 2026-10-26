@@ -25,6 +25,7 @@ TEMPLATE_PATH = _ASSETS_DIR / "sickleaves_template.pdf"
 FONT_BOLD_PATH = _FONTS_DIR / "NotoSansArabic-Bold.ttf"
 FONT_REG_PATH = _FONTS_DIR / "NotoSansArabic-Regular.ttf"
 MOH_LOGO_PATH = _ASSETS_DIR / "moh_logo.png"
+NHIC_LOGO_PATH = _ASSETS_DIR / "nhic_logo_clean.png"
 
 # Color constants
 C_DARK_VAL = (0.17255, 0.24314, 0.46667)    # #2c3e77
@@ -34,6 +35,47 @@ C_NAVY_URL = (0.08235, 0.23137, 0.76078)    # Vivid Dark Blue for link
 
 _AR_FONT = "F4"
 _EN_FONT = "times-roman"
+
+# Pre-cache static template in memory
+TEMPLATE_BYTES = TEMPLATE_PATH.read_bytes() if TEMPLATE_PATH.exists() else b""
+
+# Pre-cache global fonts for fast, zero-allocation metrics & text measurement
+_F_ROMAN = fitz.Font("times-roman")
+_F_BOLD  = fitz.Font("times-bold")
+_F_NSA_R = fitz.Font(fontfile=str(FONT_REG_PATH)) if FONT_REG_PATH.exists() else None
+_F_NSA_B = fitz.Font(fontfile=str(FONT_BOLD_PATH)) if FONT_BOLD_PATH.exists() else None
+
+# Pre-cache static logo PNG buffers
+MOH_PNG_BYTES = None
+MOH_LOGO_H = 75.0
+if MOH_LOGO_PATH.exists():
+    try:
+        from PIL import Image as PIL_Image
+        with PIL_Image.open(str(MOH_LOGO_PATH)) as _mimg:
+            _lw, _lh = _mimg.size
+            _mimg_conv = _mimg.convert("RGBA")
+            _logo_w = 110.0
+            MOH_LOGO_H = _logo_w * (_lh / _lw)
+            _target_px = int(_logo_w * 1.5)
+            _mimg_conv.thumbnail((_target_px, _target_px * 2), PIL_Image.LANCZOS)
+            _buf = io.BytesIO()
+            _mimg_conv.save(_buf, format="PNG", optimize=True)
+            MOH_PNG_BYTES = _buf.getvalue()
+    except Exception:
+        MOH_PNG_BYTES = None
+
+NHIC_PNG_BYTES = None
+if NHIC_LOGO_PATH.exists():
+    try:
+        from PIL import Image as PIL_Image
+        with PIL_Image.open(str(NHIC_LOGO_PATH)) as _nimg:
+            _nimg_conv = _nimg.convert("RGBA")
+            _nimg_conv.thumbnail((250, 115), PIL_Image.LANCZOS)
+            _buf = io.BytesIO()
+            _nimg_conv.save(_buf, format="PNG", optimize=True)
+            NHIC_PNG_BYTES = _buf.getvalue()
+    except Exception:
+        NHIC_PNG_BYTES = None
 
 
 def has_ar(text: str) -> bool:
@@ -91,14 +133,18 @@ def _get_hijri(d_str: Union[str, datetime, None]) -> str:
 
 
 import functools
+from fontTools import subset
 
-@functools.lru_cache(maxsize=128)
+_SUBSET_OPTS = subset.Options()
+_SUBSET_OPTS.hinting = False
+_SUBSET_OPTS.desubroutinize = False
+_SUBSET_OPTS.legacy_kern = False
+
+@functools.lru_cache(maxsize=256)
 def _subset_font_bytes_cached(font_path_str: str, sorted_chars: str) -> bytes:
     try:
-        from fontTools import subset
-        opt = subset.Options()
-        font = subset.load_font(font_path_str, opt)
-        s = subset.Subsetter(options=opt)
+        font = subset.load_font(font_path_str, _SUBSET_OPTS)
+        s = subset.Subsetter(options=_SUBSET_OPTS)
         s.populate(text=sorted_chars)
         s.subset(font)
         buf = io.BytesIO()
@@ -141,17 +187,18 @@ def _format_and_split_en_name(name_raw: str, max_width: float = 195.0, font=None
         return [parts[0], parts[1]]
 
 
-def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
+def generate_pdf_bytes(data: dict) -> bytes:
     """
-    Generate pixel-perfect Seha Sick Leave Report matching Canva reference 100%.
+    Generate pixel-perfect Seha Sick Leave Report directly into an in-memory buffer.
+    Asynchronous, ultra-fast, and stream-ready.
     """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if not TEMPLATE_PATH.exists():
+    if TEMPLATE_BYTES:
+        doc = fitz.open(stream=TEMPLATE_BYTES, filetype="pdf")
+    elif TEMPLATE_PATH.exists():
+        doc = fitz.open(str(TEMPLATE_PATH))
+    else:
         raise FileNotFoundError(f"Template not found at: {TEMPLATE_PATH}")
 
-    doc = fitz.open(str(TEMPLATE_PATH))
     page = doc[0]
 
     # Collect all text to dynamically subset Arabic fonts (maintains ~301 KB and 100% crystal clear Arabic)
@@ -166,10 +213,11 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     page.insert_font(fontname="NSA_R", fontbuffer=reg_bytes)
     page.insert_font(fontname="NSA_B", fontbuffer=bold_bytes)
 
-    f_roman = fitz.Font("times-roman")
-    f_bold  = fitz.Font("times-bold")
-    f_nsa_r = fitz.Font(fontbuffer=reg_bytes)
-    f_nsa_b = fitz.Font(fontbuffer=bold_bytes)
+    # Use pre-cached font instances for ultra-fast text width metrics
+    f_roman = _F_ROMAN or fitz.Font("times-roman")
+    f_bold  = _F_BOLD or fitz.Font("times-bold")
+    f_nsa_r = _F_NSA_R or fitz.Font(fontfile=str(FONT_REG_PATH))
+    f_nsa_b = _F_NSA_B or fitz.Font(fontfile=str(FONT_BOLD_PATH))
 
     # ── Unpack & Normalize Data ────────────────────────────────────────────────
     leave_id = str(data.get("leave_id") or data.get("service_code") or "").strip()
@@ -347,20 +395,13 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
 
     # 1. Hospital Logo & Names
     # Logo selection: custom upload > MOH logo for gov/GSL
-    logo_file = None
     custom_logo = data.get("hospital_logo_path")
     is_gov = (hosp_type == "government" or report_type == "GSL" or leave_id.startswith("GSL"))
 
     if custom_logo and Path(str(custom_logo)).exists():
-        logo_file = str(custom_logo)
-    elif is_gov and MOH_LOGO_PATH.exists():
-        logo_file = str(MOH_LOGO_PATH)
-
-    # Logo positioned lower, ending at logo_bottom = 844.0, sticking right to the names below
-    if logo_file:
         try:
             from PIL import Image as PIL_Image
-            with PIL_Image.open(logo_file) as limg:
+            with PIL_Image.open(str(custom_logo)) as limg:
                 lw, lh = limg.size
                 limg_conv = limg.convert("RGBA")
             logo_w = 110.0
@@ -377,7 +418,14 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
                 stream=logo_buf.read(),
             )
         except Exception:
-            page.insert_image(fitz.Rect(576.88, 740.0, 689.38, 844.0), filename=logo_file)
+            page.insert_image(fitz.Rect(576.88, 740.0, 689.38, 844.0), filename=str(custom_logo))
+    elif is_gov and MOH_PNG_BYTES:
+        page.insert_image(
+            fitz.Rect(633.13 - 55.0, 844.0 - MOH_LOGO_H, 633.13 + 55.0, 844.0),
+            stream=MOH_PNG_BYTES,
+        )
+    elif is_gov and MOH_LOGO_PATH.exists():
+        page.insert_image(fitz.Rect(576.88, 740.0, 689.38, 844.0), filename=str(MOH_LOGO_PATH))
 
     # Hospital names directly underneath
     if hosp_ar:
@@ -431,21 +479,23 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
     page.insert_text(fitz.Point(38.25, 990.29), iss_long, fontname="times-bold", fontsize=12.75, color=C_BLACK)
 
     # 5. National Health Information Center (NHIC) Logo (المركز الوطني للمعلومات الصحية) in bottom right corner
-    nhic_logo_path = _ASSETS_DIR / "nhic_logo_clean.png"
-    if nhic_logo_path.exists():
-        try:
-            from PIL import Image as PIL_Image
-            with PIL_Image.open(str(nhic_logo_path)) as nimg:
-                nimg_conv = nimg.convert("RGBA")
-                nimg_conv.thumbnail((250, 115), PIL_Image.LANCZOS)
-                nhic_buf = io.BytesIO()
-                nimg_conv.save(nhic_buf, format="PNG", optimize=True)
-                nhic_buf.seek(0)
-            page.insert_image(fitz.Rect(667.0, 948.0, 820.0, 1020.66), stream=nhic_buf.read())
-        except Exception:
-            page.insert_image(fitz.Rect(667.0, 948.0, 820.0, 1020.66), filename=str(nhic_logo_path))
+    if NHIC_PNG_BYTES:
+        page.insert_image(fitz.Rect(667.0, 948.0, 820.0, 1020.66), stream=NHIC_PNG_BYTES)
+    elif NHIC_LOGO_PATH.exists():
+        page.insert_image(fitz.Rect(667.0, 948.0, 820.0, 1020.66), filename=str(NHIC_LOGO_PATH))
 
-    # Save to destination
-    doc.save(str(output_path), deflate=True, garbage=4, clean=True, deflate_images=True, deflate_fonts=True)
+    # Fast in-memory serialization
+    pdf_bytes = doc.tobytes(deflate=True, garbage=4, clean=True, deflate_images=True, deflate_fonts=True)
     doc.close()
+    return pdf_bytes
+
+
+def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
+    """
+    Generate pixel-perfect Seha Sick Leave Report and save directly to file path.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pdf_bytes = generate_pdf_bytes(data)
+    output_path.write_bytes(pdf_bytes)
     return output_path

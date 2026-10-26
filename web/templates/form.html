@@ -1054,7 +1054,7 @@ async function submitForm() {
 
     const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const res = await fetch(url, {
       method: 'POST',
@@ -1070,10 +1070,14 @@ async function submitForm() {
     try {
       json = await res.json();
     } catch (parseErr) {
+      document.getElementById('loading').classList.remove('show');
       showErr('e3', `❌ خطأ من الخادم (${res.status})`);
       alert(`❌ خطأ من الخادم (${res.status})`);
       return;
     }
+
+    // Hide loader immediately before presenting results
+    document.getElementById('loading').classList.remove('show');
 
     if (json && json.success) {
       submitSucceeded = true;
@@ -1095,12 +1099,9 @@ async function submitForm() {
         succModal.style.display = 'flex';
       }
 
-      // Automatically trigger download/open
+      // Automatically trigger download/open immediately
       if (sCode) {
-        const fullDlUrl = window.location.origin + `/api/download/${sCode}`;
-        if (tg && typeof tg.openLink === 'function') {
-          try { tg.openLink(fullDlUrl); } catch(e) {}
-        }
+        downloadPdfFromModal();
       }
     } else {
       const errMsg = '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً');
@@ -1108,8 +1109,14 @@ async function submitForm() {
       alert(errMsg);
     }
   } catch (ex) {
+    document.getElementById('loading').classList.remove('show');
     if (submitSucceeded) return;
-    if (ex && (ex.name === 'AbortError' || String(ex).includes('aborted'))) return;
+    if (ex && (ex.name === 'AbortError' || String(ex).includes('aborted'))) {
+      const timeErr = '⏳ استغرق إنشاء التقرير وقتاً طويلاً، اضغط زر الإرسال مرة أخرى لإتمامه';
+      showErr('e3', timeErr);
+      alert(timeErr);
+      return;
+    }
 
     const netErr = '❌ تعذر الاتصال بالخادم، حاول ثانية';
     showErr('e3', netErr);
@@ -1122,7 +1129,7 @@ async function submitForm() {
 
 function downloadPdfFromModal(e) {
   if (e) e.preventDefault();
-  const sCode = document.getElementById('res-service-code').textContent.trim();
+  const sCode = document.getElementById('res-service-code')?.textContent?.trim() || document.getElementById('res-service-code-badge')?.textContent?.trim();
   if (!sCode) return;
   const downloadUrl = window.location.origin + `/api/download/${sCode}`;
 
@@ -1134,7 +1141,7 @@ function downloadPdfFromModal(e) {
     } catch (err) {}
   }
 
-  // 2. If Telegram WebApp supports openLink, open in system browser (Safari/Chrome on mobile)
+  // 2. If Telegram WebApp supports openLink, open in native system browser (Safari/Chrome)
   if (tg && typeof tg.openLink === 'function') {
     try {
       tg.openLink(downloadUrl);
@@ -1142,14 +1149,18 @@ function downloadPdfFromModal(e) {
     } catch (err) {}
   }
 
-  // 3. Standard browser fallback
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = `SickLeave_${sCode}.pdf`;
-  a.target = '_blank';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // 3. Fallback direct browser download
+  try {
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `SickLeave_${sCode}.pdf`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch(err) {
+    window.open(downloadUrl, '_blank');
+  }
 }
 
 function sendToTelegramAndClose() {
@@ -1179,7 +1190,7 @@ function sendToTelegramAndClose() {
 
     <!-- Navigation Buttons -->
     <div style="display:flex;flex-direction:column;gap:11px;">
-      <a id="btn-download-pdf" href="#" target="_blank" class="btn" style="background:#10b981;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);font-family:inherit;width:100%;">
+      <a id="btn-download-pdf" href="#" target="_blank" onclick="downloadPdfFromModal(event)" class="btn" style="background:#10b981;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);font-family:inherit;width:100%;">
         ⬇️ استخراج وتحميل التقرير (PDF)
       </a>
       <button type="button" class="btn" onclick="closeToBot()" style="background:#0284c7;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(2,132,199,0.35);font-family:inherit;width:100%;">

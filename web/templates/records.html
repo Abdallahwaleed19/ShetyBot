@@ -479,7 +479,7 @@ async function trashPersonData(code) {
     const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
       method: 'POST',
       body: fd,
-      headers: { 'x-auth-token': token, 'x-username': username, 'x-telegram-user-id': uid }
+      headers: { 'x-auth-token': token }
     });
     const json = await res.json();
     if (json.success) {
@@ -509,7 +509,7 @@ async function restorePersonData(code) {
     const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
       method: 'POST',
       body: fd,
-      headers: { 'x-auth-token': token, 'x-username': username, 'x-telegram-user-id': uid }
+      headers: { 'x-auth-token': token }
     });
     const json = await res.json();
     if (json.success) {
@@ -536,7 +536,7 @@ async function permanentDeletePersonData(code) {
     const res = await fetch(`/api/records/permanent-delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
       method: 'POST',
       body: fd,
-      headers: { 'x-auth-token': token, 'x-username': username }
+      headers: { 'x-auth-token': token }
     });
     const json = await res.json();
     if (json.success) {
@@ -669,7 +669,7 @@ async function loadAllData() {
   if (qKey) {
     authParams += `&key=${encodeURIComponent(qKey)}`;
   }
-  const headers = { 'x-auth-token': token, 'x-username': uname };
+  const headers = { 'x-auth-token': token };
 
   // 1. Fetch active safely
   try {
