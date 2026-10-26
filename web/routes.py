@@ -3,6 +3,7 @@ web/routes.py — API + HTML routes
 """
 import os
 import sys
+import io
 import asyncio
 import logging
 import httpx
