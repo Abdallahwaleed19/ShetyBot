@@ -459,8 +459,8 @@
   </div>
 
   <div class="field">
-    <label>اسم المستشفى — عربي</label>
-    <input type="text" id="hospital_name_ar" placeholder="مستشفى..." required>
+    <label>اسم المستشفى — عربي (اختياري)</label>
+    <input type="text" id="hospital_name_ar" placeholder="مستشفى...">
   </div>
 
   <div class="field ltr-field">
@@ -957,64 +957,142 @@ const LABELS = ['','الصفحة 1 من 3 — تفاصيل الإجازة',
 
 function showErr(id, msg) {
   const el = document.getElementById(id);
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 5000);
+  if (el) {
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => { if (el) el.classList.remove('show'); }, 6000);
+  }
+  if (window.Telegram?.WebApp?.showAlert) {
+    try { window.Telegram.WebApp.showAlert(msg); } catch(e) {}
+  }
+}
+
+function clearErr(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = '';
+    el.classList.remove('show');
+  }
 }
 
 function validate(n) {
   if (n === 1) {
-    if (!document.getElementById('admission_date').value) return 'أدخل تاريخ الدخول';
-    if (!document.getElementById('discharge_date').value)  return 'أدخل تاريخ الخروج';
-    if (!document.getElementById('leave_duration').value)  return 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول';
-    if (!document.getElementById('issue_date').value)      return 'أدخل تاريخ الإصدار';
+    const adm = document.getElementById('admission_date')?.value;
+    const dis = document.getElementById('discharge_date')?.value;
+    if (!adm) return { page: 1, field: 'admission_date', msg: 'أدخل تاريخ الدخول' };
+    if (!dis) return { page: 1, field: 'discharge_date', msg: 'أدخل تاريخ الخروج' };
+    // Ensure duration calculation is triggered
+    onDateChange();
+    const durVal = document.getElementById('leave_duration')?.value;
+    if (!durVal) return { page: 1, field: 'discharge_date', msg: 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول' };
+    const issEl = document.getElementById('issue_date');
+    if (issEl && !issEl.value) {
+      const now = new Date();
+      const pad = (x) => String(x).padStart(2, '0');
+      issEl.value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+      markDateFilled('issue_date');
+    }
   }
   if (n === 2) {
-    if (!document.getElementById('service_code').value.trim()) return 'أدخل رمز الخدمة';
-    if (!document.getElementById('national_id').value.trim())     return 'أدخل رقم الهوية';
-    if (!document.getElementById('patient_name_ar').value.trim()) return 'أدخل اسم المريض بالعربية';
+    let scEl = document.getElementById('service_code');
+    if (!scEl || !scEl.value.trim()) {
+      regenerateServiceCode(true);
+      scEl = document.getElementById('service_code');
+    }
+    const nid = document.getElementById('national_id')?.value?.trim();
+    if (!nid) return { page: 2, field: 'national_id', msg: 'أدخل رقم الهوية' };
+    const pName = document.getElementById('patient_name_ar')?.value?.trim();
+    if (!pName) return { page: 2, field: 'patient_name_ar', msg: 'أدخل اسم المريض بالعربية' };
   }
   if (n === 3) {
-    if (!document.getElementById('practitioner_name_ar').value.trim()) return 'أدخل اسم الممارس';
-    if (!document.getElementById('hospital_name_ar').value.trim())     return 'أدخل اسم المستشفى';
+    const prEl = document.getElementById('practitioner_name_ar');
+    if (prEl && !prEl.value.trim()) {
+      prEl.value = 'محمد عبدالله الشراري';
+    }
+    // Hospital name is optional and defaults gracefully on server
   }
   return null;
 }
 
 function go(from, to) {
-  if (to > from) { const err = validate(from); if (err) { showErr(`e${from}`, '⚠️ ' + err); return; } }
+  if (to > from) {
+    const err = validate(from);
+    if (err) {
+      const msg = (typeof err === 'object') ? err.msg : err;
+      showErr(`e${from}`, '⚠️ ' + msg);
+      return;
+    }
+  }
   document.getElementById(`p${from}`).classList.remove('active');
   document.getElementById(`p${to}`).classList.add('active');
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById(`d${i}`);
-    el.className = 'step-dot' + (i < to ? ' done' : i === to ? ' active' : '');
+    if (el) el.className = 'step-dot' + (i < to ? ' done' : i === to ? ' active' : '');
   }
-  document.getElementById('progress-lbl').textContent = LABELS[to];
+  const lbl = document.getElementById('progress-lbl');
+  if (lbl && LABELS[to]) lbl.textContent = LABELS[to];
   window.scrollTo(0, 0);
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────────
 async function submitForm() {
-  const err = validate(1) || validate(2) || validate(3);
-  if (err) {
-    showErr('e3', '⚠️ ' + err);
-    alert('⚠️ ' + err);
-    return;
+  // Validate all 3 pages
+  for (let p = 1; p <= 3; p++) {
+    const err = validate(p);
+    if (err) {
+      const msg = (typeof err === 'object') ? err.msg : err;
+      const targetPage = (typeof err === 'object') ? err.page : p;
+      const fieldId = (typeof err === 'object') ? err.field : null;
+
+      // Navigate to the page with the error so user can correct it
+      if (targetPage !== 3) {
+        document.getElementById('p3').classList.remove('active');
+        document.getElementById(`p${targetPage}`).classList.add('active');
+        for (let i = 1; i <= 3; i++) {
+          const el = document.getElementById(`d${i}`);
+          if (el) el.className = 'step-dot' + (i < targetPage ? ' done' : i === targetPage ? ' active' : '');
+        }
+        const lbl = document.getElementById('progress-lbl');
+        if (lbl && LABELS[targetPage]) lbl.textContent = LABELS[targetPage];
+      }
+
+      showErr(`e${targetPage}`, '⚠️ ' + msg);
+      if (fieldId) {
+        const fieldEl = document.getElementById(fieldId);
+        if (fieldEl) {
+          fieldEl.focus();
+          fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      return;
+    }
   }
 
-  // Check subscription before sending
-  const token = localStorage.getItem('sehty_token') || '';
-  const username = localStorage.getItem('sehty_username') || '';
-
-  document.getElementById('loading').classList.add('show');
-  let submitSucceeded = false;
+  // Clear previous error messages
+  clearErr('e1');
+  clearErr('e2');
   clearErr('e3');
 
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.classList.add('show');
+  let submitSucceeded = false;
+
   try {
+    const token = localStorage.getItem('sehty_token') || '';
+    const username = localStorage.getItem('sehty_username') || '';
+
     const fd = new FormData();
     const val = (id) => (document.getElementById(id)?.value || '').trim();
 
+    // Ensure service code exists
+    let sCodeVal = val('service_code');
+    if (!sCodeVal) {
+      regenerateServiceCode(true);
+      sCodeVal = val('service_code');
+    }
+
     // Page 1 fields
-    fd.append('service_code',         val('service_code'));
+    fd.append('service_code',         sCodeVal);
     fd.append('report_type',          val('report_type') || 'GSL');
     fd.append('admission_date',       val('admission_date'));
     fd.append('discharge_date',       val('discharge_date'));
@@ -1070,19 +1148,18 @@ async function submitForm() {
     try {
       json = await res.json();
     } catch (parseErr) {
-      document.getElementById('loading').classList.remove('show');
+      if (loadingEl) loadingEl.classList.remove('show');
       showErr('e3', `❌ خطأ من الخادم (${res.status})`);
-      alert(`❌ خطأ من الخادم (${res.status})`);
       return;
     }
 
     // Hide loader immediately before presenting results
-    document.getElementById('loading').classList.remove('show');
+    if (loadingEl) loadingEl.classList.remove('show');
 
     if (json && json.success) {
       submitSucceeded = true;
       clearErr('e3');
-      const sCode = json.service_code || '';
+      const sCode = json.service_code || sCodeVal;
 
       const badgeEl = document.getElementById('res-service-code-badge');
       if (badgeEl) badgeEl.textContent = sCode;
@@ -1106,24 +1183,21 @@ async function submitForm() {
     } else {
       const errMsg = '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً');
       showErr('e3', errMsg);
-      alert(errMsg);
     }
   } catch (ex) {
-    document.getElementById('loading').classList.remove('show');
+    if (loadingEl) loadingEl.classList.remove('show');
     if (submitSucceeded) return;
     if (ex && (ex.name === 'AbortError' || String(ex).includes('aborted'))) {
       const timeErr = '⏳ استغرق إنشاء التقرير وقتاً طويلاً، اضغط زر الإرسال مرة أخرى لإتمامه';
       showErr('e3', timeErr);
-      alert(timeErr);
       return;
     }
 
     const netErr = '❌ تعذر الاتصال بالخادم، حاول ثانية';
     showErr('e3', netErr);
-    alert(netErr);
     console.error(ex);
   } finally {
-    document.getElementById('loading').classList.remove('show');
+    if (loadingEl) loadingEl.classList.remove('show');
   }
 }
 
