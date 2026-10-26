@@ -85,8 +85,8 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     # 1. Admin Access
     if is_admin:
         admin_url = f"{base_url}/admin?key=admin123"
-        admin_form_url = f"{webapp_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}&v=3"
-        admin_records_url = f"{records_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}&v=3"
+        admin_form_url = f"{webapp_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}&v=5"
+        admin_records_url = f"{records_url}?telegram_user_id={user_tg_id}&role=admin&u={ADMIN_USERNAME}&v=5"
 
         keyboard = ReplyKeyboardMarkup(
             [
@@ -115,7 +115,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     # 2. Unregistered User (First-time /start)
     if not user_rec:
-        reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}&v=3"
+        reg_url = f"{webapp_url}?telegram_user_id={user_tg_id}&v=5"
         inline_reg = InlineKeyboardMarkup([
             [InlineKeyboardButton("📝 تقديم طلب إنشاء تقرير جديد", web_app=WebAppInfo(url=reg_url))],
             [InlineKeyboardButton("💬 تواصل مع المشرف (@RE_i1i)", url="https://t.me/RE_i1i")]
@@ -212,8 +212,8 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     keyboard_rows = [
         [
-            KeyboardButton("📝 تقديم تقرير جديد", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}&v=3")),
-            KeyboardButton("📋 البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}&v=3")),
+            KeyboardButton("📝 تقديم تقرير جديد", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}&v=5")),
+            KeyboardButton("📋 البيانات السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}&v=5")),
         ]
     ]
 

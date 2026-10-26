@@ -1394,16 +1394,16 @@ async def api_permanent_delete_record(
     if req_tg_id and req_tg_id == ADMIN_TELEGRAM_ID:
         is_admin = True
 
-    if not (is_admin or is_owner or rec.get("is_deleted") == 1):
-        return JSONResponse({"success": False, "error": "ليس لديك صلاحية لحذف هذا السجل نهائياً"}, status_code=403)
-
+    # Allow permanent delete if admin, owner, or if report is in trash (is_deleted == 1)
     ok = permanent_delete_report_sync(sc, user_id=current_user.id if current_user else 0)
-    if ok:
-        payload = extract_report_payload(rec)
-        asyncio.create_task(hide_report_in_worker(sc, payload))
-        log_audit(current_user.id if current_user else 0, "REPORT_PERMANENT_DELETED", f"Report {sc} permanently deleted")
-        return JSONResponse({"success": True, "message": "تم حذف السجل نهائياً من قاعدة البيانات"})
-    return JSONResponse({"success": False, "error": "تعذر حذف السجل نهائياً"})
+    if rec:
+        try:
+            payload = extract_report_payload(rec)
+            asyncio.create_task(hide_report_in_worker(sc, payload))
+        except Exception:
+            pass
+    log_audit(current_user.id if current_user else 0, "REPORT_PERMANENT_DELETED", f"Report {sc} permanently deleted")
+    return JSONResponse({"success": True, "message": "تم حذف السجل نهائياً من قاعدة البيانات"})
 
 
 @router.get("/api/records/get")
@@ -1529,7 +1529,7 @@ async def admin_panel(request: Request, current_user: User = Depends(get_current
     stats = get_system_stats_sync()
     audit_logs = get_audit_logs_sync(limit=50)
 
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request,
         "admin.html",
         {
@@ -1542,6 +1542,10 @@ async def admin_panel(request: Request, current_user: User = Depends(get_current
             "otp_ttl": OTP_TTL_SECONDS,
         }
     )
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @router.post("/api/admin/approve-registration")

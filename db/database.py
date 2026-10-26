@@ -645,6 +645,8 @@ def check_subscription_sync(user_id: int = 0) -> Dict[str, Any]:
         return {"active": False, "days_remaining": 0, "message": "انتهى الاشتراك (30 يوماً)", "status": "EXPIRED"}
 
     days_remaining = max(1, int(math.ceil(total_sec / 86400)))
+    if user.role != "admin" and days_remaining > 30:
+        days_remaining = 30
     message = f"متبقي على انتهاء الاشتراك {days_remaining} يوم"
     return {"active": True, "days_remaining": days_remaining, "message": message, "status": "ACTIVE"}
 
@@ -667,18 +669,7 @@ def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
     user = UserRecord(row)
     now = datetime.now(timezone.utc)
 
-    # Idempotency guard: prevent duplicate extensions from rapid double-clicks (within 5 seconds)
-    if user.updated_at:
-        try:
-            up_dt = datetime.fromisoformat(user.updated_at)
-            if up_dt.tzinfo is None:
-                up_dt = up_dt.replace(tzinfo=timezone.utc)
-            if abs((now - up_dt).total_seconds()) < 5.0 and user.subscription_end and user.subscription_end > now:
-                logger.info(f"Ignoring duplicate renewal click for user {user_id} (idempotency guard)")
-                conn.close()
-                return user
-        except Exception:
-            pass
+    # Always reset strictly to 30 days from now (no accumulation)
 
     # Strict Reset to 30 days from this moment (No accumulation)
     new_start = now

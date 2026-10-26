@@ -393,11 +393,11 @@
 
       <!-- User Filters -->
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button type="button" class="btn btn-copy" onclick="filterUserRows('all')" id="btn-u-all" style="background:#3b9eff">الكل ({{ users|length }})</button>
-        <button type="button" class="btn btn-copy" onclick="filterUserRows('active')" id="btn-u-active">🟢 النشطين فقط (اشتراك ساري)</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('all')" id="btn-u-all" style="background:#3b9eff">📋 السجلات الحالية (<span id="lbl-cnt-all">{{ users|rejectattr('is_deleted')|list|length }}</span>)</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('active')" id="btn-u-active">🟢 النشطين فقط</button>
         <button type="button" class="btn btn-copy" onclick="filterUserRows('expired')" id="btn-u-expired">⚠️ منتهية اشتراكاتهم</button>
         <button type="button" class="btn btn-copy" onclick="filterUserRows('suspended')" id="btn-u-suspended">⏸️ معلقين</button>
-        <button type="button" class="btn btn-copy" onclick="filterUserRows('deleted')" id="btn-u-deleted">🗑️ المحذوفين</button>
+        <button type="button" class="btn btn-copy" onclick="filterUserRows('deleted')" id="btn-u-deleted">🗑️ سلة المحذوفات (<span id="lbl-cnt-del">{{ users|selectattr('is_deleted')|list|length }}</span>)</button>
       </div>
 
       <div class="table-wrap">
@@ -562,7 +562,7 @@
     }
 
     let currentUsersPage = 1;
-    const USERS_PER_PAGE = 15;
+    const USERS_PER_PAGE = 5;
     let activeUserFilter = 'all';
 
     function paginateUsers() {
@@ -585,10 +585,13 @@
       // Strictly hide all rows first so no overlapping occurs
       allRows.forEach(r => r.style.display = 'none');
 
-      // Display only active page slice
+      // Display only active page slice (mobile cards = block, desktop = table-row)
       const start = (currentUsersPage - 1) * USERS_PER_PAGE;
       const pageSlice = visibleRows.slice(start, start + USERS_PER_PAGE);
-      pageSlice.forEach(r => r.style.display = '');
+      const isMobile = window.innerWidth <= 700;
+      pageSlice.forEach(r => {
+        r.style.display = isMobile ? 'block' : '';
+      });
 
       // Render pagination bar
       let pagWrap = document.getElementById('usersPagination');
@@ -935,21 +938,7 @@
       } catch (e) { alert('فشل الاتصال بالخادم'); }
     }
 
-    async function deleteUser(userId, name) {
-      if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم (${name})؟ لن يتمكن من الوصول إلى البوت.`)) return;
-      const fd = new FormData();
-      fd.append('user_id', userId);
-      try {
-        const res = await fetch(`/api/admin/delete-user?key=${adminKey}`, { method: 'POST', body: fd });
-        const json = await res.json();
-        if (json.success) {
-          alert(`✅ تم حذف المستخدم (${name}) بنجاح`);
-          location.reload();
-        } else {
-          alert('خطأ: ' + (json.error || 'تعذر حذف المستخدم'));
-        }
-      } catch (e) { alert('فشل الاتصال بالخادم'); }
-    }
+
 
     async function showActiveNowUsers() {
       document.getElementById('activeNowModal').classList.add('show');
