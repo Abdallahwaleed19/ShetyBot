@@ -42,6 +42,7 @@ from db.database import (
     get_user_reports,
     verify_report_ownership,
     record_report_ownership,
+    record_report_ownership_sync,
     get_user_by_identifier_sync,
     create_new_user_sync,
     register_user_request_sync,
@@ -281,7 +282,11 @@ async def get_current_user(request: Request) -> User:
 # ── WebApp Form ────────────────────────────────────────────────────────────────
 @router.get("/form", response_class=HTMLResponse, summary="Telegram WebApp 3-page form")
 async def form_page(request: Request):
-    return templates.TemplateResponse(request, "form.html", {})
+    resp = templates.TemplateResponse(request, "form.html", {})
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 # ── Submit Report API ──────────────────────────────────────────────────────────
@@ -1114,7 +1119,11 @@ async def api_check_session(token: str = Query(...)):
 # ── Records & Previous Persons Management ─────────────────────────────────────
 @router.get("/records", response_class=HTMLResponse)
 async def records_page(request: Request):
-    return templates.TemplateResponse(request, "records.html", {})
+    resp = templates.TemplateResponse(request, "records.html", {})
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @router.get("/api/all-records")

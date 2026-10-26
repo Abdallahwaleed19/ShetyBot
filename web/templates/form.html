@@ -1001,50 +1001,52 @@ async function submitForm() {
   const username = localStorage.getItem('sehty_username') || '';
 
   document.getElementById('loading').classList.add('show');
-
-  const fd = new FormData();
-
-  // Page 1 fields
-  fd.append('service_code',         document.getElementById('service_code').value);
-  fd.append('report_type',          document.getElementById('report_type').value);
-  fd.append('admission_date',       document.getElementById('admission_date').value);
-  fd.append('discharge_date',       document.getElementById('discharge_date').value);
-  fd.append('leave_duration_days',  document.getElementById('leave_duration').value);
-  fd.append('issue_date',           document.getElementById('issue_date').value);
-  fd.append('report_time',          document.getElementById('issue_time').value);
-  fd.append('include_barcode',      document.getElementById('include_barcode').checked ? '1' : '0');
-
-  // Page 2 fields
-  fd.append('national_id',          document.getElementById('national_id').value);
-  fd.append('patient_name_ar',      document.getElementById('patient_name_ar').value);
-  fd.append('patient_name_en',      document.getElementById('patient_name_en').value);
-  fd.append('nationality',          document.getElementById('nationality').value);
-  fd.append('nationality_en',       document.getElementById('nationality_en').value);
-  fd.append('employer',             document.getElementById('employer').value);
-  fd.append('employer_en',          '');
-
-  // Page 3 fields
-  fd.append('practitioner_name_ar', document.getElementById('practitioner_name_ar').value);
-  fd.append('practitioner_name_en', document.getElementById('practitioner_name_en').value);
-  fd.append('job_title_ar',         document.getElementById('job_title_ar').value);
-  fd.append('job_title_en',         document.getElementById('job_title_en').value);
-  fd.append('hospital_name_ar',     document.getElementById('hospital_name_ar').value);
-  fd.append('hospital_name_en',     document.getElementById('hospital_name_en').value);
-  fd.append('hospital_type',        document.getElementById('hospital_type').value);
-
-  // User identifiers
-  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || new URLSearchParams(window.location.search).get('telegram_user_id') || '0';
-  fd.append('telegram_user_id', uid);
-  fd.append('username', username);
-
-  // Logo file
-  const logo = document.getElementById('logo_file').files[0];
-  if (logo) fd.append('logo', logo);
-
   let submitSucceeded = false;
   clearErr('e3');
 
   try {
+    const fd = new FormData();
+    const val = (id) => (document.getElementById(id)?.value || '').trim();
+
+    // Page 1 fields
+    fd.append('service_code',         val('service_code'));
+    fd.append('report_type',          val('report_type') || 'GSL');
+    fd.append('admission_date',       val('admission_date'));
+    fd.append('discharge_date',       val('discharge_date'));
+    fd.append('leave_duration_days',  val('leave_duration') || '1');
+    fd.append('issue_date',           val('issue_date'));
+    fd.append('report_time',          val('issue_time'));
+    fd.append('include_barcode',      document.getElementById('include_barcode')?.checked ? '1' : '0');
+
+    // Page 2 fields
+    fd.append('national_id',          val('national_id'));
+    fd.append('patient_name_ar',      val('patient_name_ar'));
+    fd.append('patient_name_en',      val('patient_name_en'));
+    fd.append('nationality',          val('nationality') || 'السعودية');
+    fd.append('nationality_en',       val('nationality_en') || 'Saudi');
+    fd.append('employer',             val('employer'));
+    fd.append('employer_en',          '');
+
+    // Page 3 fields
+    fd.append('practitioner_name_ar', val('practitioner_name_ar') || 'محمد عبدالله الشراري');
+    fd.append('practitioner_name_en', val('practitioner_name_en') || 'MOHAMMED ABDULLAH AL-SHARARI');
+    fd.append('job_title_ar',         val('job_title_ar') || 'طبيب عام');
+    fd.append('job_title_en',         val('job_title_en') || 'General');
+    fd.append('hospital_name_ar',     val('hospital_name_ar'));
+    fd.append('hospital_name_en',     val('hospital_name_en'));
+    fd.append('hospital_type',        val('hospital_type') || 'government');
+
+    // User identifiers
+    const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || new URLSearchParams(window.location.search).get('telegram_user_id') || localStorage.getItem('sehty_telegram_user_id') || '0';
+    fd.append('telegram_user_id', uid);
+    fd.append('username', username);
+
+    // Logo file
+    const logoEl = document.getElementById('logo_file');
+    if (logoEl && logoEl.files && logoEl.files[0]) {
+      fd.append('logo', logoEl.files[0]);
+    }
+
     const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`;
     const res = await fetch(url, {
       method: 'POST',
@@ -1060,29 +1062,37 @@ async function submitForm() {
     try {
       json = await res.json();
     } catch (parseErr) {
-      document.getElementById('loading').classList.remove('show');
       showErr('e3', `❌ خطأ من الخادم (${res.status})`);
+      alert(`❌ خطأ من الخادم (${res.status})`);
       return;
     }
-
-    document.getElementById('loading').classList.remove('show');
 
     if (json && json.success) {
       submitSucceeded = true;
       clearErr('e3');
       const sCode = json.service_code || '';
 
-      // Set up Success Modal
+      const badgeEl = document.getElementById('res-service-code-badge');
+      if (badgeEl) badgeEl.textContent = sCode;
       const resCodeEl = document.getElementById('res-service-code');
       if (resCodeEl) resCodeEl.textContent = sCode;
+      
       const dlBtn = document.getElementById('btn-download-pdf');
-      if (dlBtn && sCode) dlBtn.href = `/api/download/${sCode}`;
-      const portalBtn = document.getElementById('btn-verify-portal');
-      if (portalBtn && sCode) portalBtn.href = `https://seha-8xj.pages.dev/inquiries?q=${encodeURIComponent(sCode)}`;
+      if (dlBtn && sCode) {
+        dlBtn.href = `/api/download/${sCode}`;
+      }
       
       const succModal = document.getElementById('success-modal');
       if (succModal) {
         succModal.style.display = 'flex';
+      }
+
+      // Automatically trigger download/open
+      if (sCode) {
+        const fullDlUrl = window.location.origin + `/api/download/${sCode}`;
+        if (tg && typeof tg.openLink === 'function') {
+          try { tg.openLink(fullDlUrl); } catch(e) {}
+        }
       }
     } else {
       const errMsg = '❌ ' + (json?.error || 'حدث خطأ، حاول مجدداً');
@@ -1090,8 +1100,6 @@ async function submitForm() {
       alert(errMsg);
     }
   } catch (ex) {
-    document.getElementById('loading').classList.remove('show');
-    // If the submission actually succeeded, completely suppress any navigation/network cancellation error
     if (submitSucceeded) return;
     if (ex && (ex.name === 'AbortError' || String(ex).includes('aborted'))) return;
 
@@ -1099,6 +1107,8 @@ async function submitForm() {
     showErr('e3', netErr);
     alert(netErr);
     console.error(ex);
+  } finally {
+    document.getElementById('loading').classList.remove('show');
   }
 }
 
@@ -1150,18 +1160,25 @@ function sendToTelegramAndClose() {
 
 <!-- ── Success Modal (Matches Image 2 Pixel-Perfect) ── -->
 <div id="success-modal" style="position:fixed;inset:0;background:rgba(7,23,57,0.96);backdrop-filter:blur(14px);z-index:99999;display:none;align-items:center;justify-content:center;padding:18px;">
-  <div style="background:#0e3683;border:1.5px solid rgba(56,189,248,0.4);border-radius:24px;padding:34px 22px;max-width:380px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
-    <div style="font-size:52px;margin-bottom:14px;line-height:1">✅</div>
-    <h2 style="font-size:22px;margin-bottom:26px;color:#fff;font-weight:800;letter-spacing:-0.3px">تم إصدار التقرير بنجاح !</h2>
+  <div style="background:#0e3683;border:1.5px solid rgba(56,189,248,0.4);border-radius:24px;padding:30px 20px;max-width:380px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.65);">
+    <div style="font-size:52px;margin-bottom:12px;line-height:1">✅</div>
+    <h2 style="font-size:22px;margin-bottom:14px;color:#fff;font-weight:800;letter-spacing:-0.3px">تم إصدار التقرير بنجاح !</h2>
+    
+    <div style="background:rgba(255,255,255,0.08);border:1px dashed rgba(56,189,248,0.5);border-radius:12px;padding:9px 12px;margin-bottom:18px;font-size:13.5px;color:#93c5fd;">
+      رمز الخدمة: <strong id="res-service-code-badge" style="color:#fff;font-family:monospace;font-size:15.5px;"></strong>
+    </div>
     <span id="res-service-code" style="display:none"></span>
 
     <!-- Navigation Buttons -->
-    <div style="display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <a id="btn-download-pdf" href="#" target="_blank" class="btn" style="background:#10b981;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);font-family:inherit;width:100%;">
+        ⬇️ استخراج وتحميل التقرير (PDF)
+      </a>
       <button type="button" class="btn" onclick="closeToBot()" style="background:#0284c7;color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(2,132,199,0.35);font-family:inherit;width:100%;">
         🤖 العودة للبوت
       </button>
       <button type="button" class="btn" onclick="returnToReportPage()" style="background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.2);color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;width:100%;">
-        📄 العودة لصفحة التقرير
+        📄 تقديم تقرير جديد
       </button>
     </div>
   </div>
