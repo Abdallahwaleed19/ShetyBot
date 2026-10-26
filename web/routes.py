@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, BackgroundTasks, Form, File, UploadFile, HTTPException, Request, Query, Depends
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Request, Query, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -291,32 +291,9 @@ async def form_page(request: Request):
 
 
 # ── Submit Report API ──────────────────────────────────────────────────────────
-def _persist_report_locally(report_data: dict) -> None:
-    service_code = str(report_data.get("service_code") or "")
-    user_id = int(report_data.get("user_id") or 0)
-    telegram_user_id = str(report_data.get("telegram_user_id") or "0")
-
-    try:
-        record_report_ownership_sync(service_code, user_id, telegram_user_id)
-    except Exception as e:
-        logger.warning(f"Failed to record ownership for {service_code}: {e}")
-
-    try:
-        save_report_full_sync(report_data)
-    except Exception as e:
-        logger.warning(f"Failed to save report {service_code} locally: {e}")
-
-    log_audit(
-        user_id,
-        "REPORT_CREATED",
-        f"Created report {service_code} for {report_data.get('patient_name_ar', '')}",
-    )
-
-
 @router.post("/api/submit-report", summary="Receive form data, save via Worker, generate PDF")
 async def submit_report(
     request: Request,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     # Page 1
     service_code:         str = Form(...),
@@ -558,6 +535,12 @@ async def submit_report(
                 )
             )
 
+        # Track ownership in database for data isolation
+        try:
+            record_report_ownership_sync(service_code, current_user.id, current_user.telegram_user_id)
+        except Exception as e:
+            logger.warning(f"Failed to record ownership: {e}")
+
         # Save to Cloudflare Worker (D1) and local SQLite
         report_data = {
             "service_code":         service_code,
@@ -586,8 +569,11 @@ async def submit_report(
             "user_id":              current_user.id,
         }
 
-        # Avoid blocking the form response on SQLite's busy timeout.
-        background_tasks.add_task(_persist_report_locally, report_data)
+        # Save to local SQLite database for instant retrieval in Records page
+        try:
+            save_report_full_sync(report_data)
+        except Exception as e:
+            logger.warning(f"Failed to save locally: {e}")
 
         # Sync to Cloudflare Worker (D1) asynchronously in background so response never hangs
         async def _sync_worker():
@@ -600,6 +586,7 @@ async def submit_report(
 
         asyncio.create_task(_sync_worker())
 
+        log_audit(current_user.id, "REPORT_CREATED", f"Created report {service_code} for {patient_name_ar}")
         return JSONResponse({"success": True, "service_code": service_code})
 
     except Exception as e:
