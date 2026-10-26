@@ -1,4 +1,4 @@
-"""
+﻿"""
 web/app.py — FastAPI application entry point.
 Run:  uvicorn web.app:app --host 0.0.0.0 --port 8000 --reload
 """
@@ -37,6 +37,16 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Cloudflare Worker is reachable.")
     else:
         logger.warning("⚠️  Cloudflare Worker health-check failed — continuing anyway.")
+
+
+    # Startup: warm up PDF font cache in background thread (avoids first-request delay)
+    try:
+        import asyncio as _asyncio
+        from pdf.generator import _warmup_font_cache
+        await _asyncio.to_thread(_warmup_font_cache)
+        logger.info("✅ PDF font cache warmed up.")
+    except Exception as _e:
+        logger.warning(f"⚠️ PDF font warmup failed: {_e}")
     yield
     # Shutdown: close the shared HTTP client
     await close_client()
