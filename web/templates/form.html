@@ -34,8 +34,8 @@
     .progress-label{text-align:center;font-size:12.5px;color:var(--text-sub);font-weight:700}
 
     /* ── Page ────────────────────────────────────────── */
-    .page{display:none;padding:18px 16px 12px;animation:slidein .3s ease}
-    .page.active{display:block}
+    .page{display:none !important;padding:18px 16px 12px}
+    .page.active{display:block !important;animation:slidein .25s ease}
     @keyframes slidein{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
     .page-title{font-size:16px;font-weight:800;text-align:center;margin-bottom:18px;color:var(--text-main);letter-spacing:.3px}
 
@@ -1047,8 +1047,16 @@ function go(from, to) {
       return;
     }
   }
-  document.getElementById(`p${from}`).classList.remove('active');
-  document.getElementById(`p${to}`).classList.add('active');
+  // Strictly hide every page completely before activating target page
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
+  const targetPage = document.getElementById(`p${to}`);
+  if (targetPage) {
+    targetPage.classList.add('active');
+    targetPage.style.display = 'block';
+  }
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById(`d${i}`);
     if (el) el.className = 'step-dot' + (i < to ? ' done' : i === to ? ' active' : '');
@@ -1070,8 +1078,15 @@ async function submitForm() {
 
       // Navigate to the page with the error so user can correct it
       if (targetPage !== 3) {
-        document.getElementById('p3').classList.remove('active');
-        document.getElementById(`p${targetPage}`).classList.add('active');
+        document.querySelectorAll('.page').forEach(p => {
+          p.classList.remove('active');
+          p.style.display = 'none';
+        });
+        const errPage = document.getElementById(`p${targetPage}`);
+        if (errPage) {
+          errPage.classList.add('active');
+          errPage.style.display = 'block';
+        }
         for (let i = 1; i <= 3; i++) {
           const el = document.getElementById(`d${i}`);
           if (el) el.className = 'step-dot' + (i < targetPage ? ' done' : i === targetPage ? ' active' : '');

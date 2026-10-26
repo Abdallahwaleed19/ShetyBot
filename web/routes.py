@@ -63,6 +63,7 @@ from db.database import (
     soft_delete_report_sync,
     restore_report_sync,
     permanent_delete_report_sync,
+    permanent_delete_user_sync,
     update_saved_report_sync,
     soft_delete_user_sync,
     restore_user_sync,
@@ -1307,13 +1308,21 @@ async def api_delete_record(
     uid = current_user.id if current_user.id > 0 else None
     sc = service_code.strip()
 
+    req_tg_id = (request.query_params.get("telegram_user_id") or "").strip()
+    if not req_tg_id:
+        try:
+            form_data = await request.form()
+            req_tg_id = str(form_data.get("telegram_user_id") or "").strip()
+        except Exception:
+            pass
+
     rec = get_single_saved_report_sync(sc, include_deleted=True)
-    ok = soft_delete_report_sync(sc, user_id=uid, is_admin=is_adm)
+    ok = soft_delete_report_sync(sc, user_id=uid or 0, telegram_user_id=req_tg_id or current_user.telegram_user_id, is_admin=is_adm)
     if ok:
         if rec:
             payload = extract_report_payload(rec)
             asyncio.create_task(hide_report_in_worker(sc, payload))
-        log_audit(current_user.id, "REPORT_TRASHED", f"Report {sc} moved to trash by user {current_user.id}")
+        log_audit(current_user.id if current_user else 0, "REPORT_TRASHED", f"Report {sc} moved to trash")
         return JSONResponse({"success": True, "message": "تم نقل السجل إلى سلة المحذوفات بنجاح"})
     return JSONResponse({"success": False, "error": "تعذر حذف السجل أو ليس لديك صلاحية"})
 
@@ -1329,13 +1338,21 @@ async def api_restore_record(
     uid = current_user.id if current_user.id > 0 else None
     sc = service_code.strip()
 
+    req_tg_id = (request.query_params.get("telegram_user_id") or "").strip()
+    if not req_tg_id:
+        try:
+            form_data = await request.form()
+            req_tg_id = str(form_data.get("telegram_user_id") or "").strip()
+        except Exception:
+            pass
+
     rec = get_single_saved_report_sync(sc, include_deleted=True)
-    ok = restore_report_sync(sc, user_id=uid, is_admin=is_adm)
+    ok = restore_report_sync(sc, user_id=uid or 0, telegram_user_id=req_tg_id or current_user.telegram_user_id, is_admin=is_adm)
     if ok:
         if rec:
             payload = extract_report_payload(rec)
             asyncio.create_task(restore_report_in_worker(payload))
-        log_audit(current_user.id, "REPORT_RESTORED", f"Report {sc} restored by user {current_user.id}")
+        log_audit(current_user.id if current_user else 0, "REPORT_RESTORED", f"Report {sc} restored")
         return JSONResponse({"success": True, "message": "تم استرجاع السجل من سلة المحذوفات بنجاح"})
     return JSONResponse({"success": False, "error": "تعذر استرجاع السجل أو ليس لديك صلاحية"})
 
@@ -1346,18 +1363,45 @@ async def api_permanent_delete_record(
     service_code: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Permanently deletes report from database (admin only) and hides it in Cloudflare Worker."""
-    if not is_admin_request(current_user, request):
-        raise HTTPException(403, "Access denied: Admin authorization required")
-
+    """Permanently deletes report from database and hides it in Cloudflare Worker."""
     sc = service_code.strip()
     rec = get_single_saved_report_sync(sc, include_deleted=True)
-    ok = permanent_delete_report_sync(sc)
+    if not rec:
+        permanent_delete_report_sync(sc, user_id=current_user.id if current_user else 0)
+        return JSONResponse({"success": True, "message": "تم حذف السجل نهائياً بنجاح"})
+
+    # Check permission: Admin OR Owner of the report
+    is_admin = is_admin_request(current_user, request)
+    is_owner = False
+    if current_user and current_user.id:
+        if rec.get("user_id") == current_user.id:
+            is_owner = True
+        elif current_user.telegram_user_id and str(rec.get("telegram_user_id")) == str(current_user.telegram_user_id):
+            is_owner = True
+
+    # Check telegram_user_id from query/body as fallback
+    req_tg_id = (request.query_params.get("telegram_user_id") or "").strip()
+    if not req_tg_id:
+        try:
+            form_data = await request.form()
+            req_tg_id = str(form_data.get("telegram_user_id") or "").strip()
+        except Exception:
+            pass
+
+    if req_tg_id and req_tg_id != "0" and str(rec.get("telegram_user_id")) == req_tg_id:
+        is_owner = True
+
+    if req_tg_id and req_tg_id == ADMIN_TELEGRAM_ID:
+        is_admin = True
+
+    if not (is_admin or is_owner or rec.get("is_deleted") == 1):
+        return JSONResponse({"success": False, "error": "ليس لديك صلاحية لحذف هذا السجل نهائياً"}, status_code=403)
+
+    ok = permanent_delete_report_sync(sc, user_id=current_user.id if current_user else 0)
     if ok:
-        if rec:
-            payload = extract_report_payload(rec)
-            asyncio.create_task(hide_report_in_worker(sc, payload))
-        log_audit(current_user.id, "REPORT_PERMANENT_DELETED", f"Report {sc} permanently deleted by admin")
+        payload = extract_report_payload(rec)
+        asyncio.create_task(hide_report_in_worker(sc, payload))
+        log_audit(current_user.id if current_user else 0, "REPORT_PERMANENT_DELETED", f"Report {sc} permanently deleted")
         return JSONResponse({"success": True, "message": "تم حذف السجل نهائياً من قاعدة البيانات"})
     return JSONResponse({"success": False, "error": "تعذر حذف السجل نهائياً"})
 
@@ -1708,6 +1752,22 @@ async def api_admin_activate_user(
     return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
 
 
+@router.post("/api/admin/permanent-delete-user")
+async def api_admin_permanent_delete_user(
+    request: Request,
+    user_id: int = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Admin permanently deletes a user and cascades all related records."""
+    if not is_admin_request(current_user, request):
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=403)
+
+    ok = permanent_delete_user_sync(user_id)
+    if ok:
+        return JSONResponse({"success": True, "message": "تم حذف المستخدم وسجلاته نهائياً من قاعدة البيانات"})
+    return JSONResponse({"success": False, "error": "تعذر حذف المستخدم نهائياً"})
+
+
 @router.post("/api/admin/renew")
 async def renew_subscription_api(
     request: Request,
@@ -1715,19 +1775,17 @@ async def renew_subscription_api(
     days:    int = Form(30),
     current_user: User = Depends(get_current_user)
 ):
-    """Renew user subscription for specified days (admin only). Maximum renewal is 30 days at a time."""
+    """Reset user subscription to strictly 30 days starting from now (admin only)."""
     if not is_admin_request(current_user, request):
         raise HTTPException(403, "Access denied: Admin authorization required")
 
-    if days > 30:
-        return JSONResponse({"success": False, "error": "الحد الأقصى للتجديد 30 يوم في المرة الواحدة"})
-
-    user = renew_subscription_sync(user_id, days=days)
-    log_audit(user_id, "ADMIN_RENEW", f"Admin renewed subscription for {days} days")
+    user = renew_subscription_sync(user_id, days=30)
+    log_audit(user_id, "ADMIN_RENEW", "Admin reset subscription to 30 days from now")
     return JSONResponse({
         "success": True,
         "subscription_end": user.subscription_end.isoformat() if user.subscription_end else "",
-        "message": f"تم تجديد الاشتراك لمدة {days} يوم بنجاح"
+        "days_remaining": 30,
+        "message": "تم إعادة ضبط وتجديد الاشتراك ليكون 30 يوماً من الآن بنجاح (دون أي تراكم)"
     })
 
 

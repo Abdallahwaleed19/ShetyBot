@@ -680,16 +680,9 @@ def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
         except Exception:
             pass
 
-    current_end = user.subscription_end
-    if current_end and current_end.tzinfo is None:
-        current_end = current_end.replace(tzinfo=timezone.utc)
-
-    if current_end and current_end > now:
-        new_end = current_end + timedelta(days=days)
-        new_start = user.subscription_start or now
-    else:
-        new_start = now
-        new_end = now + timedelta(days=days)
+    # Strict Reset to 30 days from this moment (No accumulation)
+    new_start = now
+    new_end = now + timedelta(days=30)
 
     cur.execute(
         """UPDATE users 
@@ -704,7 +697,7 @@ def renew_subscription_sync(user_id: int = 0, days: int = 30) -> UserRecord:
     updated_row = cur.fetchone()
     conn.close()
 
-    log_audit(user_id, "RENEW_SUBSCRIPTION", f"Subscription renewed by {days} days until {new_end.isoformat()}")
+    log_audit(user_id, "RENEW_SUBSCRIPTION", f"Subscription reset to 30 days from now until {new_end.isoformat()}")
     return UserRecord(updated_row)
 
 
@@ -941,7 +934,7 @@ def update_saved_report_sync(service_code: str, data: dict, user_id: int = 0) ->
     return updated
 
 
-def soft_delete_report_sync(service_code: str, user_id: int = 0, is_admin: bool = False) -> bool:
+def soft_delete_report_sync(service_code: str, user_id: int = 0, telegram_user_id: Optional[str] = None, is_admin: bool = False) -> bool:
     """Moves report to trash (is_deleted = 1)."""
     conn = _get_conn()
     cur = conn.cursor()
@@ -950,11 +943,11 @@ def soft_delete_report_sync(service_code: str, user_id: int = 0, is_admin: bool 
 
     query = """UPDATE saved_reports 
                SET is_deleted = 1, deleted_at = ?, deleted_by = ?, updated_at = CURRENT_TIMESTAMP
-               WHERE service_code = ?"""
-    params = [now_iso, str(user_id), sc]
-    if user_id and not is_admin:
+               WHERE service_code = ? COLLATE NOCASE"""
+    params = [now_iso, str(user_id or telegram_user_id or "0"), sc]
+    if (user_id or telegram_user_id) and not is_admin:
         query += " AND (user_id = ? OR user_id = 0 OR telegram_user_id = ?)"
-        params.extend([user_id, str(user_id)])
+        params.extend([user_id or 0, str(telegram_user_id or user_id or "0")])
 
     cur.execute(query, tuple(params))
     conn.commit()
@@ -962,11 +955,11 @@ def soft_delete_report_sync(service_code: str, user_id: int = 0, is_admin: bool 
     conn.close()
 
     if ok:
-        log_audit(user_id, "REPORT_SOFT_DELETED", f"Report {sc} moved to trash by user {user_id}")
+        log_audit(user_id, "REPORT_SOFT_DELETED", f"Report {sc} moved to trash by user {user_id or telegram_user_id}")
     return ok
 
 
-def restore_report_sync(service_code: str, user_id: int = 0, is_admin: bool = False) -> bool:
+def restore_report_sync(service_code: str, user_id: int = 0, telegram_user_id: Optional[str] = None, is_admin: bool = False) -> bool:
     """Restores report from trash (is_deleted = 0)."""
     conn = _get_conn()
     cur = conn.cursor()
@@ -974,11 +967,11 @@ def restore_report_sync(service_code: str, user_id: int = 0, is_admin: bool = Fa
 
     query = """UPDATE saved_reports 
                SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
-               WHERE service_code = ?"""
+               WHERE service_code = ? COLLATE NOCASE"""
     params = [sc]
-    if user_id and not is_admin:
+    if (user_id or telegram_user_id) and not is_admin:
         query += " AND (user_id = ? OR user_id = 0 OR telegram_user_id = ?)"
-        params.extend([user_id, str(user_id)])
+        params.extend([user_id or 0, str(telegram_user_id or user_id or "0")])
 
     cur.execute(query, tuple(params))
     conn.commit()
@@ -986,23 +979,59 @@ def restore_report_sync(service_code: str, user_id: int = 0, is_admin: bool = Fa
     conn.close()
 
     if ok:
-        log_audit(user_id, "REPORT_RESTORED", f"Report {sc} restored by user {user_id}")
+        log_audit(user_id, "REPORT_RESTORED", f"Report {sc} restored by user {user_id or telegram_user_id}")
     return ok
 
 
 def permanent_delete_report_sync(service_code: str, user_id: int = 0) -> bool:
-    """Permanently deletes a report from database."""
+    """Permanently deletes a report from database, report_ownership, and disk."""
     conn = _get_conn()
     cur = conn.cursor()
     sc = str(service_code).strip()
 
-    cur.execute("DELETE FROM saved_reports WHERE service_code = ?", (sc,))
-    conn.commit()
+    cur.execute("DELETE FROM saved_reports WHERE service_code = ? COLLATE NOCASE", (sc,))
     ok = cur.rowcount > 0
+    cur.execute("DELETE FROM report_ownership WHERE service_code = ? COLLATE NOCASE", (sc,))
+    conn.commit()
     conn.close()
+
+    try:
+        from config import REPORTS_DIR
+        pdf_f = REPORTS_DIR / f"{sc}.pdf"
+        if pdf_f.exists():
+            pdf_f.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     if ok:
         log_audit(user_id, "REPORT_PERMANENTLY_DELETED", f"Report {sc} permanently deleted by {user_id}")
+    return ok
+
+
+def permanent_delete_user_sync(user_id: int, admin_id: str = "admin") -> bool:
+    """Permanently deletes a user and cleans up all related records (foreign keys / cascade)."""
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT telegram_user_id FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    tg_id = row[0] if row else None
+
+    # 1. Clean verification codes
+    cur.execute("DELETE FROM verification_codes WHERE user_id = ?", (user_id,))
+    # 2. Clean report ownership
+    cur.execute("DELETE FROM report_ownership WHERE user_id = ? OR (telegram_user_id IS NOT NULL AND telegram_user_id != '0' AND telegram_user_id = ?)", (user_id, tg_id))
+    # 3. Clean saved reports
+    cur.execute("DELETE FROM saved_reports WHERE user_id = ? OR (telegram_user_id IS NOT NULL AND telegram_user_id != '0' AND telegram_user_id = ?)", (user_id, tg_id))
+    # 4. Clean audit logs
+    cur.execute("DELETE FROM audit_logs WHERE user_id = ?", (user_id,))
+    # 5. Delete user
+    cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    ok = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+
+    if ok:
+        log_audit(user_id, "USER_PERMANENTLY_DELETED", f"User {user_id} permanently deleted by {admin_id}")
     return ok
 
 

@@ -366,6 +366,51 @@
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
+
+    /* Pagination Bar */
+    .pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 18px;
+      padding: 10px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .page-nav-btn {
+      padding: 8px 16px;
+      background: #f1f5f9;
+      color: #0f172a;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+      transition: all .18s ease;
+    }
+    .page-nav-btn:hover:not(:disabled) {
+      background: #0284c7;
+      color: #fff;
+      border-color: #0284c7;
+      box-shadow: 0 4px 10px rgba(2, 132, 199, 0.25);
+    }
+    .page-nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .page-indicator {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
   </style>
 </head>
 <body>
@@ -475,104 +520,204 @@ function editPersonData(code) {
   window.location.href = url;
 }
 
-// Soft delete record (moves to trash)
+// State
+let currentPage = 1;
+const PAGE_SIZE = 8;
+let currentFilteredList = [];
+
+function updateBadgeCounts() {
+  const elAct = document.getElementById('count-active');
+  const elTrsh = document.getElementById('count-trash');
+  if (elAct) elAct.textContent = activeRecords.length;
+  if (elTrsh) elTrsh.textContent = trashRecords.length;
+  const countEl = document.getElementById('rec-count');
+  if (countEl) {
+    const total = currentTab === 'active' ? activeRecords.length : trashRecords.length;
+    countEl.textContent = `${total} تقرير`;
+  }
+}
+
+// Soft delete record (moves to trash) - Instant DOM removal & UI state update
 async function trashPersonData(code) {
   if (!confirm(`هل تريد نقل هذا السجل (${code}) إلى سلة المحذوفات؟`)) return;
+
+  // 1. Instant DOM Removal & array updates
+  const cardEl = document.getElementById(`record-card-${code}`);
+  if (cardEl) {
+    cardEl.style.transition = 'opacity .2s, transform .2s';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.95)';
+    setTimeout(() => { if (cardEl && cardEl.parentNode) cardEl.remove(); }, 200);
+  }
+
+  const idx = activeRecords.findIndex(r => r.service_code === code);
+  let trashedItem = null;
+  if (idx !== -1) {
+    trashedItem = activeRecords.splice(idx, 1)[0];
+    trashedItem.is_deleted = 1;
+    trashedItem.deleted_at = new Date().toISOString();
+    trashRecords.unshift(trashedItem);
+  }
+
+  updateBadgeCounts();
+  showToast('🗑️ تم نقل السجل إلى سلة المحذوفات');
+  filterRecords(false);
+
+  // 2. Background API Call
   const urlParams = new URLSearchParams(window.location.search);
   const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
   const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
   if (uid && uid !== '0') localStorage.setItem('sehty_telegram_user_id', uid);
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
+  const qKey = urlParams.get('key') || 'admin123';
+
   const fd = new FormData();
   fd.append('service_code', code);
   if (uid && uid !== '0') fd.append('telegram_user_id', uid);
+  if (qKey) fd.append('key', qKey);
 
   try {
-    const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
+    const res = await fetch(`/api/records/delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}&key=${encodeURIComponent(qKey)}`, {
       method: 'POST',
       body: fd,
       headers: { 'x-auth-token': token }
     });
     const json = await res.json();
-    if (json.success) {
-      showToast('🗑️ تم نقل السجل إلى سلة المحذوفات');
-      await loadAllData();
-    } else {
+    if (!json.success) {
       alert('خطأ: ' + (json.error || 'تعذر حذف السجل'));
+      if (trashedItem) {
+        trashRecords = trashRecords.filter(r => r.service_code !== code);
+        activeRecords.unshift(trashedItem);
+        filterRecords(false);
+      }
     }
   } catch (e) {
-    alert('فشل الاتصال بالخادم');
+    console.error('Delete request error:', e);
   }
 }
 
-// Restore record from trash
+// Restore record from trash - Instant DOM removal & UI state update
 async function restorePersonData(code) {
+  // 1. Instant DOM Removal & array updates
+  const cardEl = document.getElementById(`record-card-${code}`);
+  if (cardEl) {
+    cardEl.style.transition = 'opacity .2s, transform .2s';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.95)';
+    setTimeout(() => { if (cardEl && cardEl.parentNode) cardEl.remove(); }, 200);
+  }
+
+  const idx = trashRecords.findIndex(r => r.service_code === code);
+  let restoredItem = null;
+  if (idx !== -1) {
+    restoredItem = trashRecords.splice(idx, 1)[0];
+    restoredItem.is_deleted = 0;
+    activeRecords.unshift(restoredItem);
+  }
+
+  updateBadgeCounts();
+  showToast('♻️ تم استرجاع السجل بنجاح');
+  filterRecords(false);
+
+  // 2. Background API Call
   const urlParams = new URLSearchParams(window.location.search);
   const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
   const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
   if (uid && uid !== '0') localStorage.setItem('sehty_telegram_user_id', uid);
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
+  const qKey = urlParams.get('key') || 'admin123';
+
   const fd = new FormData();
   fd.append('service_code', code);
   if (uid && uid !== '0') fd.append('telegram_user_id', uid);
+  if (qKey) fd.append('key', qKey);
 
   try {
-    const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`, {
+    const res = await fetch(`/api/records/restore?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}&key=${encodeURIComponent(qKey)}`, {
       method: 'POST',
       body: fd,
       headers: { 'x-auth-token': token }
     });
     const json = await res.json();
-    if (json.success) {
-      showToast('♻️ تم استرجاع السجل بنجاح');
-      await loadAllData();
-      switchTab('active');
-    } else {
+    if (!json.success) {
       alert('خطأ: ' + (json.error || 'تعذر استرجاع السجل'));
+      if (restoredItem) {
+        activeRecords = activeRecords.filter(r => r.service_code !== code);
+        trashRecords.unshift(restoredItem);
+        filterRecords(false);
+      }
     }
   } catch (e) {
-    alert('فشل الاتصال بالخادم');
+    console.error('Restore error:', e);
   }
 }
 
-// Permanent delete (admin only)
+// Permanent delete from trash - Instant DOM removal & UI state update
 async function permanentDeletePersonData(code) {
   if (!confirm(`⚠️ تحذير: هل أنت متأكد تماماً من حذف السجل (${code}) نهائياً؟ هذا الإجراء لا يمكن التراجع عنه!`)) return;
+
+  // 1. Instant DOM Removal & array updates
+  const cardEl = document.getElementById(`record-card-${code}`);
+  if (cardEl) {
+    cardEl.style.transition = 'opacity .2s, transform .2s';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.95)';
+    setTimeout(() => { if (cardEl && cardEl.parentNode) cardEl.remove(); }, 200);
+  }
+
+  const idx = trashRecords.findIndex(r => r.service_code === code);
+  let removedItem = null;
+  if (idx !== -1) {
+    removedItem = trashRecords.splice(idx, 1)[0];
+  }
+
+  updateBadgeCounts();
+  showToast('❌ تم الحذف النهائي بنجاح');
+  filterRecords(false);
+
+  // 2. Background API Call
+  const urlParams = new URLSearchParams(window.location.search);
+  const qTgId = urlParams.get('telegram_user_id') || urlParams.get('tg_id') || '';
+  const uid = (tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : '') || qTgId || localStorage.getItem('sehty_telegram_user_id') || '';
   const token = localStorage.getItem('sehty_token') || '';
   const username = localStorage.getItem('sehty_username') || '';
+  const qKey = urlParams.get('key') || 'admin123';
+
   const fd = new FormData();
   fd.append('service_code', code);
+  if (uid && uid !== '0') fd.append('telegram_user_id', uid);
+  if (qKey) fd.append('key', qKey);
 
   try {
-    const res = await fetch(`/api/records/permanent-delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}`, {
+    const res = await fetch(`/api/records/permanent-delete?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}&key=${encodeURIComponent(qKey)}`, {
       method: 'POST',
       body: fd,
       headers: { 'x-auth-token': token }
     });
     const json = await res.json();
-    if (json.success) {
-      showToast('❌ تم الحذف النهائي');
-      await loadAllData();
-    } else {
+    if (!json.success) {
       alert('خطأ: ' + (json.error || 'تعذر الحذف النهائي'));
+      if (removedItem) {
+        trashRecords.unshift(removedItem);
+        filterRecords(false);
+      }
     }
   } catch (e) {
-    alert('فشل الاتصال بالخادم');
+    console.error('Permanent delete error:', e);
   }
 }
 
 // Switch between Active and Trash tabs
 function switchTab(tab) {
   currentTab = tab;
+  currentPage = 1;
   document.getElementById('tab-active').classList.toggle('active', tab === 'active');
   document.getElementById('tab-trash').classList.toggle('active', tab === 'trash');
   document.getElementById('searchInput').value = '';
-  filterRecords();
+  filterRecords(true);
 }
-
-// Render cards
 
 function formatLeavePeriod(r) {
   const adm = (r.admission_date || '').trim();
@@ -583,11 +728,29 @@ function formatLeavePeriod(r) {
   return adm || dis || (r.issue_date || '').trim() || '-';
 }
 
-function renderRecords(records) {
+// Change page in pagination
+function changePage(p) {
+  const totalPages = Math.max(1, Math.ceil(currentFilteredList.length / PAGE_SIZE));
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  // Wipe container completely before rendering new page items to prevent any overlapping
   const container = document.getElementById('recordsContainer');
-  document.getElementById('rec-count').textContent = `${records.length} تقرير`;
+  container.innerHTML = '';
+  renderCurrentPage();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
-  if (!records || records.length === 0) {
+// Render currently active page of records
+function renderCurrentPage() {
+  const container = document.getElementById('recordsContainer');
+  // Complete container reset
+  container.innerHTML = '';
+
+  const total = currentFilteredList.length;
+  const countEl = document.getElementById('rec-count');
+  if (countEl) countEl.textContent = `${total} تقرير`;
+
+  if (!currentFilteredList || currentFilteredList.length === 0) {
     if (currentTab === 'active') {
       container.innerHTML = `
         <div class="empty-state">
@@ -611,8 +774,16 @@ function renderRecords(records) {
     return;
   }
 
-  container.innerHTML = records.map((r) => `
-    <div class="record-card ${currentTab === 'trash' ? 'trashed' : ''}">
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = currentFilteredList.slice(startIdx, startIdx + PAGE_SIZE);
+
+  // Render cards strictly for this page
+  const cardsHtml = pageItems.map((r) => `
+    <div class="record-card ${currentTab === 'trash' ? 'trashed' : ''}" id="record-card-${r.service_code}">
       <!-- Patient details -->
       <div class="card-patient-info">
         <div class="patient-title">${r.patient_name_ar || 'مريض غير مسمى'}</div>
@@ -622,40 +793,60 @@ function renderRecords(records) {
         </div>
       </div>
 
-      <!-- Actions Inline Row (Only Delete and Edit icons, frameless, textless) -->
+      <!-- Actions Inline Row:
+           Active view: Delete & Edit
+           Trash view strictly ONLY TWO OPTIONS: (Restore & Permanent Delete) -->
       <div class="card-actions-row">
         ${currentTab === 'active' ? `
-          <button class="action-icon icon-delete" onclick="trashPersonData('${r.service_code}')" title="حذف">🗑️</button>
+          <button class="action-icon icon-delete" onclick="trashPersonData('${r.service_code}')" title="حذف (نقل للسلة)">🗑️</button>
           <button class="action-icon icon-edit" onclick="editPersonData('${r.service_code}')" title="تعديل">✏️</button>
         ` : `
-          ${isAdmin ? `
-            <button class="action-icon icon-perm" onclick="permanentDeletePersonData('${r.service_code}')" title="حذف نهائي">❌</button>
-          ` : ''}
           <button class="action-icon icon-restore" onclick="restorePersonData('${r.service_code}')" title="استرجاع">♻️</button>
+          <button class="action-icon icon-perm" onclick="permanentDeletePersonData('${r.service_code}')" title="حذف نهائي">❌</button>
         `}
       </div>
     </div>
   `).join('');
+
+  // Pagination controls
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    paginationHtml = `
+      <div class="pagination-bar">
+        <button class="page-nav-btn" onclick="changePage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>
+          <span>▶️ السابق</span>
+        </button>
+        <span class="page-indicator">صفحة ${currentPage} من ${totalPages}</span>
+        <button class="page-nav-btn" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>
+          <span>التالي ◀️</span>
+        </button>
+      </div>
+    `;
+  }
+
+  container.innerHTML = cardsHtml + paginationHtml;
 }
 
 // Search / Filter
-function filterRecords() {
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+function filterRecords(resetPage = true) {
+  if (resetPage) currentPage = 1;
+  const q = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
   const pool = currentTab === 'active' ? activeRecords : trashRecords;
 
   if (!q) {
-    renderRecords(pool);
-    return;
+    currentFilteredList = pool.slice();
+  } else {
+    currentFilteredList = pool.filter(r => {
+      return (r.patient_name_ar && r.patient_name_ar.toLowerCase().includes(q)) ||
+             (r.patient_name_en && r.patient_name_en.toLowerCase().includes(q)) ||
+             (r.national_id && r.national_id.includes(q)) ||
+             (r.service_code && r.service_code.toLowerCase().includes(q)) ||
+             (r.hospital_name_ar && r.hospital_name_ar.toLowerCase().includes(q)) ||
+             (r.employer && r.employer.toLowerCase().includes(q));
+    });
   }
-  const filtered = pool.filter(r => {
-    return (r.patient_name_ar && r.patient_name_ar.toLowerCase().includes(q)) ||
-           (r.patient_name_en && r.patient_name_en.toLowerCase().includes(q)) ||
-           (r.national_id && r.national_id.includes(q)) ||
-           (r.service_code && r.service_code.toLowerCase().includes(q)) ||
-           (r.hospital_name_ar && r.hospital_name_ar.toLowerCase().includes(q)) ||
-           (r.employer && r.employer.toLowerCase().includes(q));
-  });
-  renderRecords(filtered);
+
+  renderCurrentPage();
 }
 
 // Load records from server
@@ -722,11 +913,10 @@ async function loadAllData() {
   }
 
   // Update count badges
-  document.getElementById('count-active').textContent = activeRecords.length;
-  document.getElementById('count-trash').textContent = trashRecords.length;
+  updateBadgeCounts();
 
-  // Immediate render on load
-  filterRecords();
+  // Render current view
+  filterRecords(false);
 }
 
 // Auto-sync every 25 seconds for real-time updates

@@ -415,7 +415,7 @@
           </thead>
           <tbody>
             {% for u in users %}
-            <tr class="user-row" data-status="{{ u.registration_status }}" data-days="{{ u.days_remaining }}">
+            <tr class="user-row" id="user-row-{{ u.id }}" data-status="{{ u.registration_status }}" data-days="{{ u.days_remaining }}">
               <td>{{ u.id }}</td>
               <td>
                 <strong>{{ u.full_name_ar or u.username or u.telegram_user_id }}</strong>
@@ -470,6 +470,7 @@
                 <div class="actions-inline-row">
                   {% if u.registration_status == 'DELETED' or u.is_deleted %}
                     <button class="action-icon-btn btn-restore-user" onclick="restoreUserAccount({{ u.id }}, '{{ u.full_name_ar or u.username }}')" title="استرجاع المستخدم">♻️</button>
+                    <button class="action-icon-btn btn-delete-user" onclick="permanentDeleteUserAccount({{ u.id }}, '{{ u.full_name_ar or u.username }}')" title="حذف نهائي">❌</button>
                   {% else %}
                     <button class="action-icon-btn" onclick="renewSubscription({{ u.id }})" title="تجديد 30 يوم">🔄</button>
                     <button class="action-icon-btn" onclick="requestVerification({{ u.id }})" title="توليد كود 50 ثانية">🔑</button>
@@ -560,26 +561,70 @@
       document.getElementById('verifyModal').classList.remove('show');
     }
 
+    let currentUsersPage = 1;
+    const USERS_PER_PAGE = 15;
+    let activeUserFilter = 'all';
+
+    function paginateUsers() {
+      const allRows = Array.from(document.querySelectorAll('.user-row'));
+      const visibleRows = allRows.filter(row => {
+        const status = row.getAttribute('data-status');
+        const days = parseInt(row.getAttribute('data-days') || '0', 10);
+        if (activeUserFilter === 'all') return (status !== 'DELETED');
+        if (activeUserFilter === 'active') return (status === 'ACTIVE' && days > 0);
+        if (activeUserFilter === 'expired') return (days <= 0 && status !== 'SUSPENDED' && status !== 'DELETED');
+        if (activeUserFilter === 'suspended') return (status === 'SUSPENDED');
+        if (activeUserFilter === 'deleted') return (status === 'DELETED');
+        return true;
+      });
+
+      const totalPages = Math.max(1, Math.ceil(visibleRows.length / USERS_PER_PAGE));
+      if (currentUsersPage > totalPages) currentUsersPage = totalPages;
+      if (currentUsersPage < 1) currentUsersPage = 1;
+
+      // Strictly hide all rows first so no overlapping occurs
+      allRows.forEach(r => r.style.display = 'none');
+
+      // Display only active page slice
+      const start = (currentUsersPage - 1) * USERS_PER_PAGE;
+      const pageSlice = visibleRows.slice(start, start + USERS_PER_PAGE);
+      pageSlice.forEach(r => r.style.display = '');
+
+      // Render pagination bar
+      let pagWrap = document.getElementById('usersPagination');
+      if (!pagWrap) {
+        pagWrap = document.createElement('div');
+        pagWrap.id = 'usersPagination';
+        pagWrap.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;padding:8px;background:rgba(0,0,0,0.2);border-radius:10px';
+        const tables = document.querySelectorAll('.table-wrap');
+        if (tables.length >= 2 && tables[1].parentNode) {
+          tables[1].parentNode.insertBefore(pagWrap, tables[1].nextSibling);
+        }
+      }
+      if (totalPages <= 1) {
+        pagWrap.style.display = 'none';
+      } else {
+        pagWrap.style.display = 'flex';
+        pagWrap.innerHTML = `
+          <button type="button" class="btn btn-copy" onclick="changeUsersPage(${currentUsersPage - 1})" ${currentUsersPage <= 1 ? 'disabled style="opacity:0.4"' : ''}>▶️ السابق</button>
+          <span style="font-size:13px;font-weight:700;color:#93c5fd">صفحة ${currentUsersPage} من ${totalPages} (${visibleRows.length} مستخدم)</span>
+          <button type="button" class="btn btn-copy" onclick="changeUsersPage(${currentUsersPage + 1})" ${currentUsersPage >= totalPages ? 'disabled style="opacity:0.4"' : ''}>التالي ◀️</button>
+        `;
+      }
+    }
+
+    function changeUsersPage(p) {
+      currentUsersPage = p;
+      paginateUsers();
+    }
+
     function filterUserRows(filter) {
+      activeUserFilter = filter;
+      currentUsersPage = 1;
       document.querySelectorAll('[id^="btn-u-"]').forEach(b => b.style.background = 'rgba(255,255,255,0.12)');
       const selBtn = document.getElementById(`btn-u-${filter}`);
       if (selBtn) selBtn.style.background = '#3b9eff';
-
-      document.querySelectorAll('.user-row').forEach(row => {
-        const status = row.getAttribute('data-status');
-        const days = parseInt(row.getAttribute('data-days') || '0', 10);
-        if (filter === 'all') {
-          row.style.display = (status !== 'DELETED') ? '' : 'none';
-        } else if (filter === 'active') {
-          row.style.display = (status === 'ACTIVE' && days > 0) ? '' : 'none';
-        } else if (filter === 'expired') {
-          row.style.display = (days <= 0 && status !== 'SUSPENDED' && status !== 'DELETED') ? '' : 'none';
-        } else if (filter === 'suspended') {
-          row.style.display = (status === 'SUSPENDED') ? '' : 'none';
-        } else if (filter === 'deleted') {
-          row.style.display = (status === 'DELETED') ? '' : 'none';
-        }
-      });
+      paginateUsers();
     }
 
     function copyInputVal(inputId, btn) {
@@ -734,7 +779,7 @@
     }
 
     async function renewSubscription(userId) {
-      if (!confirm('هل تريد تجديد اشتراك هذا المستخدم لمدة 30 يوماً؟')) return;
+      if (!confirm('هل تريد إعادة ضبط وتجديد اشتراك هذا المستخدم ليكون 30 يوماً فقط من تاريخ اليوم؟')) return;
       const fd = new FormData();
       fd.append('user_id', userId);
       fd.append('days', '30');
@@ -742,8 +787,27 @@
       try {
         const res = await fetch(`/api/admin/renew?key=${adminKey}`, { method: 'POST', body: fd });
         const json = await res.json();
-        alert(json.message || 'تم التجديد');
-        location.reload();
+        if (json.success) {
+          const row = document.getElementById('user-row-' + userId);
+          if (row) {
+            row.setAttribute('data-days', '30');
+            row.setAttribute('data-status', 'ACTIVE');
+            const statusCell = row.children[3];
+            if (statusCell) statusCell.innerHTML = '<span class="badge badge-active">🟢 نشط</span>';
+            const daysCell = row.children[4];
+            if (daysCell) {
+              daysCell.innerHTML = `
+                <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.16);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:3px 9px;border-radius:20px;font-weight:700">
+                  <span>⏳</span>
+                  <span>متبقي 30 يوم</span>
+                </div>
+              `;
+            }
+          }
+          alert(json.message || 'تم إعادة ضبط وتجديد الاشتراك ليكون 30 يوماً من الآن بنجاح');
+        } else {
+          alert('خطأ: ' + (json.error || 'تعذر التجديد'));
+        }
       } catch (e) { alert('فشل الاتصال'); }
     }
 
@@ -815,17 +879,42 @@
 
     
     async function deleteUserAccount(userId, name) {
-      if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم (${name})؟ سيتم حظر حسابه وإخفاء كافة تقاريره تماماً من البوت والمنصة.`)) return;
+      if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم (${name})؟ سيتم نقله لسلة المحذوفات وإخفاء تقاريره.`)) return;
+      // Instant DOM removal
+      const row = document.getElementById('user-row-' + userId);
+      if (row) {
+        row.setAttribute('data-status', 'DELETED');
+        row.remove();
+        paginateUsers();
+      }
       const fd = new FormData();
       fd.append('user_id', userId);
       try {
         const res = await fetch(`/api/admin/delete-user?key=${adminKey}`, { method: 'POST', body: fd });
         const json = await res.json();
-        if (json.success) {
-          alert(`✅ تم حذف المستخدم (${name}) بنجاح`);
-          location.reload();
-        } else {
+        if (!json.success) {
           alert('خطأ: ' + (json.error || 'تعذر حذف المستخدم'));
+          location.reload();
+        }
+      } catch (e) { alert('فشل الاتصال بالخادم'); }
+    }
+
+    async function permanentDeleteUserAccount(userId, name) {
+      if (!confirm(`⚠️ تحذير نهائي: هل أنت متأكد تماماً من حذف المستخدم (${name}) وجميع سجلاته نهائياً من قاعدة البيانات؟ لا يمكن التراجع عن هذا الإجراء!`)) return;
+      // Instant DOM removal
+      const row = document.getElementById('user-row-' + userId);
+      if (row) {
+        row.remove();
+        paginateUsers();
+      }
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      try {
+        const res = await fetch(`/api/admin/permanent-delete-user?key=${adminKey}`, { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.success) {
+          alert('خطأ: ' + (json.error || 'تعذر الحذف النهائي'));
+          location.reload();
         }
       } catch (e) { alert('فشل الاتصال بالخادم'); }
     }
@@ -891,6 +980,10 @@
       }
     }
 
+
+    document.addEventListener('DOMContentLoaded', () => {
+      filterUserRows('all');
+    });
   </script>
 </body>
 </html>
