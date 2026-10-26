@@ -90,21 +90,29 @@ def _get_hijri(d_str: Union[str, datetime, None]) -> str:
 
 
 
-def _subset_font_bytes(font_path: Path, chars_str: str) -> bytes:
-    """Dynamically subsets a TTF font to include glyphs for the requested characters."""
+import functools
+
+@functools.lru_cache(maxsize=128)
+def _subset_font_bytes_cached(font_path_str: str, sorted_chars: str) -> bytes:
     try:
         from fontTools import subset
         opt = subset.Options()
-        font = subset.load_font(str(font_path), opt)
+        font = subset.load_font(font_path_str, opt)
         s = subset.Subsetter(options=opt)
-        s.populate(text=chars_str)
+        s.populate(text=sorted_chars)
         s.subset(font)
         buf = io.BytesIO()
         font.save(buf)
         return buf.getvalue()
     except Exception as e:
-        with open(font_path, "rb") as f:
+        with open(font_path_str, "rb") as f:
             return f.read()
+
+
+def _subset_font_bytes(font_path: Path, chars_str: str) -> bytes:
+    """Dynamically subsets a TTF font to include glyphs for the requested characters."""
+    sorted_chars = "".join(sorted(set(chars_str)))
+    return _subset_font_bytes_cached(str(font_path), sorted_chars)
 
 def _format_and_split_en_name(name_raw: str, max_width: float = 195.0, font=None, fontsize: float = 13.5) -> list[str]:
     """
@@ -291,10 +299,12 @@ def generate_pdf(data: dict, output_path: Union[str, Path]) -> Path:
 
     # Row 7: Nationality
     if nat_en:
-        w = f_roman.text_length(nat_en, 13.5)
-        page.insert_text(fitz.Point(318.27 - w / 2, 563.61), nat_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
+        clean_nat_en = re.sub(r'[\U00010000-\U0010ffff]', '', nat_en).strip()
+        w = f_roman.text_length(clean_nat_en, 13.5)
+        page.insert_text(fitz.Point(318.27 - w / 2, 563.61), clean_nat_en, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
     if nat_ar:
-        ar_nat = ar(nat_ar)
+        clean_nat_ar = re.sub(r'[\U00010000-\U0010ffff]', '', nat_ar).strip()
+        ar_nat = ar(clean_nat_ar)
         w = f_nsa_r.text_length(ar_nat, 13.5)
         page.insert_text(fitz.Point(556.78 - w / 2, 564.13), ar_nat, fontname="NSA_R", fontsize=13.5, color=C_DARK_VAL)
 

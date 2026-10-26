@@ -398,7 +398,7 @@ async def submit_report(
 
             content_type = logo.content_type or "image/jpeg"
             try:
-                logo_url = await upload_logo(unique_name, file_bytes, content_type)
+                logo_url = await asyncio.wait_for(upload_logo(unique_name, file_bytes, content_type), timeout=2.5)
             except Exception:
                 logo_url = None
 
