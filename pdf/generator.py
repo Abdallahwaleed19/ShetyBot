@@ -133,26 +133,33 @@ def _get_hijri(d_str: Union[str, datetime, None]) -> str:
 
 
 import functools
-from fontTools import subset
-
-_SUBSET_OPTS = subset.Options()
-_SUBSET_OPTS.hinting = False
-_SUBSET_OPTS.desubroutinize = False
-_SUBSET_OPTS.legacy_kern = False
+try:
+    from fontTools import subset
+    _SUBSET_OPTS = subset.Options()
+    _SUBSET_OPTS.hinting = False
+    _SUBSET_OPTS.desubroutinize = False
+    _SUBSET_OPTS.legacy_kern = False
+    HAS_FONTTOOLS = True
+except Exception:
+    subset = None
+    _SUBSET_OPTS = None
+    HAS_FONTTOOLS = False
 
 @functools.lru_cache(maxsize=256)
 def _subset_font_bytes_cached(font_path_str: str, sorted_chars: str) -> bytes:
-    try:
-        font = subset.load_font(font_path_str, _SUBSET_OPTS)
-        s = subset.Subsetter(options=_SUBSET_OPTS)
-        s.populate(text=sorted_chars)
-        s.subset(font)
-        buf = io.BytesIO()
-        font.save(buf)
-        return buf.getvalue()
-    except Exception as e:
-        with open(font_path_str, "rb") as f:
-            return f.read()
+    if HAS_FONTTOOLS and subset is not None:
+        try:
+            font = subset.load_font(font_path_str, _SUBSET_OPTS)
+            s = subset.Subsetter(options=_SUBSET_OPTS)
+            s.populate(text=sorted_chars)
+            s.subset(font)
+            buf = io.BytesIO()
+            font.save(buf)
+            return buf.getvalue()
+        except Exception as e:
+            pass
+    with open(font_path_str, "rb") as f:
+        return f.read()
 
 
 def _subset_font_bytes(font_path: Path, chars_str: str) -> bytes:
