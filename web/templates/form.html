@@ -371,11 +371,11 @@
   <div class="row">
     <div class="field">
       <label>📅 تاريخ الدخول</label>
-      <input type="date" id="admission_date" class="has-value" value="{{ today_str }}" required onchange="onDateChange()" oninput="markDateFilled('admission_date')">
+      <input type="date" id="admission_date" class="has-value" value="{{ today_str }}" required onchange="onDateChange()" oninput="markDateFilled('admission_date'); onDateChange()">
     </div>
     <div class="field">
       <label>📅 تاريخ الخروج</label>
-      <input type="date" id="discharge_date" class="has-value" value="{{ tomorrow_str }}" required onchange="onDateChange()" oninput="markDateFilled('discharge_date')">
+      <input type="date" id="discharge_date" class="has-value" value="{{ tomorrow_str }}" required onchange="onDateChange()" oninput="markDateFilled('discharge_date'); onDateChange()">
     </div>
   </div>
 
@@ -690,7 +690,7 @@ if(tg){
       const durEl = document.getElementById('leave_duration');
       if (durEl) {
         durEl.value = d.leave_duration_days;
-        _userEditedDuration = true;
+        
       }
     } else {
       onDateChange();
@@ -1025,8 +1025,6 @@ document.getElementById('include_barcode').addEventListener('change', function(e
 });
 
 // ── Duration Manual Edit & Auto-calculation ──────────────────────────────────
-let _userEditedDuration = false;
-
 function onDurationInput() {
   const durEl = document.getElementById('leave_duration');
   const box   = document.getElementById('duration_box');
@@ -1035,12 +1033,10 @@ function onDurationInput() {
 
   const val = durEl.value.trim();
   if (!val) {
-    _userEditedDuration = false;
-    onDateChange(true);
+    onDateChange();
     return;
   }
 
-  _userEditedDuration = true;
   const num = Number(val);
   if (num > 0) {
     if (box) box.classList.remove('invalid');
@@ -1057,7 +1053,7 @@ function onDurationInput() {
   }
 }
 
-function onDateChange(force = false) {
+function onDateChange() {
   const admEl = document.getElementById('admission_date');
   const disEl = document.getElementById('discharge_date');
   const durEl = document.getElementById('leave_duration');
@@ -1102,11 +1098,9 @@ function onDateChange(force = false) {
   const msPerDay = 86400000;
   const calculatedDays = Math.round((disTime - admTime) / msPerDay) + 1;
 
-  // Auto-calculate if user hasn't explicitly customized the duration, or if input is empty, or if forced
+  // Whenever admission or discharge dates change, auto-calculate days immediately
   if (durEl) {
-    if (!_userEditedDuration || !durEl.value || force) {
-      durEl.value = calculatedDays;
-    }
+    durEl.value = calculatedDays;
   }
 }
 
