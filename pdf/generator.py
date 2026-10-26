@@ -161,8 +161,10 @@ def _subset_font_bytes_cached(font_path_str: str, sorted_chars: str) -> bytes:
         except Exception:
             return b""
     if HAS_FONTTOOLS and _ft_subset is not None:
+        _ex = None
         try:
             import concurrent.futures
+
             def _do_subset():
                 font = _ft_subset.load_font(font_path_str, _SUBSET_OPTS)
                 s = _ft_subset.Subsetter(options=_SUBSET_OPTS)
@@ -171,14 +173,20 @@ def _subset_font_bytes_cached(font_path_str: str, sorted_chars: str) -> bytes:
                 buf = io.BytesIO()
                 font.save(buf)
                 return buf.getvalue()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _ex:
-                _fut = _ex.submit(_do_subset)
-                try:
-                    return _fut.result(timeout=8)
-                except (concurrent.futures.TimeoutError, Exception):
-                    pass
+
+            # Avoid a context manager: its exit waits for timed-out work to finish.
+            _ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            _fut = _ex.submit(_do_subset)
+            try:
+                return _fut.result(timeout=8)
+            except Exception:
+                # Use the already-loaded full font if subsetting is slow or fails.
+                return raw
         except Exception:
-            pass
+            return raw
+        finally:
+            if _ex is not None:
+                _ex.shutdown(wait=False, cancel_futures=True)
     return raw
 
 
