@@ -138,10 +138,60 @@
     /* ── Duration display ────────────────────────────── */
     .duration-display{
       background:rgba(2,132,199,0.07);border:1.5px solid rgba(2,132,199,0.25);
-      border-radius:12px;padding:13px 14px;font-size:14.5px;
+      border-radius:12px;padding:11px 14px;font-size:14.5px;
       color:var(--accent);text-align:center;font-weight:800;letter-spacing:.3px
     }
-    .duration-display.invalid{border-color:rgba(239,68,68,0.4);color:#dc2626;background:rgba(239,68,68,0.08)}
+    .duration-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: text;
+      transition: all .2s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .duration-box:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(2,132,199,0.15);
+      background: #ffffff;
+    }
+    .duration-display.invalid, .duration-box.invalid{
+      border-color:rgba(239,68,68,0.4);color:#dc2626;background:rgba(239,68,68,0.08)
+    }
+    .duration-input {
+      background: transparent !important;
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--accent) !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 65px;
+      direction: ltr;
+      font-family: inherit;
+      -moz-appearance: textfield;
+    }
+    .duration-input::-webkit-outer-spin-button,
+    .duration-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .duration-unit {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--accent);
+      user-select: none;
+    }
+    .duration-error {
+      color: #dc2626;
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-top: 5px;
+      text-align: center;
+    }
 
     /* ── Toggle buttons ──────────────────────────────── */
     .toggle-group{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -329,11 +379,14 @@
     </div>
   </div>
 
-  <!-- مدة الإجازة — auto-calculated, read-only -->
+  <!-- مدة الإجازة — قابلة للتعديل والاحتساب التلقائي بدون تغيير التواريخ -->
   <div class="field">
     <label>⏱️ مدة الإجازة بالأيام</label>
-    <div class="duration-display" id="duration_display">اختر التواريخ أولاً</div>
-    <input type="hidden" id="leave_duration" value="">
+    <div class="duration-display duration-box" id="duration_box" onclick="document.getElementById('leave_duration').focus()">
+      <input type="number" id="leave_duration" name="leave_duration_days" min="1" step="1" class="duration-input" placeholder="1" onfocus="this.select()" oninput="onDurationInput()" onchange="onDurationInput()">
+      <span class="duration-unit">يوم</span>
+    </div>
+    <div id="duration_error" class="duration-error" style="display:none;"></div>
   </div>
 
   <!-- تاريخ الإصدار — full width -->
@@ -632,8 +685,16 @@ if(tg){
     if (d.hospital_name_en)     document.getElementById('hospital_name_en').value = d.hospital_name_en;
     if (d.hospital_type)        pickType(d.hospital_type, false);
 
-    // Recalculate duration after pre-fill
-    onDateChange();
+    // Restore or recalculate duration in edit mode
+    if (d.leave_duration_days) {
+      const durEl = document.getElementById('leave_duration');
+      if (durEl) {
+        durEl.value = d.leave_duration_days;
+        _userEditedDuration = true;
+      }
+    } else {
+      onDateChange();
+    }
 
     // Show edit notice banner
     const notice = document.createElement('div');
@@ -938,24 +999,56 @@ document.getElementById('include_barcode').addEventListener('change', function(e
   note.style.display = this.checked ? 'block' : 'none';
 });
 
-// ── Leave duration auto-calculation ──────────────────────────────────────────
-function onDateChange() {
+// ── Duration Manual Edit & Auto-calculation ──────────────────────────────────
+let _userEditedDuration = false;
+
+function onDurationInput() {
+  const durEl = document.getElementById('leave_duration');
+  const box   = document.getElementById('duration_box');
+  const errEl = document.getElementById('duration_error');
+  if (!durEl) return;
+
+  const val = durEl.value.trim();
+  if (!val) {
+    _userEditedDuration = false;
+    onDateChange(true);
+    return;
+  }
+
+  _userEditedDuration = true;
+  const num = Number(val);
+  if (num > 0) {
+    if (box) box.classList.remove('invalid');
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.style.display = 'none';
+    }
+  } else {
+    if (box) box.classList.add('invalid');
+    if (errEl) {
+      errEl.textContent = '⚠️ مدة الإجازة يجب أن تكون يوماً واحداً على الأقل';
+      errEl.style.display = 'block';
+    }
+  }
+}
+
+function onDateChange(force = false) {
   const admEl = document.getElementById('admission_date');
   const disEl = document.getElementById('discharge_date');
   const durEl = document.getElementById('leave_duration');
-  const disp  = document.getElementById('duration_display');
+  const box   = document.getElementById('duration_box');
+  const errEl = document.getElementById('duration_error');
 
   markDateFilled('admission_date');
   markDateFilled('discharge_date');
 
-  const admVal = admEl.value;
-  const disVal = disEl.value;
-  disEl.min = admVal || '';
+  const admVal = admEl ? admEl.value : '';
+  const disVal = disEl ? disEl.value : '';
+  if (disEl && admVal) disEl.min = admVal;
 
   if (!admVal || !disVal) {
-    disp.textContent = 'اختر التواريخ أولاً';
-    disp.className = 'duration-display';
-    durEl.value = '';
+    if (box) box.classList.remove('invalid');
+    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
     return;
   }
 
@@ -966,18 +1059,30 @@ function onDateChange() {
   const disTime = Date.UTC(dy, dm - 1, dd);
 
   if (disTime < admTime) {
-    disp.textContent = '⚠️ تاريخ الخروج قبل تاريخ الدخول';
-    disp.className = 'duration-display invalid';
-    durEl.value = '';
+    if (box) box.classList.add('invalid');
+    if (errEl) {
+      errEl.textContent = '⚠️ تاريخ الخروج قبل تاريخ الدخول';
+      errEl.style.display = 'block';
+    }
     return;
+  }
+
+  if (box) box.classList.remove('invalid');
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
   }
 
   // Inclusive day count: (dis - adm) / ms_per_day + 1
   const msPerDay = 86400000;
-  const days = Math.round((disTime - admTime) / msPerDay) + 1;
-  disp.textContent = `${days} يوم`;
-  disp.className = 'duration-display';
-  durEl.value = days;
+  const calculatedDays = Math.round((disTime - admTime) / msPerDay) + 1;
+
+  // Auto-calculate if user hasn't explicitly customized the duration, or if input is empty, or if forced
+  if (durEl) {
+    if (!_userEditedDuration || !durEl.value || force) {
+      durEl.value = calculatedDays;
+    }
+  }
 }
 
 function markDateFilled(id) {
@@ -1029,10 +1134,23 @@ function validate(n) {
     const dis = document.getElementById('discharge_date')?.value;
     if (!adm) return { page: 1, field: 'admission_date', msg: 'أدخل تاريخ الدخول' };
     if (!dis) return { page: 1, field: 'discharge_date', msg: 'أدخل تاريخ الخروج' };
-    // Ensure duration calculation is triggered
-    onDateChange();
-    const durVal = document.getElementById('leave_duration')?.value;
-    if (!durVal) return { page: 1, field: 'discharge_date', msg: 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول' };
+
+    const [ay, am, ad] = adm.split('-').map(Number);
+    const [dy, dm, dd] = dis.split('-').map(Number);
+    if (Date.UTC(dy, dm - 1, dd) < Date.UTC(ay, am - 1, ad)) {
+      return { page: 1, field: 'discharge_date', msg: 'تاريخ الخروج يجب أن يكون بعد أو يساوي تاريخ الدخول' };
+    }
+
+    const durEl = document.getElementById('leave_duration');
+    let durVal = durEl ? durEl.value.trim() : '';
+    if (!durVal || Number(durVal) <= 0) {
+      onDateChange(true);
+      durVal = durEl ? durEl.value.trim() : '';
+    }
+    if (!durVal || Number(durVal) <= 0) {
+      return { page: 1, field: 'leave_duration', msg: 'أدخل مدة الإجازة بالأيام (رقم صحيح)' };
+    }
+
     const issEl = document.getElementById('issue_date');
     if (issEl && !issEl.value) {
       const now = new Date();

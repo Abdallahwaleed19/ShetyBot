@@ -376,7 +376,12 @@ async def submit_report(
             rt = now_dt.time().replace(second=0, microsecond=0)
 
         # Leave duration
-        dur = inclusive_duration(adm, dis)
+        # Leave duration: respect manual form duration if provided (> 0), otherwise calculate inclusive duration
+        dur_from_form = str(leave_duration_days).strip() if leave_duration_days else ''
+        if dur_from_form and dur_from_form.isdigit() and int(dur_from_form) > 0:
+            dur = int(dur_from_form)
+        else:
+            dur = inclusive_duration(adm, dis)
         if not practitioner_name_ar or not practitioner_name_ar.strip():
             practitioner_name_ar = "محمد عبدالله الشراري"
         if not practitioner_name_en or not practitioner_name_en.strip():
@@ -794,7 +799,11 @@ async def generate_pdf_stream(
         if rt is None:
             rt = datetime.now().time().replace(second=0, microsecond=0)
 
-        dur = inclusive_duration(adm, dis)
+        dur_from_form = str(leave_duration_days).strip() if leave_duration_days else ''
+        if dur_from_form and dur_from_form.isdigit() and int(dur_from_form) > 0:
+            dur = int(dur_from_form)
+        else:
+            dur = inclusive_duration(adm, dis)
 
         def _hijri(d):
             try:
