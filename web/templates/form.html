@@ -315,13 +315,7 @@
     </div>
     <input type="hidden" id="report_type" value="GSL">
   </div>
-          <div style="color:#38bdf8;font-size:16px;font-weight:800">PSL</div>
-          <span id="chk-psl" style="display:none;color:#10b981;font-size:18px;font-weight:bold">✓</span>
-        </div>
-      </div>
-    </div>
-    <input type="hidden" id="report_type" value="GSL">
-  </div>
+
 
   <!-- تاريخ الدخول / الخروج — center calendar icon, no placeholder -->
   <div class="row">
@@ -651,22 +645,52 @@ if(tg){
   }
 })();
 
-// ── Auto-set issue date & time ───────────────────────────────────────────────
-(function(){
+// ── Auto-set All Dates on Page Load (Admission = Today, Discharge = Tomorrow, Issue = Today) ──
+(function initAllDatesAutomatically(){
   const now = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  document.getElementById('issue_date').value = dateStr;
-  markDateFilled('issue_date');
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
-  // Set time (24h for input value, AM/PM for display)
-  const h24 = now.getHours();
-  const mins = pad(now.getMinutes());
-  document.getElementById('issue_time').value = `${pad(h24)}:${mins}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
 
-  // Set AM/PM toggle
-  const isAm = h24 < 12;
-  setAmPm(isAm ? 'AM' : 'PM', false);
+  const urlParams = new URLSearchParams(window.location.search);
+  const isEditMode = Boolean(urlParams.get('edit'));
+
+  // 1. Admission & Discharge Dates (Default: Today to Tomorrow)
+  const admEl = document.getElementById('admission_date');
+  const disEl = document.getElementById('discharge_date');
+  if (!isEditMode) {
+    if (admEl && !admEl.value) {
+      admEl.value = todayStr;
+      markDateFilled('admission_date');
+    }
+    if (disEl && !disEl.value) {
+      disEl.value = tomorrowStr;
+      markDateFilled('discharge_date');
+    }
+    // Calculate leave duration automatically
+    if (typeof onDateChange === 'function') {
+      onDateChange();
+    }
+  }
+
+  // 2. Issue Date & Time (Default: Today & Now)
+  const issEl = document.getElementById('issue_date');
+  if (issEl && (!issEl.value || !isEditMode)) {
+    issEl.value = todayStr;
+    markDateFilled('issue_date');
+  }
+
+  const timeEl = document.getElementById('issue_time');
+  if (timeEl && (!timeEl.value || !isEditMode)) {
+    const h24 = now.getHours();
+    const mins = pad(now.getMinutes());
+    timeEl.value = `${pad(h24)}:${mins}`;
+    const isAm = h24 < 12;
+    setAmPm(isAm ? 'AM' : 'PM', false);
+  }
 })();
 
 // ── AM/PM toggle ─────────────────────────────────────────────────────────────
@@ -1050,12 +1074,12 @@ function go(from, to) {
   // Strictly hide every page completely before activating target page
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
-    p.style.display = 'none';
+    p.style.setProperty('display', 'none', 'important');
   });
   const targetPage = document.getElementById(`p${to}`);
   if (targetPage) {
     targetPage.classList.add('active');
-    targetPage.style.display = 'block';
+    targetPage.style.setProperty('display', 'block', 'important');
   }
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById(`d${i}`);
@@ -1063,7 +1087,14 @@ function go(from, to) {
   }
   const lbl = document.getElementById('progress-lbl');
   if (lbl && LABELS[to]) lbl.textContent = LABELS[to];
+
+  // Comprehensive scroll to top for mobile browsers and Telegram WebApp
   window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  } catch(e) {}
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────────
