@@ -284,7 +284,25 @@ async def get_current_user(request: Request) -> User:
 # ── WebApp Form ────────────────────────────────────────────────────────────────
 @router.get("/form", response_class=HTMLResponse, summary="Telegram WebApp 3-page form")
 async def form_page(request: Request):
-    resp = templates.TemplateResponse(request, "form.html", {})
+    try:
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Asia/Riyadh")
+        now_sa = datetime.now(tz)
+    except Exception:
+        now_sa = datetime.utcnow() + timedelta(hours=3)
+
+    today_str = now_sa.strftime("%Y-%m-%d")
+    tomorrow_str = (now_sa + timedelta(days=1)).strftime("%Y-%m-%d")
+    time_str = now_sa.strftime("%H:%M")
+    ampm_str = "AM" if now_sa.hour < 12 else "PM"
+
+    context = {
+        "today_str": today_str,
+        "tomorrow_str": tomorrow_str,
+        "time_str": time_str,
+        "ampm_str": ampm_str,
+    }
+    resp = templates.TemplateResponse(request, "form.html", context)
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"

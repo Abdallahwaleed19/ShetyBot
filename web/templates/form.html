@@ -371,11 +371,11 @@
   <div class="row">
     <div class="field">
       <label>📅 تاريخ الدخول</label>
-      <input type="date" id="admission_date" required onchange="onDateChange()" oninput="markDateFilled('admission_date')">
+      <input type="date" id="admission_date" class="has-value" value="{{ today_str }}" required onchange="onDateChange()" oninput="markDateFilled('admission_date')">
     </div>
     <div class="field">
       <label>📅 تاريخ الخروج</label>
-      <input type="date" id="discharge_date" required onchange="onDateChange()" oninput="markDateFilled('discharge_date')">
+      <input type="date" id="discharge_date" class="has-value" value="{{ tomorrow_str }}" required onchange="onDateChange()" oninput="markDateFilled('discharge_date')">
     </div>
   </div>
 
@@ -383,7 +383,7 @@
   <div class="field">
     <label>⏱️ مدة الإجازة بالأيام</label>
     <div class="duration-display duration-box" id="duration_box" onclick="document.getElementById('leave_duration').focus()">
-      <input type="number" id="leave_duration" name="leave_duration_days" min="1" step="1" class="duration-input" placeholder="1" onfocus="this.select()" oninput="onDurationInput()" onchange="onDurationInput()">
+      <input type="number" id="leave_duration" name="leave_duration_days" min="1" step="1" class="duration-input" value="2" placeholder="1" onfocus="this.select()" oninput="onDurationInput()" onchange="onDurationInput()">
       <span class="duration-unit">يوم</span>
     </div>
     <div id="duration_error" class="duration-error" style="display:none;"></div>
@@ -392,17 +392,17 @@
   <!-- تاريخ الإصدار — full width -->
   <div class="field">
     <label>🗓️ تاريخ الإصدار</label>
-    <input type="date" id="issue_date" required onchange="markDateFilled('issue_date')" oninput="markDateFilled('issue_date')">
+    <input type="date" id="issue_date" class="has-value" value="{{ today_str }}" required onchange="markDateFilled('issue_date')" oninput="markDateFilled('issue_date')">
   </div>
 
   <!-- وقت الإصدار — underneath issue date, with AM / PM buttons -->
   <div class="field">
     <label>🕐 وقت الإصدار</label>
     <div style="display:flex;gap:10px;align-items:center">
-      <input type="time" id="issue_time" style="flex:1" dir="ltr">
+      <input type="time" id="issue_time" value="{{ time_str }}" style="flex:1" dir="ltr">
       <div style="display:flex;gap:6px;flex-shrink:0">
-        <div class="ampm-btn sel" id="am_btn" onclick="setAmPm('AM')">AM</div>
-        <div class="ampm-btn"     id="pm_btn" onclick="setAmPm('PM')">PM</div>
+        <div class="ampm-btn {% if ampm_str == 'AM' or not ampm_str %}sel{% endif %}" id="am_btn" onclick="setAmPm('AM')">AM</div>
+        <div class="ampm-btn {% if ampm_str == 'PM' %}sel{% endif %}"     id="pm_btn" onclick="setAmPm('PM')">PM</div>
       </div>
     </div>
   </div>
@@ -706,8 +706,34 @@ if(tg){
   }
 })();
 
-// ── Auto-set All Dates on Page Load (Admission = Today, Discharge = Tomorrow, Issue = Today) ──
-(function initAllDatesAutomatically(){
+// ── AM/PM toggle (declared first to prevent Temporal Dead Zone) ──────────────
+var _ampm = 'AM';
+function setAmPm(val, updateTime=true) {
+  _ampm = val;
+  const amBtn = document.getElementById('am_btn');
+  const pmBtn = document.getElementById('pm_btn');
+  if (amBtn) amBtn.classList.toggle('sel', val === 'AM');
+  if (pmBtn) pmBtn.classList.toggle('sel', val === 'PM');
+  if (updateTime) {
+    const timeEl = document.getElementById('issue_time');
+    if (timeEl && timeEl.value) {
+      let [h, m] = timeEl.value.split(':').map(Number);
+      if (val === 'PM' && h < 12)  h += 12;
+      if (val === 'AM' && h >= 12) h -= 12;
+      if (h === 24) h = 0;
+      if (h === 12 && val === 'AM') h = 0;
+      if (h === 0 && val === 'PM') h = 12;
+      timeEl.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+  }
+}
+
+// ── Auto-set All Dates & Times on Page Load ──────────────────────────────────
+function initAllDatesAutomatically(){
+  const urlParams = new URLSearchParams(window.location.search);
+  const isEditMode = Boolean(urlParams.get('edit'));
+  if (isEditMode) return; // Edit mode will prefill its own values
+
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -716,65 +742,64 @@ if(tg){
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const isEditMode = Boolean(urlParams.get('edit'));
-
-  // 1. Admission & Discharge Dates (Default: Today to Tomorrow)
-  const admEl = document.getElementById('admission_date');
-  const disEl = document.getElementById('discharge_date');
-  if (!isEditMode) {
+  // 1. Admission Date
+  try {
+    const admEl = document.getElementById('admission_date');
     if (admEl && !admEl.value) {
       admEl.value = todayStr;
-      markDateFilled('admission_date');
     }
+    if (admEl) markDateFilled('admission_date');
+  } catch(e) { console.error('adm error', e); }
+
+  // 2. Discharge Date
+  try {
+    const disEl = document.getElementById('discharge_date');
     if (disEl && !disEl.value) {
       disEl.value = tomorrowStr;
-      markDateFilled('discharge_date');
     }
-    // Calculate leave duration automatically
+    if (disEl) markDateFilled('discharge_date');
+  } catch(e) { console.error('dis error', e); }
+
+  // 3. Duration
+  try {
+    const durEl = document.getElementById('leave_duration');
+    if (durEl && !durEl.value) {
+      durEl.value = '2';
+    }
     if (typeof onDateChange === 'function') {
       onDateChange();
     }
-  }
+  } catch(e) { console.error('dur error', e); }
 
-  // 2. Issue Date & Time (Default: Today & Now)
-  const issEl = document.getElementById('issue_date');
-  if (issEl && (!issEl.value || !isEditMode)) {
-    issEl.value = todayStr;
-    markDateFilled('issue_date');
-  }
+  // 4. Issue Date (Default: Today)
+  try {
+    const issEl = document.getElementById('issue_date');
+    if (issEl && !issEl.value) {
+      issEl.value = todayStr;
+    }
+    if (issEl) markDateFilled('issue_date');
+  } catch(e) { console.error('iss error', e); }
 
-  const timeEl = document.getElementById('issue_time');
-  if (timeEl && (!timeEl.value || !isEditMode)) {
+  // 5. Issue Time (Default: Current Hour:Minute + AM/PM)
+  try {
+    const timeEl = document.getElementById('issue_time');
     const h24 = now.getHours();
     const mins = pad(now.getMinutes());
-    timeEl.value = `${pad(h24)}:${mins}`;
+    if (timeEl && !timeEl.value) {
+      timeEl.value = `${pad(h24)}:${mins}`;
+    }
     const isAm = h24 < 12;
     setAmPm(isAm ? 'AM' : 'PM', false);
-  }
-})();
+  } catch(e) { console.error('time error', e); }
+}
 
-// ── AM/PM toggle ─────────────────────────────────────────────────────────────
-let _ampm = 'AM';
-function setAmPm(val, updateTime=true) {
-  _ampm = val;
-  document.getElementById('am_btn').classList.toggle('sel', val === 'AM');
-  document.getElementById('pm_btn').classList.toggle('sel', val === 'PM');
-  if (updateTime) {
-    // Adjust the time field to match am/pm
-    const timeEl = document.getElementById('issue_time');
-    if (timeEl.value) {
-      let [h, m] = timeEl.value.split(':').map(Number);
-      // Convert from current display to preserve user's hour
-      if (val === 'PM' && h < 12)  h += 12;
-      if (val === 'AM' && h >= 12) h -= 12;
-      // Handle midnight/noon special cases
-      if (h === 24) h = 0;
-      if (h === 12 && val === 'AM') h = 0;
-      if (h === 0 && val === 'PM') h = 12;
-      timeEl.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-    }
-  }
+// Execute immediately and on load events
+initAllDatesAutomatically();
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('DOMContentLoaded', initAllDatesAutomatically);
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('load', initAllDatesAutomatically);
 }
 
 // ── Service Code Generation & Manual Edit ────────────────────────────────────
