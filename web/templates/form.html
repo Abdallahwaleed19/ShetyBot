@@ -1406,12 +1406,34 @@ function clearAuthErr() {
   el.style.display = 'none';
 }
 
+let pendingPollInterval = null;
+
+function startPendingStatusPoll() {
+  if (pendingPollInterval) clearInterval(pendingPollInterval);
+  pendingPollInterval = setInterval(() => {
+    checkUserStatusOnDemand(true);
+  }, 3500);
+}
+
+function stopPendingStatusPoll() {
+  if (pendingPollInterval) {
+    clearInterval(pendingPollInterval);
+    pendingPollInterval = null;
+  }
+}
+
 function switchAuthMode(mode) {
   clearAuthErr();
   document.getElementById('auth-step-login').style.display = (mode === 'login') ? 'block' : 'none';
   document.getElementById('auth-step-register').style.display = (mode === 'register') ? 'block' : 'none';
   document.getElementById('auth-step-pending').style.display = (mode === 'pending') ? 'block' : 'none';
   document.getElementById('auth-step-otp').style.display = (mode === 'otp') ? 'block' : 'none';
+
+  if (mode === 'pending') {
+    startPendingStatusPoll();
+  } else {
+    stopPendingStatusPoll();
+  }
 }
 
 function renderSubscriptionBanner(data) {
@@ -1582,8 +1604,12 @@ async function requestOtpCode() {
 
 async function verifyOtpCode() {
   clearAuthErr();
-  const username = document.getElementById('auth-username').value.trim() || localStorage.getItem('sehty_username') || '';
+  const username = document.getElementById('auth-username').value.trim() || 
+                   localStorage.getItem('sehty_username') || 
+                   localStorage.getItem('sehty_registered_email') || '';
   const code = document.getElementById('auth-code').value.trim();
+  const tgUser = tg?.initDataUnsafe?.user;
+  const tgId = (tgUser?.id ? String(tgUser.id) : '') || localStorage.getItem('sehty_telegram_user_id') || '0';
 
   if (!code || code.length !== 5) {
     showAuthErr('⚠️ الرمز يجب أن يتكون من 5 أرقام');
@@ -1593,6 +1619,9 @@ async function verifyOtpCode() {
   const fd = new FormData();
   fd.append('username', username);
   fd.append('code', code);
+  if (tgId && tgId !== '0') {
+    fd.append('telegram_user_id', tgId);
+  }
 
   try {
     const res = await fetch('/api/auth/verify-code', { method: 'POST', body: fd });
@@ -1600,10 +1629,13 @@ async function verifyOtpCode() {
 
     if (json.success) {
       if (otpInterval) clearInterval(otpInterval);
+      stopPendingStatusPoll();
       localStorage.setItem('sehty_token', json.token);
-      localStorage.setItem('sehty_username', json.username);
+      localStorage.setItem('sehty_username', json.username || username);
+      localStorage.removeItem('sehty_registered_email');
       document.getElementById('auth-modal').style.display = 'none';
       renderSubscriptionBanner(json);
+      showToast('🎉 تم تفعيل حسابك ودخول البوت بنجاح!');
     } else {
       showAuthErr('❌ ' + (json.error || 'الرمز غير صحيح أو انتهت صلاحيته (50 ثانية)'));
     }
@@ -1612,10 +1644,10 @@ async function verifyOtpCode() {
   }
 }
 
-async function checkUserStatusOnDemand() {
-  clearAuthErr();
+async function checkUserStatusOnDemand(silent = false) {
+  if (!silent) clearAuthErr();
   const tgUser = tg?.initDataUnsafe?.user;
-  const tgId = tgUser?.id || '0';
+  const tgId = (tgUser?.id ? String(tgUser.id) : '') || localStorage.getItem('sehty_telegram_user_id') || '0';
   const email = localStorage.getItem('sehty_registered_email') || '';
   const username = localStorage.getItem('sehty_username') || '';
 
@@ -1623,21 +1655,50 @@ async function checkUserStatusOnDemand() {
     const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}&username=${encodeURIComponent(username || email)}`);
     const json = await res.json();
     if (json.success) {
-      if (json.is_admin || json.status === 'ACTIVE' || json.status === 'APPROVED' || json.active) {
+      if (json.is_admin) {
+        stopPendingStatusPoll();
+        document.getElementById('auth-modal').style.display = 'none';
+        return;
+      }
+
+      // If Admin accepted the request: DO NOT OPEN BOT YET! User MUST enter OTP code first!
+      if (json.status === 'APPROVED') {
+        stopPendingStatusPoll();
+        if (json.username || json.email) {
+          document.getElementById('auth-username').value = json.username || json.email;
+          localStorage.setItem('sehty_username', json.username || json.email);
+        }
+        switchAuthMode('otp');
+        document.getElementById('auth-modal').style.display = 'flex';
+        const codeInput = document.getElementById('auth-code');
+        codeInput.value = '';
+        codeInput.disabled = false;
+        document.getElementById('btn-verify-otp').disabled = false;
+        document.getElementById('btn-verify-otp').style.opacity = '1';
+        codeInput.focus();
+        startOtpTimer(json.expires_in || 50);
+        showToast('🎉 وافق الأدمن على طلبك! أدخل رمز التحقق المرسل لبريدك الإلكتروني');
+        return;
+      }
+
+      if (json.status === 'ACTIVE' && json.active) {
+        stopPendingStatusPoll();
         document.getElementById('auth-modal').style.display = 'none';
         localStorage.removeItem('sehty_registered_email');
         if (json.token) localStorage.setItem('sehty_token', json.token);
-        renderSubscriptionBanner({ days_remaining: json.days_remaining || 30, username: json.full_name_ar || json.username || 'مستخدم' });
+        renderSubscriptionBanner({ days_remaining: json.days_remaining || 30, username: json.full_name_ar || json.username || 'مستخدم', active: true });
         return;
       }
+
       if (json.status === 'PENDING_APPROVAL') {
         switchAuthMode('pending');
+        if (!silent) showToast('⏳ لا يزال الطلب قيد المراجعة والتدقيق لدى الأدمن');
         return;
       }
     }
-    showAuthErr('لا يزال الطلب قيد المراجعة لدى الأدمن');
+    if (!silent) showAuthErr('لا يزال الطلب قيد المراجعة لدى الأدمن');
   } catch (e) {
-    showAuthErr('تعذر فحص الحالة');
+    if (!silent) showAuthErr('تعذر فحص الحالة');
   }
 }
 
@@ -1709,7 +1770,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await fetch(`/api/auth/status?telegram_user_id=${tgId}&username=${encodeURIComponent(tgUsername)}`);
       const json = await res.json();
-      if (json.success && (json.is_admin || json.status === 'ACTIVE' || json.status === 'APPROVED' || json.active)) {
+      if (json.success && (json.is_admin || (json.status === 'ACTIVE' && json.active))) {
         document.getElementById('auth-modal').style.display = 'none';
         localStorage.removeItem('sehty_registered_email');
         if (json.token) localStorage.setItem('sehty_token', json.token);
@@ -1725,7 +1786,23 @@ window.addEventListener('DOMContentLoaded', async () => {
           if (topBar) topBar.style.display = 'flex';
         }
         return;
-      } else if (json.success && json.registered) {
+      } else if (json.success && json.status === 'APPROVED') {
+        // Admin accepted the request! DO NOT open bot directly: show OTP screen!
+        if (json.username || json.email) {
+          document.getElementById('auth-username').value = json.username || json.email;
+          localStorage.setItem('sehty_username', json.username || json.email);
+        }
+        switchAuthMode('otp');
+        document.getElementById('auth-modal').style.display = 'flex';
+        const codeInput = document.getElementById('auth-code');
+        codeInput.value = '';
+        codeInput.disabled = false;
+        document.getElementById('btn-verify-otp').disabled = false;
+        document.getElementById('btn-verify-otp').style.opacity = '1';
+        codeInput.focus();
+        startOtpTimer(json.expires_in || 50);
+        return;
+      } else if (json.success && (json.status === 'PENDING_APPROVAL' || json.registered)) {
         if (json.status === 'PENDING_APPROVAL') {
           switchAuthMode('pending');
           document.getElementById('auth-modal').style.display = 'flex';

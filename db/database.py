@@ -460,17 +460,16 @@ def approve_user_registration_sync(user_id: int, admin_id: str = "admin") -> tup
 
     cur.execute(
         """UPDATE users 
-           SET registration_status = 'ACTIVE', approved_at = ?, approved_by = ?,
-               is_active = 1, rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
+           SET registration_status = 'APPROVED', approved_at = ?, approved_by = ?,
+               is_active = 0, rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE id = ?""",
         (now_iso, str(admin_id), user_id)
     )
     conn.commit()
     conn.close()
 
-    renew_subscription_sync(user_id, days=30)
     otp_code = create_verification_code_sync(user_id, purpose="registration")
-    log_audit(user_id, "REGISTRATION_APPROVED", f"Approved by {admin_id}. Activated for 30 days.")
+    log_audit(user_id, "REGISTRATION_APPROVED", f"Approved by {admin_id}. Status set to APPROVED. Waiting for user to enter OTP code.")
 
     user = get_user_by_identifier_sync(str(user_id))
     return user, otp_code

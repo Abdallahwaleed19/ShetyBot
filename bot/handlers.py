@@ -172,15 +172,20 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, rejected_msg, reply_markup=ReplyKeyboardRemove())
         return
 
-    # 5. User with APPROVED status -> immediately activate without waiting
+    # 5. User with APPROVED status -> Must enter the OTP code sent to their email
     if user_rec.registration_status == "APPROVED":
-        from db.database import _get_conn, renew_subscription_sync
-        conn = _get_conn()
-        conn.execute("UPDATE users SET registration_status = 'ACTIVE', is_active = 1 WHERE id = ?", (user_rec.id,))
-        conn.commit()
-        conn.close()
-        renew_subscription_sync(user_rec.id, days=30)
-        user_rec = get_user_by_identifier_sync(str(user_rec.id))
+        u_param = user_rec.username or user_rec.telegram_user_id
+        webapp_url_form = f"{WEBAPP_URL}/form?telegram_user_id={user_rec.telegram_user_id}&u={u_param}"
+        approved_msg = (
+            "🎉 <b>تمت الموافقة على طلب تسجيلك من قِبل الإدارة!</b>\n\n"
+            f"📧 تم إرسال رمز التحقق (OTP) إلى بريدك الإلكتروني (<code>{user_rec.email or ''}</code>).\n\n"
+            "⚠️ <b>يجب إدخال رمز التحقق أولاً</b> لتفعيل حسابك وفتح البوت."
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔑 إدخال رمز التحقق وتفعيل الحساب", web_app=WebAppInfo(url=webapp_url_form))]
+        ])
+        await reply_safe(update.message, approved_msg, reply_markup=markup)
+        return
 
     # 6. User with SUSPENDED status
     if user_rec.registration_status == "SUSPENDED" or not user_rec.is_active:
@@ -519,7 +524,7 @@ async def handle_text_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
 
     # If user wants previous records
     if any(k in txt for k in ["+", "➕", "بيانات", "سابق", "سجل", "سجلات", "تعديل"]):
-        if not is_admin and (not user_rec or user_rec.registration_status not in ("ACTIVE", "APPROVED")):
+        if not is_admin and (not user_rec or user_rec.registration_status != "ACTIVE"):
             msg = (
                 "⚠️ <b>عذراً، لا يمكنك الوصول للبيانات السابقة</b>\n\n"
                 "يتطلب فتح السجلات أن يكون حسابك مسجلاً ومفعلاً بموافقة الإدارة.\n"

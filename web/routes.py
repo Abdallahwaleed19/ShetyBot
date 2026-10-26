@@ -1009,16 +1009,37 @@ async def api_auth_status(
 
     status = user_rec.registration_status
     if status == "APPROVED":
-        status = "ACTIVE"
-        from db.database import _get_conn, renew_subscription_sync
-        conn = _get_conn()
-        conn.execute("UPDATE users SET registration_status = 'ACTIVE', is_active = 1 WHERE id = ?", (user_rec.id,))
-        conn.commit()
-        conn.close()
-        renew_subscription_sync(user_rec.id, days=30)
-        sub = {"active": True, "days_remaining": 30, "message": "اشتراك نشط"}
-    else:
-        sub = check_subscription_sync(user_rec.id)
+        return JSONResponse({
+            "success": True,
+            "registered": True,
+            "user_id": user_rec.id,
+            "username": user_rec.username,
+            "email": user_rec.email,
+            "full_name_ar": user_rec.full_name_ar,
+            "status": "APPROVED",
+            "is_admin": False,
+            "active": False,
+            "token": None,
+            "expires_in": OTP_TTL_SECONDS,
+            "message": "تمت الموافقة على طلبك من قِبل الإدارة! يرجى إدخال رمز التحقق المرسل لبريدك الإلكتروني.",
+        })
+    elif status == "PENDING_APPROVAL":
+        return JSONResponse({
+            "success": True,
+            "registered": True,
+            "user_id": user_rec.id,
+            "username": user_rec.username,
+            "email": user_rec.email,
+            "full_name_ar": user_rec.full_name_ar,
+            "status": "PENDING_APPROVAL",
+            "is_admin": False,
+            "active": False,
+            "token": None,
+            "message": "طلبك قيد المراجعة لدى الإدارة.",
+        })
+
+    sub = check_subscription_sync(user_rec.id)
+    is_active = bool(status == "ACTIVE" and sub.get("active"))
 
     return JSONResponse({
         "success": True,
@@ -1029,10 +1050,10 @@ async def api_auth_status(
         "full_name_ar": user_rec.full_name_ar,
         "status": status,
         "is_admin": False,
-        "active": sub["active"],
-        "token": _make_token(user_rec.id),
-        "days_remaining": sub["days_remaining"],
-        "message": sub["message"],
+        "active": is_active,
+        "token": _make_token(user_rec.id) if is_active else None,
+        "days_remaining": sub.get("days_remaining", 0),
+        "message": sub.get("message", ""),
     })
 
 
@@ -1171,12 +1192,20 @@ async def api_request_code(
 
 
 @router.post("/api/auth/verify-code")
-async def api_verify_code(username: str = Form(...), code: str = Form(...)):
-    """Verify 5-digit code within 30s"""
+async def api_verify_code(
+    username: str = Form(""),
+    code: str = Form(...),
+    telegram_user_id: Optional[str] = Form(None)
+):
+    """Verify 5-digit code within 50s"""
     clean_u = str(username).strip()
     clean_c = str(code).strip()
+    clean_tg = str(telegram_user_id or "").strip()
 
-    user = get_user_by_identifier_sync(clean_u)
+    user = get_user_by_identifier_sync(clean_u) if clean_u else None
+    if not user and clean_tg and clean_tg not in ("0", "-1"):
+        user = get_user_by_identifier_sync(clean_tg)
+
     if not user:
         return JSONResponse({"success": False, "error": "المستخدم غير موجود"})
 
@@ -1184,7 +1213,7 @@ async def api_verify_code(username: str = Form(...), code: str = Form(...)):
     if not valid:
         return JSONResponse({
             "success": False,
-            "error": "الرمز غير صحيح أو انتهت صلاحيته (30 ثانية). يرجى طلب رمز جديد."
+            "error": f"الرمز غير صحيح أو انتهت صلاحيته ({OTP_TTL_SECONDS} ثانية). يرجى طلب رمز جديد."
         })
 
     # Activate user and start 30-day subscription upon successful verification
@@ -1199,15 +1228,15 @@ async def api_verify_code(username: str = Form(...), code: str = Form(...)):
     sub = check_subscription_sync(user.id)
     token = _make_token(user.id)
 
-    log_audit(user.id, "OTP_VERIFIED", f"User {user.username or user.email} verified 30s OTP and logged in")
+    log_audit(user.id, "OTP_VERIFIED", f"User {user.username or user.email} verified OTP and logged in")
 
     return JSONResponse({
         "success": True,
         "token": token,
-        "username": user.username,
+        "username": user.username or user.email,
         "user_id": user.id,
         "days_remaining": sub["days_remaining"],
-        "message": sub["message"]
+        "message": "تم تأكيد الحساب وتفعيل الاشتراك بنجاح (30 يوماً)!"
     })
 
 
