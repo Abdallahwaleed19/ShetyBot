@@ -101,7 +101,7 @@ def extract_report_payload(row: dict) -> dict:
         'patient_name_ar': str(row.get('patient_name_ar') or ''),
         'patient_name_en': str(row.get('patient_name_en') or ''),
         'nationality': str(row.get('nationality') or 'السعودية'),
-        'nationality_en': str(row.get('nationality_en') or 'Saudi'),
+        'nationality_en': str(row.get('nationality_en') or 'Saudi Arabia'),
         'employer': str(row.get('employer') or ''),
         'employer_en': str(row.get('employer_en') or ''),
         'practitioner_name_ar': str(row.get('practitioner_name_ar') or 'محمد عبدالله الشراري'),
@@ -309,7 +309,7 @@ async def submit_report(
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
     nationality:          str = Form("السعودية"),
-    nationality_en:       str = Form("Saudi"),
+    nationality_en:       str = Form("Saudi Arabia"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     # Page 3
@@ -385,7 +385,7 @@ async def submit_report(
         if not nationality or not nationality.strip():
             nationality = "السعودية"
         if not nationality_en or not nationality_en.strip():
-            nationality_en = "Saudi"
+            nationality_en = "Saudi Arabia"
         if not job_title_en or not job_title_en.strip():
             job_title_en = "General"
         with_barcode = (include_barcode.strip() == "1")
@@ -754,7 +754,7 @@ async def generate_pdf_stream(
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
     nationality:          str = Form("السعودية"),
-    nationality_en:       str = Form("Saudi"),
+    nationality_en:       str = Form("Saudi Arabia"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     practitioner_name_ar: str = Form("محمد عبدالله الشراري"),
@@ -812,7 +812,7 @@ async def generate_pdf_stream(
             "patient_name_ar":           patient_name_ar,
             "patient_name_en":           patient_name_en,
             "nationality":               nationality or "السعودية",
-            "nationality_en":            nationality_en or "Saudi",
+            "nationality_en":            nationality_en or "Saudi Arabia",
             "employer":                  employer,
             "employer_en":               employer_en,
             "report_type":               report_type,
@@ -1386,7 +1386,7 @@ async def api_update_record(
     patient_name_ar:      str = Form(...),
     patient_name_en:      str = Form(""),
     nationality:          str = Form("السعودية"),
-    nationality_en:       str = Form("Saudi"),
+    nationality_en:       str = Form("Saudi Arabia"),
     employer:             str = Form(""),
     employer_en:          str = Form(""),
     practitioner_name_ar: str = Form("محمد عبدالله الشراري"),

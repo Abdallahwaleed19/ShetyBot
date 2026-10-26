@@ -404,7 +404,7 @@
     <label>🌍 الجنسية — عربي</label>
     <select id="nationality_select" onchange="applyNationalitySelect()" style="width:100%;padding:13px 14px;background:#ffffff;border:1.5px solid #cbd5e1;border-radius:10px;color:#0f172a;font-size:14.5px;margin-bottom:8px">
       <option value="">- اختر الجنسية -</option>
-      <option value="السعودية|Saudi" selected>🇸🇦 السعودية</option>
+      <option value="السعودية|Saudi Arabia" selected>🇸🇦 السعودية</option>
       <option value="مصري|Egyptian">🇪🇬 مصري</option>
       <option value="سوري|Syrian">🇸🇾 سوري</option>
       <option value="أردني|Jordanian">🇯🇴 أردني</option>
@@ -433,7 +433,7 @@
 
   <div class="field ltr-field">
     <label>Nationality — English</label>
-    <input type="text" id="nationality_en" value="Saudi" placeholder="e.g. Saudi" dir="ltr" oninput="onUserEditNationalityEn()">
+    <input type="text" id="nationality_en" value="Saudi Arabia" placeholder="e.g. Saudi Arabia" dir="ltr" oninput="onUserEditNationalityEn()">
   </div>
 
   <div class="field">
@@ -826,7 +826,7 @@ function onUserEditNationalityEn() {
 }
 
 const NATIONALITY_MAP = {
-  'سعودي': 'Saudi', 'سعوديه': 'Saudi', 'سعودية': 'Saudi', 'المملكة العربية السعودية': 'Saudi',
+  'سعودي': 'Saudi Arabia', 'سعوديه': 'Saudi Arabia', 'سعودية': 'Saudi Arabia', 'المملكة العربية السعودية': 'Saudi Arabia', 'السعودية': 'Saudi Arabia',
   'مصري': 'Egyptian', 'مصريه': 'Egyptian', 'مصرية': 'Egyptian', 'مصر': 'Egyptian',
   'سوري': 'Syrian', 'سوريه': 'Syrian', 'سورية': 'Syrian', 'سوريا': 'Syrian',
   'اردني': 'Jordanian', 'أردني': 'Jordanian', 'اردنية': 'Jordanian', 'أردنية': 'Jordanian',
@@ -1130,7 +1130,7 @@ async function submitForm() {
     fd.append('patient_name_ar',      val('patient_name_ar'));
     fd.append('patient_name_en',      val('patient_name_en'));
     fd.append('nationality',          val('nationality') || 'السعودية');
-    fd.append('nationality_en',       val('nationality_en') || 'Saudi');
+    fd.append('nationality_en',       val('nationality_en') || 'Saudi Arabia');
     fd.append('employer',             val('employer'));
     fd.append('employer_en',          '');
 

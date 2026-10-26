@@ -225,6 +225,8 @@ def generate_pdf_bytes(data: dict) -> bytes:
     nid       = str(data.get("national_id") or "").strip()
     nat_en    = str(data.get("nationality_en") or "").strip()
     nat_ar    = str(data.get("nationality") or "").strip()
+    if nat_en.lower() == "saudi" or (not nat_en and any(s in nat_ar for s in ["سعودي", "السعودية"])):
+        nat_en = "Saudi Arabia" 
     emp_en    = str(data.get("employer_en") or "").strip()
     emp_ar    = str(data.get("employer") or "").strip()
 
