@@ -899,36 +899,35 @@ async def api_register_user(
             "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         }
 
-        # Generate fresh OTP code for the registering user directly (bypassing admin wait during testing)
-        code = create_verification_code_sync(user_rec.id)
-
-        # 1. Send OTP to User's Email IMMEDIATELY
-        asyncio.create_task(
-            send_user_otp_email(clean_email, code, clean_ar or clean_u or "المستخدم الكريم")
-        )
-
-        # 2. Send Email Notification to Admin
+        # 1. Send Email Notification to Admin
         asyncio.create_task(
             send_admin_new_registration_notification(user_dict)
         )
 
-        # 3. Send Telegram Notification to Admin
+        # 2. Send Telegram Notification to Admin with Approve / Reject buttons
         admin_tg_msg = (
-            f"🔔 <b>طلب تسجيل حساب جديد (إرسال الرمز للبريد مباشرة للتجربة)</b>\n\n"
+            f"🔔 <b>طلب تسجيل حساب جديد</b>\n\n"
             f"👤 <b>الاسم:</b> {clean_ar}\n"
-            f"📧 <b>البريد:</b> <code>{clean_email}</code>\n"
-            f"🔑 <b>الرمز المرسل للـ Gmail:</b> <code>{code}</code>\n"
+            f"📧 <b>البريد الإلكتروني:</b> <code>{clean_email}</code>\n"
             f"🆔 <b>Telegram ID:</b> <code>{clean_tg}</code>\n"
             f"🏷️ <b>Username:</b> @{clean_u or 'بدون'}"
         )
-        asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg))
+        admin_markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ موافقة وتوليد الرمز", "callback_data": f"adm_appr:{user_rec.id}"},
+                    {"text": "❌ رفض الطلب", "callback_data": f"adm_rej:{user_rec.id}"}
+                ]
+            ]
+        }
+        asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg, reply_markup=admin_markup))
 
+        # Do NOT send OTP code to user until Admin approves!
         return JSONResponse({
             "success": True,
             "user_id": user_rec.id,
-            "otp_sent": True,
-            "expires_in": OTP_TTL_SECONDS,
-            "message": f"تم إرسال رمز التحقق (صالح لمدة {OTP_TTL_SECONDS} ثانية) إلى بريدك الإلكتروني ({clean_email})."
+            "status": "PENDING_APPROVAL",
+            "message": "تم استلام طلب تسجيلك بنجاح وهو قيد المراجعة والتدقيق حالياً من قِبل الإدارة. سيتم إرسال رمز التحقق إلى بريدك الإلكتروني (Gmail) فور الموافقة."
         })
 
     except Exception as e:
@@ -1118,13 +1117,12 @@ async def api_request_code(
     )
 
     if not is_admin:
-        # Bypassed temporarily for testing as requested by user
-        # if user.registration_status == "PENDING_APPROVAL":
-        #     return JSONResponse({
-        #         "success": False,
-        #         "error": "طلبك قيد المراجعة والتدقيق حالياً من قِبل الإدارة. سيصلك رمز التحقق على بريدك الإلكتروني (Gmail) فور الموافقة.",
-        #         "status": "PENDING_APPROVAL"
-        #     })
+        if user.registration_status == "PENDING_APPROVAL":
+            return JSONResponse({
+                "success": False,
+                "error": "طلبك قيد المراجعة والتدقيق حالياً من قِبل الإدارة. سيصلك رمز التحقق على بريدك الإلكتروني (Gmail) فور الموافقة.",
+                "status": "PENDING_APPROVAL"
+            })
         if user.registration_status == "REJECTED":
             return JSONResponse({
                 "success": False,

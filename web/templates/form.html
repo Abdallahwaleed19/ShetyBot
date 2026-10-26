@@ -1432,15 +1432,20 @@ async function submitRegistration() {
       localStorage.setItem('sehty_registered_email', email);
       if (username) localStorage.setItem('sehty_username', username);
       document.getElementById('auth-username').value = email;
-      switchAuthMode('otp');
-      const codeInput = document.getElementById('auth-code');
-      codeInput.value = '';
-      codeInput.disabled = false;
-      document.getElementById('btn-verify-otp').disabled = false;
-      document.getElementById('btn-verify-otp').style.opacity = '1';
-      codeInput.focus();
-      startOtpTimer(json.expires_in || 50);
-      showToast('📩 تم إرسال رمز التحقق إلى بريدك الإلكتروني (Gmail)!');
+      if (json.status === 'PENDING_APPROVAL') {
+        switchAuthMode('pending');
+        showToast('⏳ تم إرسال طلبك للإدارة، سيصلك رمز التحقق على بريدك فور الموافقة');
+      } else {
+        switchAuthMode('otp');
+        const codeInput = document.getElementById('auth-code');
+        codeInput.value = '';
+        codeInput.disabled = false;
+        document.getElementById('btn-verify-otp').disabled = false;
+        document.getElementById('btn-verify-otp').style.opacity = '1';
+        codeInput.focus();
+        startOtpTimer(json.expires_in || 50);
+        showToast('📩 تم إرسال رمز التحقق إلى بريدك الإلكتروني (Gmail)!');
+      }
     } else {
       showAuthErr('❌ ' + (json.error || 'فشل إرسال طلب التسجيل'));
     }
