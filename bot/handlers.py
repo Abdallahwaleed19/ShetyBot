@@ -406,6 +406,38 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
                 )
         else:
             await query.message.reply_text("❌ ملف PDF غير موجود.")
+        return
+
+    if query.data and query.data.startswith("adm_appr:"):
+        u_id = int(query.data.split(":", 1)[1])
+        from db.database import approve_user_registration_sync, create_verification_code_sync
+        from services.email_service import send_user_otp_email
+        res = approve_user_registration_sync(u_id)
+        if res:
+            user_rec = res[0] if isinstance(res, tuple) else res
+            code = res[1] if isinstance(res, tuple) else create_verification_code_sync(u_id)
+            if user_rec.email:
+                await send_user_otp_email(user_rec.email, code, user_rec.full_name_ar or user_rec.username or "المستخدم الكريم")
+            if user_rec.telegram_user_id and str(user_rec.telegram_user_id) not in ("0", "-1"):
+                try:
+                    await ctx.bot.send_message(
+                        chat_id=user_rec.telegram_user_id,
+                        text=f"🎉 <b>تمت الموافقة على طلب تسجيلك من قِبل الإدارة!</b>\n\n📧 تم إرسال رمز التحقق الخاص بك إلى بريدك الإلكتروني (<code>{user_rec.email}</code>). أدخل الرمز في النموذج لتفعيل حسابك.",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+            await query.edit_message_text(f"✅ تمت الموافقة على {user_rec.full_name_ar or user_rec.username} وإرسال رمز التحقق ({code}) إلى بريده الإلكتروني ({user_rec.email}) بنجاح.")
+        else:
+            await query.edit_message_text("❌ المستخدم غير موجود أو تمت معالجته مسبقاً.")
+        return
+
+    if query.data and query.data.startswith("adm_rej:"):
+        u_id = int(query.data.split(":", 1)[1])
+        from db.database import reject_user_registration_sync
+        reject_user_registration_sync(u_id, reason="تم الرفض بواسطة الإدارة")
+        await query.edit_message_text("❌ تم رفض طلب التسجيل بنجاح.")
+        return
 
 
 # ── /verify ────────────────────────────────────────────────────────────────────

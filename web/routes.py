@@ -771,47 +771,35 @@ async def api_register_user(
             "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         }
 
-        # Generate fresh OTP code for the registering user
-        code = create_verification_code_sync(user_rec.id)
-
-        # 1. Send OTP to User's Email IMMEDIATELY
-        asyncio.create_task(
-            send_user_otp_email(clean_email, code, clean_ar or clean_u or "المستخدم الكريم")
-        )
-
-        # 2. Send Email Notification to Admin
+        # 1. Send Email Notification to Admin
         asyncio.create_task(
             send_admin_new_registration_notification(user_dict)
         )
 
-        # 3. Send Telegram Notification to Admin with the code
+        # 2. Send Telegram Notification to Admin with Approve / Reject buttons
         admin_tg_msg = (
-            f"🔔 <b>طلب تسجيل جديد وتوليد رمز تحقق</b>\n\n"
-            f"👤 <b>الاسم بالعربي:</b> {clean_ar}\n"
-            f"📧 <b>البريد:</b> <code>{clean_email}</code>\n"
-            f"🔑 <b>الرمز المرسل:</b> <code>{code}</code>\n"
+            f"🔔 <b>طلب تسجيل حساب جديد</b>\n\n"
+            f"👤 <b>الاسم:</b> {clean_ar}\n"
+            f"📧 <b>البريد الإلكتروني:</b> <code>{clean_email}</code>\n"
             f"🆔 <b>Telegram ID:</b> <code>{clean_tg}</code>\n"
             f"🏷️ <b>Username:</b> @{clean_u or 'بدون'}"
         )
-        asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg))
+        admin_markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ موافقة وتوليد الرمز", "callback_data": f"adm_appr:{user_rec.id}"},
+                    {"text": "❌ رفض الطلب", "callback_data": f"adm_rej:{user_rec.id}"}
+                ]
+            ]
+        }
+        asyncio.create_task(send_telegram_message_safe(ADMIN_TELEGRAM_ID, admin_tg_msg, reply_markup=admin_markup))
 
-        # 4. Notify registering user on Telegram if chat available
-        if clean_tg and clean_tg not in ("0", "-1"):
-            user_tg_msg = (
-                f"🎉 <b>تم استلام طلب تسجيلك بنجاح!</b>\n\n"
-                f"🔑 <b>رمز التحقق الخاص بك (50 ثانية):</b> <code>{code}</code>\n\n"
-                f"تم إرسال الرمز أيضاً إلى بريدك الإلكتروني (<code>{clean_email}</code>).\n"
-                f"أدخل الرمز الآن في النموذج لتفعيل حسابك فوراً."
-            )
-            asyncio.create_task(send_telegram_message_safe(clean_tg, user_tg_msg))
-
+        # Do NOT send OTP code to user until Admin approves!
         return JSONResponse({
             "success": True,
             "user_id": user_rec.id,
-            "status": "OTP_SENT",
-            "has_otp": True,
-            "expires_in": OTP_TTL_SECONDS,
-            "message": "تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح!"
+            "status": "PENDING_APPROVAL",
+            "message": "تم استلام طلب تسجيلك بنجاح وهو قيد المراجعة والتدقيق حالياً من قِبل الإدارة. سيتم إرسال رمز التحقق إلى بريدك الإلكتروني (Gmail) فور الموافقة."
         })
 
     except Exception as e:
@@ -1001,6 +989,12 @@ async def api_request_code(
     )
 
     if not is_admin:
+        if user.registration_status == "PENDING_APPROVAL":
+            return JSONResponse({
+                "success": False,
+                "error": "طلبك قيد المراجعة والتدقيق حالياً من قِبل الإدارة. سيصلك رمز التحقق على بريدك الإلكتروني (Gmail) فور الموافقة.",
+                "status": "PENDING_APPROVAL"
+            })
         if user.registration_status == "REJECTED":
             return JSONResponse({
                 "success": False,
@@ -1025,22 +1019,11 @@ async def api_request_code(
 
     code = create_verification_code_sync(user.id)
 
-    # 1. Send OTP to User's Email
+    # 1. Send OTP ONLY to User's Email
     if user.email:
         asyncio.create_task(
             send_user_otp_email(user.email, code, user.full_name_ar or user.username or "")
         )
-
-    # 2. Send OTP to User's Telegram
-    target_tg = str(user.telegram_user_id or clean_tg).strip()
-    if target_tg and target_tg not in ("0", "-1", "None"):
-        user_tg_msg = (
-            f"🔐 <b>رمز التحقق الخاص بك (50 ثانية)</b>\n\n"
-            f"🔑 <b>الرمز:</b> <code>{code}</code>\n"
-            f"⏳ <b>المدة:</b> 50 ثانية فقط!\n\n"
-            f"أدخل الرمز الآن في نموذج صحتي لتفعيل اشتراكك لمدة 30 يوماً."
-        )
-        asyncio.create_task(send_telegram_message_safe(target_tg, user_tg_msg))
 
     # 3. Notify Admin on Telegram for real-time tracking
     admin_msg = (
@@ -1386,7 +1369,7 @@ async def api_admin_approve_registration(
         user_rec = result
         otp_code = create_verification_code_sync(user_id)
 
-    # 1. Send OTP to User's Email
+    # 1. Send OTP ONLY to User's Email
     if user_rec.email:
         asyncio.create_task(
             send_user_otp_email(
@@ -1396,17 +1379,15 @@ async def api_admin_approve_registration(
             )
         )
 
-    # 2. Send Telegram message to user if available
+    # 2. Inform user on Telegram without exposing the code
     webapp_base = (os.getenv("WEBAPP_URL") or "https://sehtybot.fly.dev").rstrip("/")
     u_param = user_rec.username or user_rec.telegram_user_id
     user_link = f"{webapp_base}/form?telegram_user_id={user_rec.telegram_user_id}&u={u_param}"
     if user_rec.telegram_user_id and str(user_rec.telegram_user_id) not in ("0", "-1"):
         user_tg_msg = (
-            f"🎉 <b>تمت الموافقة على طلب تسجيلك في صحتي!</b>\n\n"
-            f"🔑 <b>رمز الدخول المؤقت:</b> <code>{otp_code}</code>\n"
-            f"⏱️ <b>صلاحية الرمز:</b> 50 ثانية فقط!\n\n"
-            f"تم إرسال الرمز أيضاً إلى بريدك الإلكتروني (<code>{user_rec.email or ''}</code>).\n"
-            f"أدخل الرمز الآن في نموذج التسجيل لتفعيل اشتراكك لمدة 30 يوماً."
+            f"🎉 <b>تمت الموافقة على طلب تسجيلك من قِبل الإدارة!</b>\n\n"
+            f"📧 <b>تم إرسال رمز التحقق الخاص بك إلى بريدك الإلكتروني (Gmail).</b>\n\n"
+            f"يرجى فتح بريدك الإلكتروني (<code>{user_rec.email or ''}</code>) واستخدام الرمز لتفعيل حسابك."
         )
         btn_markup = {
             "inline_keyboard": [

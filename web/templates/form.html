@@ -994,7 +994,12 @@ function go(from, to) {
 
 // ── Submit ────────────────────────────────────────────────────────────────────
 async function submitForm() {
-  const err = validate(3); if (err) { showErr('e3', '⚠️ ' + err); return; }
+  const err = validate(1) || validate(2) || validate(3);
+  if (err) {
+    showErr('e3', '⚠️ ' + err);
+    alert('⚠️ ' + err);
+    return;
+  }
 
   // Check subscription before sending
   const token = localStorage.getItem('sehty_token') || '';
@@ -1048,15 +1053,18 @@ async function submitForm() {
     }
 
     const url = `/api/submit-report?token=${encodeURIComponent(token)}&u=${encodeURIComponent(username)}&telegram_user_id=${encodeURIComponent(uid)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
     const res = await fetch(url, {
       method: 'POST',
       headers: {
-        'x-auth-token': token,
-        'x-username': username,
-        'x-telegram-user-id': String(uid)
+        'x-auth-token': token
       },
-      body: fd
+      body: fd,
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     let json;
     try {
@@ -1339,15 +1347,8 @@ async function submitRegistration() {
       localStorage.setItem('sehty_registered_email', email);
       if (username) localStorage.setItem('sehty_username', username);
       document.getElementById('auth-username').value = email;
-      switchAuthMode('otp');
-      const codeInput = document.getElementById('auth-code');
-      codeInput.value = '';
-      codeInput.disabled = false;
-      document.getElementById('btn-verify-otp').disabled = false;
-      document.getElementById('btn-verify-otp').style.opacity = '1';
-      codeInput.focus();
-      startOtpTimer(json.expires_in || 50);
-      showToast('📩 تم إرسال رمز التحقق إلى بريدك الإلكتروني!');
+      switchAuthMode('pending');
+      showToast('⏳ تم إرسال طلبك للإدارة، سيصلك رمز التحقق على بريدك فور الموافقة');
     } else {
       showAuthErr('❌ ' + (json.error || 'فشل إرسال طلب التسجيل'));
     }
