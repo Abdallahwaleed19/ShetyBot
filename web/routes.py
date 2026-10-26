@@ -390,23 +390,21 @@ async def submit_report(
             job_title_en = "General"
         with_barcode = (include_barcode.strip() == "1")
 
-        # Upload logo to R2
+        # Save uploaded logo locally for immediate PDF generation
         logo_url = None
         logo_local_path = None
+        logo_file_bytes = None
+        logo_content_type = None
+        logo_unique_name = None
         if logo and logo.filename:
-            ext         = Path(logo.filename).suffix or ".jpg"
-            unique_name = f"logo_{service_code}{ext}"
-            file_bytes  = await logo.read()
+            ext = Path(logo.filename).suffix or ".jpg"
+            logo_unique_name = f"logo_{service_code}{ext}"
+            logo_file_bytes = await logo.read()
 
-            local_path = UPLOADS_DIR / unique_name
-            local_path.write_bytes(file_bytes)
+            local_path = UPLOADS_DIR / logo_unique_name
+            local_path.write_bytes(logo_file_bytes)
             logo_local_path = str(local_path)
-
-            content_type = logo.content_type or "image/jpeg"
-            try:
-                logo_url = await asyncio.wait_for(upload_logo(unique_name, file_bytes, content_type), timeout=2.5)
-            except Exception:
-                logo_url = None
+            logo_content_type = logo.content_type or "image/jpeg"
 
         # Hijri conversion helper
         def _hijri(d):
@@ -575,9 +573,16 @@ async def submit_report(
         except Exception as e:
             logger.warning(f"Failed to save locally: {e}")
 
-        # Sync to Cloudflare Worker (D1) asynchronously in background so response never hangs
+        # Sync to Cloudflare Worker (D1) and R2 asynchronously in background so response never hangs
         async def _sync_worker():
             try:
+                if logo_unique_name and logo_file_bytes:
+                    try:
+                        r2_url = await upload_logo(logo_unique_name, logo_file_bytes, logo_content_type)
+                        if r2_url:
+                            report_data["logo_url"] = r2_url
+                    except Exception as e_r2:
+                        logger.warning(f"Background logo R2 upload failed: {e_r2}")
                 res = await create_report(report_data)
                 if not res.get("success"):
                     logger.warning("Worker save skipped/failed: %s", res.get("error"))
