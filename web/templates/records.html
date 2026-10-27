@@ -491,13 +491,15 @@ function copyPersonData(code) {
   const r = pool.find(item => item.service_code === code);
   if (!r) return;
 
+  const leaveEnd = getLeaveEndDate(r.admission_date, r.leave_duration_days) || r.discharge_date || r.admission_date || '-';
+
   const text = 
 `🏥 تقرير إجازة مرضية
 👤 اسم المريض: ${r.patient_name_ar || '-'}${r.patient_name_en ? ' (' + r.patient_name_en + ')' : ''}
 🪪 رقم الهوية: ${r.national_id || '-'}
 🌍 الجنسية: ${r.nationality || '-'}${r.nationality_en ? ' (' + r.nationality_en + ')' : ''}
 🏢 جهة العمل: ${r.employer || '-'}${r.employer_en ? ' (' + r.employer_en + ')' : ''}
-⏱️ مدة الإجازة: ${r.leave_duration_days || '1'} يوم (من ${r.admission_date || '-'} إلى ${r.discharge_date || '-'})
+⏱️ مدة الإجازة: ${r.leave_duration_days || '1'} يوم (من ${r.admission_date || '-'} إلى ${leaveEnd})
 🗓️ تاريخ الإصدار: ${r.issue_date || '-'} ${r.report_time || ''}
 🏥 المستشفى: ${r.hospital_name_ar || '-'}
 👨‍⚕️ الممارس: ${r.practitioner_name_ar || '-'}
@@ -719,8 +721,32 @@ function switchTab(tab) {
   filterRecords(true);
 }
 
+function getLeaveEndDate(adm, durDays) {
+  const dur = parseInt(durDays || '1', 10);
+  if (!adm || isNaN(dur) || dur < 1) return '';
+  try {
+    const parts = adm.split('-');
+    if (parts.length === 3) {
+      const d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      d.setDate(d.getDate() + (dur - 1));
+      const endDay = String(d.getDate()).padStart(2, '0');
+      const endMonth = String(d.getMonth() + 1).padStart(2, '0');
+      const endYear = d.getFullYear();
+      return `${endDay}-${endMonth}-${endYear}`;
+    }
+  } catch (e) {}
+  return '';
+}
+
 function formatLeavePeriod(r) {
   const adm = (r.admission_date || '').trim();
+  const dur = parseInt(r.leave_duration_days || '1', 10);
+  if (adm && dur > 1) {
+    const endStr = getLeaveEndDate(adm, dur);
+    if (endStr) {
+      return `${adm} إلى ${endStr} (${dur} أيام)`;
+    }
+  }
   const dis = (r.discharge_date || '').trim();
   if (adm && dis && adm !== dis) {
     return `${adm} إلى ${dis}`;

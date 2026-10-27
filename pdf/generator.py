@@ -8,13 +8,16 @@ from __future__ import annotations
 import io
 import os
 import sys
-from datetime import datetime
+import logging
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, Union
 
 import fitz
 import arabic_reshaper
 from bidi.algorithm import get_display
+
+logger = logging.getLogger(__name__)
 
 # ── Paths & Assets ─────────────────────────────────────────────────────────────
 _BASE_DIR = Path(__file__).resolve().parent
@@ -268,13 +271,28 @@ def generate_pdf_bytes(data: dict) -> bytes:
         page.insert_text(fitz.Point(437.53 - w / 2, 266.24), leave_id, fontname="times-roman", fontsize=13.5, color=C_DARK_VAL)
 
     # Row 1: Duration (White text on dark blue background)
+    # Calculate leave end date for the duration banner: [admission_date, admission_date + dur_days - 1]
+    leave_end_g = dd_g
+    leave_end_h = dd_h
+    try:
+        dur_days = int(dur_str)
+        if dur_days >= 1 and ad_g:
+            parts = [int(p) for p in ad_g.split("-")]
+            if len(parts) == 3:
+                start_dt = date(parts[2], parts[1], parts[0])
+                end_dt = start_dt + timedelta(days=dur_days - 1)
+                leave_end_g = end_dt.strftime("%d-%m-%Y")
+                leave_end_h = _get_hijri(leave_end_g)
+    except Exception as e:
+        logger.warning(f"Error calculating leave banner end date: {e}")
+
     # English Col 1 (center = 318.27, baseline = 309.00)
-    dur_en = f"{dur_str} {unit} ( {ad_g} to {dd_g} )"
+    dur_en = f"{dur_str} {unit} ( {ad_g} to {leave_end_g} )"
     w = f_roman.text_length(dur_en, 13.5)
     page.insert_text(fitz.Point(318.27 - w / 2, 309.00), dur_en, fontname="times-roman", fontsize=13.5, color=C_WHITE)
 
     # Arabic Col 2 (center = 556.78, baseline = 309.52)
-    s1 = f"({dd_h} "
+    s1 = f"({leave_end_h} "
     w1 = f_roman.text_length(s1, 13.5)
     s2 = ar("الى")
     w2 = f_nsa_r.text_length(s2, 13.5)
