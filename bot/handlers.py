@@ -206,9 +206,12 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_safe(update.message, expired_msg, reply_markup=ReplyKeyboardRemove())
         return
 
-    # Active and verified! Check if user has any submitted report
+    # Active and verified user returning to bot
     user_reports = get_all_saved_reports_sync(user_id=user_rec.id, telegram_user_id=str(user_tg_id))
     latest_code = user_reports[0]["service_code"] if user_reports else None
+    reports_count = len(user_reports)
+    days_left = sub.get("days_remaining", 30)
+    user_display = user.first_name or user_name or "عزيزنا المشترك"
 
     keyboard_rows = [
         [
@@ -217,17 +220,29 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         ]
     ]
 
-
     keyboard = ReplyKeyboardMarkup(
         keyboard_rows,
         resize_keyboard=True,
         one_time_keyboard=False,
     )
 
-    active_msg = "مرحباً بك مجدداً في نظام الإجازات المرضية 🏥"
+    inline_actions = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📝 تقديم تقرير جديد", web_app=WebAppInfo(url=f"{webapp_url}?telegram_user_id={user_tg_id}&v=8")),
+            InlineKeyboardButton("📋 استعراض بياناتي السابقة", web_app=WebAppInfo(url=f"{records_url}?telegram_user_id={user_tg_id}&v=8")),
+        ]
+    ])
 
+    active_msg = (
+        f"👋 <b>أهلاً بعودتك يا {user_display}!</b>\n\n"
+        f"🏥 <b>نظام الإجازات المرضية المعتمد (صحتي)</b>\n"
+        f"⏳ <b>حالة اشتراكك:</b> نشط (متبقي {days_left} يوم)\n"
+        f"📑 <b>سجلاتك السابقة:</b> {reports_count} تقرير\n\n"
+        f"يسعدنا وجودك مجدداً! يمكنك الآن تقديم تقرير جديد أو استعراض بياناتك وسجلاتك السابقة:"
+    )
 
     await reply_safe(update.message, active_msg, reply_markup=keyboard)
+    await reply_safe(update.message, "👇 <b>الخيارات المتاحة:</b>", reply_markup=inline_actions)
 
 
 # ── /edit ──────────────────────────────────────────────────────────────────────

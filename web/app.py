@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from db.worker_client import get_client, close_client, health_check
 from web.routes import router
-from config import BASE_DIR
+from config import BASE_DIR, REPORTS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,6 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Serve generated PDFs
-app.mount("/reports", StaticFiles(directory=str(BASE_DIR / "reports")), name="reports")
+app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 
 app.include_router(router)

@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 
 from config import (
     BASE_DIR,
+    DEFAULT_DB_PATH,
     ADMIN_USERNAME,
     ADMIN_USERNAMES,
     ADMIN_EMAIL,
@@ -23,7 +24,7 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = BASE_DIR / "seha_auth.db"
+DB_PATH = DEFAULT_DB_PATH
 
 
 def _get_conn() -> sqlite3.Connection:

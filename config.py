@@ -52,18 +52,32 @@ WORKER_URL: str = os.getenv(
 # Optional secret token to protect your Worker endpoints
 WORKER_SECRET: str = os.getenv("WORKER_SECRET", "sehabot").strip()
 
-# ── Database (SQLite for local/Fly.io auth, or MySQL/Postgres if configured) ──
-DEFAULT_DB_PATH = BASE_DIR / "seha_auth.db"
+# ── Persistent Storage Directory ─────────────────────────────────────────────
+# Automatically uses Fly.io persistent volume at /data if available, otherwise local BASE_DIR
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data" if Path("/data").exists() else str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DEFAULT_DB_PATH = DATA_DIR / "seha_auth.db"
+
+# Seed persistent volume database on initial mount if not present
+_seed_db = BASE_DIR / "seha_auth.db"
+if str(DATA_DIR) != str(BASE_DIR) and not DEFAULT_DB_PATH.exists() and _seed_db.exists():
+    import shutil
+    try:
+        shutil.copy2(_seed_db, DEFAULT_DB_PATH)
+    except Exception:
+        pass
+
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL",
     f"sqlite+aiosqlite:///{DEFAULT_DB_PATH.as_posix()}"
 )
 
-# ── File Storage (local cache for PDF generation) ────────────────────────────
-UPLOADS_DIR: Path = BASE_DIR / "uploads"
-REPORTS_DIR: Path = BASE_DIR / "reports"
-UPLOADS_DIR.mkdir(exist_ok=True)
-REPORTS_DIR.mkdir(exist_ok=True)
+# ── File Storage (Persistent cache for PDF generation & logos) ────────────────
+UPLOADS_DIR: Path = DATA_DIR / "uploads"
+REPORTS_DIR: Path = DATA_DIR / "reports"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Web App ──────────────────────────────────────────────────────────────────
 WEBAPP_URL: str = os.getenv("WEBAPP_URL", "")
