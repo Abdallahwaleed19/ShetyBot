@@ -145,10 +145,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      cursor: text;
+      gap: 12px;
+      cursor: pointer;
       transition: all .2s;
       box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      padding: 8px 14px;
     }
     .duration-box:focus-within {
       border-color: var(--accent);
@@ -158,26 +159,55 @@
     .duration-display.invalid, .duration-box.invalid{
       border-color:rgba(239,68,68,0.4);color:#dc2626;background:rgba(239,68,68,0.08)
     }
+    .dur-step-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(2,132,199,0.3);
+      background: #ffffff;
+      color: var(--accent);
+      font-size: 20px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all .15s ease;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      padding: 0;
+      line-height: 1;
+    }
+    .dur-step-btn:active {
+      background: var(--accent);
+      color: #ffffff;
+      transform: scale(0.92);
+    }
+    .dur-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: text;
+    }
     .duration-input {
       background: transparent !important;
       border: none !important;
       outline: none !important;
       box-shadow: none !important;
       text-align: center;
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 800;
       color: var(--accent) !important;
-      padding: 0 !important;
+      padding: 4px 6px !important;
       margin: 0 !important;
-      width: 65px;
+      width: 55px;
       direction: ltr;
       font-family: inherit;
-      -moz-appearance: textfield;
+      border-radius: 6px;
+      transition: background .15s;
     }
-    .duration-input::-webkit-outer-spin-button,
-    .duration-input::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
+    .duration-input:focus {
+      background: rgba(2,132,199,0.1) !important;
     }
     .duration-unit {
       font-size: 15px;
@@ -382,9 +412,24 @@
   <!-- مدة الإجازة — قابلة للتعديل والاحتساب التلقائي بدون تغيير التواريخ -->
   <div class="field">
     <label>⏱️ مدة الإجازة بالأيام</label>
-    <div class="duration-display duration-box" id="duration_box" onclick="document.getElementById('leave_duration').focus()">
-      <input type="number" id="leave_duration" name="leave_duration_days" min="1" step="1" class="duration-input" value="2" placeholder="1" onfocus="this.select()" oninput="onDurationInput()" onchange="onDurationInput()">
-      <span class="duration-unit">يوم</span>
+    <div class="duration-display duration-box" id="duration_box" onclick="focusDurationInput(event)">
+      <button type="button" class="dur-step-btn" onclick="stepDuration(-1, event)" title="إنقاص يوم">−</button>
+      <div class="dur-input-wrap">
+        <input type="text" 
+               inputmode="numeric" 
+               pattern="[0-9]*" 
+               id="leave_duration" 
+               name="leave_duration_days" 
+               class="duration-input" 
+               value="2" 
+               placeholder="1" 
+               onfocus="handleDurationFocus(this)" 
+               onclick="handleDurationClick(this, event)" 
+               oninput="onDurationInput()" 
+               onchange="onDurationInput()">
+        <span class="duration-unit">يوم</span>
+      </div>
+      <button type="button" class="dur-step-btn" onclick="stepDuration(1, event)" title="زيادة يوم">+</button>
     </div>
     <div id="duration_error" class="duration-error" style="display:none;"></div>
   </div>
@@ -1025,11 +1070,69 @@ document.getElementById('include_barcode').addEventListener('change', function(e
 });
 
 // ── Duration Manual Edit & Auto-calculation ──────────────────────────────────
+function stepDuration(delta, e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  const durEl = document.getElementById('leave_duration');
+  if (!durEl) return;
+  let cur = parseInt(durEl.value, 10);
+  if (isNaN(cur) || cur < 1) cur = 1;
+  cur += delta;
+  if (cur < 1) cur = 1;
+  durEl.value = cur;
+  onDurationInput();
+}
+
+function handleDurationFocus(input) {
+  setTimeout(() => {
+    try {
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+    } catch(e) {
+      input.select();
+    }
+  }, 10);
+}
+
+function handleDurationClick(input, e) {
+  if (e) e.stopPropagation();
+  try {
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+  } catch(err) {
+    input.select();
+  }
+  setTimeout(() => {
+    try {
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+    } catch(err) {
+      input.select();
+    }
+  }, 50);
+}
+
+function focusDurationInput(e) {
+  if (e && e.target && e.target.classList && e.target.classList.contains('dur-step-btn')) {
+    return;
+  }
+  const durEl = document.getElementById('leave_duration');
+  if (durEl) {
+    durEl.focus();
+    handleDurationFocus(durEl);
+  }
+}
+
 function onDurationInput() {
   const durEl = document.getElementById('leave_duration');
   const box   = document.getElementById('duration_box');
   const errEl = document.getElementById('duration_error');
   if (!durEl) return;
+
+  // Clean non-digits
+  durEl.value = durEl.value.replace(/[^0-9]/g, '');
 
   const val = durEl.value.trim();
   if (!val) {
